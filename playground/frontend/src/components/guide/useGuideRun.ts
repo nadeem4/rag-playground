@@ -21,6 +21,8 @@ import {
   GUIDE_STEPS,
   guideGraph,
   readGuide,
+  readGuideLoaded,
+  setGuideLoaded,
   setGuideStep,
   stageNode,
   useGuideHidden,
@@ -144,7 +146,11 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   const beforeRows = useMemo(() => (beforeData && Array.isArray(beforeData.hits) ? rowsFromResult(beforeData) : null), [beforeData])
 
   // Step 1 only loads the document; it is never a run.
-  const [loaded, setLoaded] = useState(false)
+  const [loaded, setLoadedState] = useState(readGuideLoaded)
+  const setLoaded = (v: boolean) => {
+    setLoadedState(v)
+    setGuideLoaded(v)
+  }
   // The Inspector shows the card the step points at.
   const nodeId = node?.id
   useEffect(() => {
@@ -199,7 +205,9 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   const dim = outcome?.kind === "ready" ? (outcome.data as { dim?: unknown } | null)?.dim : undefined
   const values: Record<string, string> = {}
   if (pages !== undefined) values.pages = String(pages)
-  if (chunk?.config.chunk_size !== undefined) values.size = String(chunk.config.chunk_size)
+  // The Chunk steps report the size the run uses; the Fix step tells the reader what to set, which is always the fix value.
+  if (onFix) values.size = String(GUIDE_FIX.chunk_size)
+  else if (chunk?.config.chunk_size !== undefined) values.size = String(chunk.config.chunk_size)
   values.dim = typeof dim === "number" ? String(dim) : "many"
 
   const onAsk = index === ASK_STEP
@@ -207,7 +215,10 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   const own = onFix ? (indexCard ? results[indexCard.id] : undefined) : node ? results[node.id] : undefined
   const failed = own?.status === "failed" && !stale.has(own.id)
   const errorNode = onFix ? indexCard : node
-  let error = failed ? errorHeadline(own.error ?? "") : ((errorNode && a.errors[errorNode.id]?.message) ?? null)
+  // An Ask can be refused on any of its cards (Search, Rerank, Answer); the coach is the only place the reader sees it.
+  const askCards = askNodes(graph)
+  const askError = [askCards.query, askCards.retrieve, askCards.rerank, askCards.useCase].map((n) => (n ? a.errors[n.id]?.message : undefined)).find(Boolean)
+  let error = failed ? errorHeadline(own.error ?? "") : ((errorNode && a.errors[errorNode.id]?.message) ?? (onAsk || onFix ? askError : undefined) ?? null)
   if (!error && (onAsk || onFix) && !a.busy && a.columnError) error = a.columnError
   if (!error && (onAsk || onFix) && findFailed !== null && findFailed === retrieveId) error = "Could not check where the answer landed. Ask the question again."
   // The step is done only when its own node is, even if a later card ran.

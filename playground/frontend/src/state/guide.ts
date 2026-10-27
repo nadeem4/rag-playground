@@ -129,6 +129,7 @@ export function stageNode(graph: PipelineGraph, stage: GuideStage): GraphNode | 
 
 const HIDDEN_KEY = "rag-playground:guide:v1"
 const STEP_KEY = "rag-playground:guide-step:v1"
+const LOADED_KEY = "rag-playground:guide-loaded:v1"
 let hidden: boolean | null = null
 let step: number | null | undefined
 const listeners = new Set<() => void>()
@@ -172,8 +173,27 @@ export function setGuideHidden(value: boolean): void {
   listeners.forEach((l) => l())
 }
 
+/** Step 1 only loads the document, so "loaded" is its own flag; it survives a reload with the step. */
+export function readGuideLoaded(): boolean {
+  try {
+    return window.sessionStorage.getItem(LOADED_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+export function setGuideLoaded(value: boolean): void {
+  try {
+    if (value) window.sessionStorage.setItem(LOADED_KEY, "1")
+    else window.sessionStorage.removeItem(LOADED_KEY)
+  } catch {
+    // Blocked storage: remembered for this page only.
+  }
+}
+
 export function setGuideStep(n: number | null): void {
   step = n
+  if (n === null) setGuideLoaded(false)
   try {
     if (n === null) window.sessionStorage.removeItem(STEP_KEY)
     else window.sessionStorage.setItem(STEP_KEY, String(n))

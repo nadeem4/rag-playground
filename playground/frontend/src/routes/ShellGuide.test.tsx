@@ -9,7 +9,7 @@ import { outcomeFor, outcomeText } from "@/components/pipeline/outcome"
 import { BUILD_SESSION_KEY } from "@/state/buildSession"
 import { resetDocumentForTests } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, signature, storeGraph } from "@/state/graph"
-import { GUIDE_STEPS, resetGuideForTests } from "@/state/guide"
+import { GUIDE_FIX, GUIDE_STEPS, resetGuideForTests } from "@/state/guide"
 import { readCurrentId, readPipelines, resetPipelinesForTests, savePipeline } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
@@ -45,6 +45,7 @@ let asks: string[] = []
 // What POST /api/v2/golds/find answers, and whether POST /api/v2/ask fails.
 let goldAnswer: unknown = { found: null }
 let askFails = false
+let askFailDetail = "The search service is down."
 
 // Twenty candidates, of which the answer step reads the first five.
 const CANDIDATES = {
@@ -76,6 +77,7 @@ beforeEach(() => {
   asks = []
   goldAnswer = { found: null }
   askFails = false
+  askFailDetail = "The search service is down."
   resetSampleQuestionsCache()
   window.localStorage.clear()
   window.sessionStorage.clear()
@@ -100,7 +102,7 @@ beforeEach(() => {
       }
       if (url === "/api/v2/ask" && init?.method === "POST") {
         asks.push(String(init.body))
-        return askFails ? ok({ detail: "The search service is down." }, 500) : ok({ run_id: "r2" }, 202)
+        return askFails ? ok({ detail: askFailDetail }, 500) : ok({ run_id: "r2" }, 202)
       }
       if (url === "/api/v2/golds/find" && init?.method === "POST") return ok(goldAnswer)
       if (url === "/api/v2/results/ret-g") return ok({})
@@ -294,6 +296,24 @@ describe("the guided run on Build", () => {
     expect(within(coach()).getByText(/A primer on chunking/)).toBeTruthy()
   })
 
+  it("step 1 stays done after a reload", async () => {
+    await open(0)
+    fireEvent.click(within(coach()).getByRole("button", { name: "Use this document" }))
+    await waitFor(() => expect(within(coach()).getByRole("button", { name: "Next step" })).toBeTruthy())
+    cleanup()
+    resetGuideForTests()
+    render(<Shell />)
+    await waitFor(() => expect(within(coach()).getByRole("button", { name: "Next step" })).toBeTruthy())
+    // Leaving clears it, so a new run starts at the button again.
+    fireEvent.click(within(coach()).getByRole("button", { name: "Leave the guided run" }))
+    cleanup()
+    resetGuideForTests()
+    window.sessionStorage.setItem(STEP_KEY, "0")
+    render(<Shell />)
+    await waitFor(() => expect(coach()).toBeTruthy())
+    expect(within(coach()).queryByRole("button", { name: "Next step" })).toBeNull()
+  })
+
   it("the Inspector follows the step", async () => {
     await open(1)
     await waitFor(() => expect(screen.queryByText("Pick a step")).toBeNull())
@@ -339,6 +359,14 @@ describe("the guided run on Build", () => {
       fireEvent.click(within(coach()).getByRole("button", { name: "Open Chunk settings" }))
       fireEvent.change(within(card("chunk")).getByLabelText("Chunk Size"), { target: { value: "800" } })
       await waitFor(() => expect(runButton("Build the index").disabled).toBe(false))
+    })
+
+    it("names the fix size in the step text whatever the chunk size is now", async () => {
+      withSize(400)
+      await open(6, session({ retrieve: done("retrieve", "ret-g") }))
+      const text = coach().textContent ?? ""
+      expect(text).toContain(`chunk size to ${GUIDE_FIX.chunk_size} on the Chunk card`)
+      expect(text).not.toContain("400")
     })
 
     it("Build the index runs the index node, not an Ask", async () => {
@@ -545,6 +573,43 @@ describe("the guided run on Build", () => {
       await waitFor(() => expect(within(coach()).getByText("The search service is down.")).toBeTruthy())
       expect(within(coach()).queryByRole("button", { name: "Next step" })).toBeNull()
       expect((within(coach()).getByRole("button", { name: "Ask the question" }) as HTMLButtonElement).disabled).toBe(false)
+    })
+
+    it("shows an Ask error that lands on the answer or rerank card, and the reader can Ask again", async () => {
+      askFails = true
+      askFailDetail = "The use_case step has no model."
+      await openAsk()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Ask the question" }))
+      await waitFor(() => expect(within(coach()).getByText("The use_case step has no model.")).toBeTruthy())
+      askFails = false
+      fireEvent.click(within(coach()).getByRole("button", { name: "Ask the question" }))
+      await waitFor(() => expect(asks).toHaveLength(2))
+    })
+
+    it("an Ask error on a search card does not open the hidden dock or change its stored state", async () => {
+      const dockState = JSON.stringify({ open: false, side: "right", width: 500 })
+      window.localStorage.setItem("rag-playground:ask-dock:v1", dockState)
+      askFails = true
+      askFailDetail = "The retrieve step failed."
+      await openAsk()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Ask the question" }))
+      await waitFor(() => expect(within(coach()).getByText("The retrieve step failed.")).toBeTruthy())
+      expect(window.localStorage.getItem("rag-playground:ask-dock:v1")).toBe(dockState)
+      fireEvent.click(within(coach()).getByRole("button", { name: "Leave the guided run" }))
+      expect((document.getElementById("ask-dock") as HTMLElement).hidden).toBe(true)
+    })
+
+    it("outside the guided run, an Ask error on a search card still opens the dock", async () => {
+      window.localStorage.setItem("rag-playground:ask-dock:v1", JSON.stringify({ open: false, side: "right", width: 500 }))
+      askFails = true
+      askFailDetail = "The retrieve step failed."
+      storeGraph(sampleGraph(TEST_REGISTRY, { sha: PRIMER.sha, filename: PRIMER.filename }, QUESTION))
+      await open()
+      await waitFor(() => expect(invite()).toBeTruthy())
+      fireEvent.click(screen.getByRole("button", { name: "I know RAG, hide this" }))
+      fireEvent.click(screen.getByRole("button", { name: "Ask" }))
+      fireEvent.click(within(document.getElementById("ask-dock")!).getByRole("button", { name: /^Ask$/ }))
+      await waitFor(() => expect((document.getElementById("ask-dock") as HTMLElement).hidden).toBe(false))
     })
 
     it("hides the Ask dock while the guide is on, and Leave brings it back with its stored state unchanged", async () => {

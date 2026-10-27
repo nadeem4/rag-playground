@@ -57,6 +57,7 @@ import {
 } from "@/state/graph"
 import { documentOf, documentsOf, useDocument } from "@/state/document"
 import { starterPipeline, useStarter } from "@/state/starter"
+import { readGuide } from "@/state/guide"
 import { goneResults, readBuildSession, writeBuildSession, type GuideAsk } from "@/state/buildSession"
 import { cardOfStepIn, graphToConfig, removedText, servedConfig, unknownStrategy } from "@/state/config"
 import { readWorking } from "@/state/working"
@@ -436,7 +437,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
         selectCard(routed.nodeId)
         // An error on a retrieval, rerank or answer step is shown in the Ask panel.
         const stage = graph.nodes.find((n) => n.id === routed.nodeId)?.stage
-        if (stage && ASK_STAGES.includes(stage)) dock.setOpen(true)
+        // The guided run hides the dock and shows the error in its coach: the dock stays as it was.
+        if (stage && ASK_STAGES.includes(stage) && readGuide().step === null) dock.setOpen(true)
       }
     } finally {
       setSubmitting(false)

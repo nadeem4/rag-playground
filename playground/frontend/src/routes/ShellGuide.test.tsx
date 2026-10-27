@@ -214,5 +214,45 @@ describe("the guided run on Build", () => {
     expect(within(coach()).getByText(/step 3 of 7/)).toBeTruthy()
     expect(window.sessionStorage.getItem(STEP_KEY)).toBe("2")
   })
-})
+  it("on a phone the invite sits above the cards, and only there", async () => {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((q: string) => ({ matches: q === "(max-width: 47.99rem)" || q === "(max-width: 63.99rem)", addEventListener: () => {}, removeEventListener: () => {} })),
+    )
+    await open()
+    await waitFor(() => expect(invite()).toBeTruthy())
+    expect(screen.getAllByRole("region", { name: "Guided run invitation" })).toHaveLength(1)
+    const scroll = screen.getByTestId("pipeline-scroll")
+    expect(within(scroll).getByRole("region", { name: "Guided run invitation" })).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Start the guided run" }))
+    await waitFor(() => expect(coach()).toBeTruthy())
+  })
 
+  it("on a wide screen the invite is in the Inspector, not above the cards", async () => {
+    await open()
+    await waitFor(() => expect(invite()).toBeTruthy())
+    expect(within(screen.getByTestId("pipeline-scroll")).queryByRole("region", { name: "Guided run invitation" })).toBeNull()
+    expect(within(screen.getByRole("region", { name: "Inspector" })).getByRole("region", { name: "Guided run invitation" })).toBeTruthy()
+  })
+
+  it("the guided run replaces the Ask dock, and Leave brings it back as it was", async () => {
+    const dockState = JSON.stringify({ open: true, side: "right", width: 500 })
+    window.localStorage.setItem("rag-playground:ask-dock:v1", dockState)
+    await open()
+    const main = document.querySelector("main")!
+    const aside = () => document.getElementById("ask-dock") as HTMLElement
+    await waitFor(() => expect(invite()).toBeTruthy())
+    expect(aside().hidden).toBe(false)
+    expect(main.className).toContain("lg:grid-cols-[380px_minmax(0,1fr)_minmax(320px")
+    fireEvent.click(screen.getByRole("button", { name: "Start the guided run" }))
+    await waitFor(() => expect(coach()).toBeTruthy())
+    expect(aside().hidden).toBe(true)
+    expect((document.querySelector(".ask-fab") as HTMLElement).hidden).toBe(true)
+    expect(main.className).not.toContain("lg:grid-cols-")
+    expect(main.className).toContain("xl:grid-cols-[380px_minmax(0,1fr)_340px]")
+    fireEvent.click(within(coach()).getByRole("button", { name: "Leave the guided run" }))
+    expect(aside().hidden).toBe(false)
+    expect(main.className).toContain("lg:grid-cols-[380px_minmax(0,1fr)_minmax(320px")
+    expect(window.localStorage.getItem("rag-playground:ask-dock:v1")).toBe(dockState)
+  })
+})

@@ -1,4 +1,4 @@
-import { PanelLeft, PanelRight, X } from "lucide-react"
+﻿import { PanelLeft, PanelRight, X } from "lucide-react"
 import {
   useCallback,
   useEffect,
@@ -166,6 +166,7 @@ export function AskDock({
   count,
   building = false,
   hideButton = false,
+  suppressed = false,
   measure,
   children,
 }: {
@@ -174,6 +175,8 @@ export function AskDock({
   building?: boolean
   /** True while another sheet (a step's output on a phone) is open: one sheet at a time. */
   hideButton?: boolean
+  /** True while the guided run owns the column: the panel and button are hidden, nothing stored changes, children stay mounted. */
+  suppressed?: boolean
   /** How many results the last question found; shown on the round button once a question has been asked. */
   count?: number
   /** Build's width in px, so the panel never leaves the main pane under 360 px. */
@@ -206,7 +209,7 @@ export function AskDock({
 
   // While the sheet is open the page behind it stays still: the document and
   // Build's own scroll box stop scrolling, and get their own values back on close.
-  const locked = sheet && open
+  const locked = sheet && open && !suppressed
   useEffect(() => {
     if (!locked) return
     const boxes = [document.documentElement, document.body, aside?.parentElement].filter((el): el is HTMLElement => Boolean(el))
@@ -217,10 +220,10 @@ export function AskDock({
 
   // Alt+A opens and closes the panel from anywhere on Build, once per press. It
   // leaves a field alone, except the question box; there only the a key counts,
-  // so Option+A still types å on a Mac. Elsewhere the key code, so it works there too.
+  // so Option+A still types Ã¥ on a Mac. Elsewhere the key code, so it works there too.
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (!e.altKey || e.ctrlKey || e.metaKey || e.repeat) return
+      if (suppressed || !e.altKey || e.ctrlKey || e.metaKey || e.repeat) return
       const inQuestion = e.target !== null && e.target === aside?.querySelector("textarea")
       if (isField(e.target) && !inQuestion) return
       const isA = inQuestion ? e.key === "a" || e.key === "A" : e.code === "KeyA" || e.key.toLowerCase() === "a"
@@ -231,7 +234,7 @@ export function AskDock({
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
-  }, [open, show, hide, aside, building])
+  }, [open, show, hide, aside, building, suppressed])
 
   // The sheet is modal: focus that gets out is brought back to its first control.
   useEffect(() => {
@@ -336,7 +339,7 @@ export function AskDock({
 
   return (
     <>
-      {sheet && open ? (
+      {sheet && open && !suppressed ? (
         <div data-testid="ask-backdrop" aria-hidden="true" className="ask-backdrop fixed inset-0 z-40 bg-(--scrim)" onClick={hide} />
       ) : null}
       <aside
@@ -346,7 +349,7 @@ export function AskDock({
         aria-modal={sheet ? true : undefined}
         aria-label="Ask"
         data-side={side}
-        hidden={!open}
+        hidden={!open || suppressed}
         onKeyDown={onSheetKey}
         className={cn(
           "ask-dock @container fixed inset-x-0 bottom-0 z-50 flex h-[85dvh] min-w-0 flex-col rounded-t-[16px] border border-hairline bg-surface shadow-sheet",
@@ -378,7 +381,7 @@ export function AskDock({
       <button
         ref={fabRef}
         type="button"
-        hidden={open || hideButton}
+        hidden={open || hideButton || suppressed}
         aria-expanded={false}
         aria-controls="ask-dock"
         disabled={building}
@@ -399,3 +402,4 @@ export function AskDock({
     </>
   )
 }
+

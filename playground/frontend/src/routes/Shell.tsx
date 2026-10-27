@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
 import { keyMissing, keyNeedFor, missingKeySteps, needsKey, useApiKey, withArticle } from "@/api/apiKey"
 import { v2 } from "@/api/v2"
@@ -518,8 +518,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
         guide.active && "md:grid-rows-[auto_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)_340px] xl:grid-rows-[minmax(0,1fr)]",
         // From lg, an open dock is a third column: its width, but never so wide that the main pane falls
         // under 360 px. Below lg, Ask is a bottom sheet over the page and takes no column.
-        dock.open && dock.side === "right" && "lg:grid-cols-[380px_minmax(0,1fr)_minmax(320px,min(var(--ask-w),calc(100%_-_742px)))]",
-        dock.open && dock.side === "left" && "lg:grid-cols-[minmax(320px,min(var(--ask-w),calc(100%_-_742px)))_380px_minmax(0,1fr)]",
+        !guide.active && dock.open && dock.side === "right" && "lg:grid-cols-[380px_minmax(0,1fr)_minmax(320px,min(var(--ask-w),calc(100%_-_742px)))]",
+        !guide.active && dock.open && dock.side === "left" && "lg:grid-cols-[minmax(320px,min(var(--ask-w),calc(100%_-_742px)))_380px_minmax(0,1fr)]",
       )}
     >
       <section aria-label="Index pipeline" className="flex flex-col bg-surface md:min-h-0">
@@ -623,6 +623,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
             <FirstRun />
           ) : (
             <>
+              {/* On a phone the Inspector is a sheet, so the invitation sits above the cards instead. */}
+              {isPhone && guide.invite ? <div className="p-3">{guide.invite}</div> : null}
               {pipelineDocs.length > 1 ? (
                 <ShowingDocument documents={pipelineDocs} value={shownDoc?.sha ?? ""} onChange={setShownSha} />
               ) : null}
@@ -678,12 +680,12 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
           stale={stale}
           selected={inspected}
           failedHint={failedNode && INDEX_STAGES.includes(failedNode.stage) ? titleFor(failedNode) : undefined}
-          roomForButton={!dock.open}
-          invite={guide.invite}
+          roomForButton={!dock.open && !guide.active}
+          invite={isPhone ? null : guide.invite}
         />
       )}
 
-      <AskDock dock={dock} count={transcript[0]?.rows.length} building={building} hideButton={isPhone && outputOpen} measure={measureBuild}>
+      <AskDock dock={dock} suppressed={guide.active} count={transcript[0]?.rows.length} building={building} hideButton={isPhone && outputOpen} measure={measureBuild}>
         {(head) => (
           <AskPanel
             head={head}
@@ -901,3 +903,4 @@ function CardInspector({
     </section>
   )
 }
+

@@ -10,6 +10,8 @@ export interface GuideCoachProps {
   values: Record<string, string>
   state: "ready" | "running" | "done" | "blocked"
   result: string | null
+  /** A failed run's own error line; shown while the step stays ready. */
+  error?: string | null
   blockedReason?: string
   onRun: () => void
   onNext: () => void
@@ -25,6 +27,7 @@ export function GuideCoach({
   values,
   state,
   result,
+  error,
   blockedReason,
   onRun,
   onNext,
@@ -70,7 +73,7 @@ export function GuideCoach({
         ) : null}
       </div>
       <div role="status" aria-live="polite" className="text-sm text-fg">
-        {done ? result : null}
+        {done ? result : state === "ready" ? error : null}
       </div>
       {done ? (
         <>

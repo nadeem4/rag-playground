@@ -78,6 +78,24 @@ describe("GuideCoach", () => {
     expect(props.onNext).toHaveBeenCalledTimes(1)
   })
 
+  it("hides result, Why and Next while running or blocked", () => {
+    for (const state of ["running", "blocked"] as const) {
+      const { unmount } = setup({ state, result: "Leaked result.", blockedReason: "Wait" })
+      expect(screen.queryByText("Leaked result.")).toBeNull()
+      expect(screen.queryByText("Why")).toBeNull()
+      expect(screen.queryByRole("button", { name: "Next step" })).toBeNull()
+      unmount()
+    }
+  })
+
+  it("shows the error line on a failed run, keeps Run enabled and hides Next", () => {
+    setup({ state: "ready", error: "Docling is not reachable." })
+    expect(screen.getByRole("status").textContent).toBe("Docling is not reachable.")
+    expect((screen.getByRole("button", { name: GUIDE_STEPS[3].run }) as HTMLButtonElement).disabled).toBe(false)
+    expect(screen.queryByRole("button", { name: "Next step" })).toBeNull()
+    expect(screen.queryByText("Why")).toBeNull()
+  })
+
   it("reads Finish on the last step", () => {
     const last = GUIDE_STEPS.length - 1
     setup({ index: last, step: GUIDE_STEPS[last], state: "done", result: "Done." })

@@ -46,6 +46,13 @@ describe("askResultLine", () => {
     expect(askResultLine({ found: { rank: 22 }, shown: 3, candidates: 30 })).toContain("22nd")
   })
 
+  it("says piece, not pieces, when the count is 1", () => {
+    expect(askResultLine({ found: { rank: 1 }, shown: 1, candidates: 20 })).toContain("the 1 piece the answer step reads")
+    expect(askResultLine({ found: { rank: 4 }, shown: 1, candidates: 20 })).toContain("the 1 piece the answer step reads")
+    expect(askResultLine({ found: null, shown: 5, candidates: 1 })).toContain("through 1 piece.")
+    expect(askResultLine({ found: { rank: 1 }, shown: 5, candidates: 20 })).toContain("the 5 pieces the answer step reads")
+  })
+
   it("not found names the candidates", () => {
     const s = askResultLine({ found: null, shown: 5, candidates: 20 })
     expect(s).toContain("20")
@@ -83,6 +90,12 @@ describe("fixResultLine", () => {
     expect(s).toContain("3rd")
     expect(s).not.toMatch(/moved/)
     expect(s).toMatch(/same|still/i)
+  })
+
+  it("never says moved from X to X, and the result lines of the other steps never say it either", () => {
+    expect(fixResultLine({ before: { rank: 3 }, after: { rank: 3 }, chunk: null })).toBe("The piece with the answer is still 3rd, the same as before.")
+    for (const r of [1, 2, 3, 11]) expect(fixResultLine({ before: { rank: r }, after: { rank: r }, chunk: null })).not.toMatch(/moved|from/)
+    expect(stepResultLine("chunk", "chunk_set", chunkRecursive, doc)).not.toMatch(/moved from/)
   })
 
   it("says the answer fell when the rank is worse", () => {

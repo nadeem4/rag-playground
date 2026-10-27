@@ -23,12 +23,12 @@ export function stepResultLine(
 
 /** What the answer step can see: the target piece among the pieces it reads, below them, or missing. */
 export function askResultLine(f: { found: Found; shown: number; candidates: number }): string {
-  const read = fmt(f.shown)
-  if (!f.found) return `No piece that was returned holds the answer. Search looked through ${fmt(f.candidates)} pieces.`
+  const read = `${fmt(f.shown)} ${f.shown === 1 ? "piece" : "pieces"}`
+  if (!f.found) return `No piece that was returned holds the answer. Search looked through ${fmt(f.candidates)} ${f.candidates === 1 ? "piece" : "pieces"}.`
   if (f.found.rank <= f.shown) {
-    return `The piece with the answer is ${ordinal(f.found.rank)}, so it is among the ${read} pieces the answer step reads.`
+    return `The piece with the answer is ${ordinal(f.found.rank)}, so it is among the ${read} the answer step reads.`
   }
-  return `The piece with the answer is ${ordinal(f.found.rank)}, which is below the ${read} pieces the answer step reads.`
+  return `The piece with the answer is ${ordinal(f.found.rank)}, which is below the ${read} the answer step reads.`
 }
 
 /** The fix helped only when the answer is now found and was missing or ranked lower before. */

@@ -21,7 +21,7 @@ export function GuideAskResults({ question, candidates, shown, found }: { questi
             <li
               data-guide-row=""
               data-answer={found?.rank === c.rank ? "" : undefined}
-              className="flex gap-3 rounded-control border border-hairline bg-surface p-3 data-answer:border-accent data-answer:outline-2 data-answer:outline-accent"
+              className="flex gap-3 rounded-control border border-hairline bg-surface p-3 data-answer:border-primary data-answer:outline-2 data-answer:outline-primary"
             >
               <span className="font-mono text-sm text-fg-muted">{c.rank}</span>
               <p className="m-0 line-clamp-3 min-w-0 flex-1 text-sm text-fg">{c.text}</p>

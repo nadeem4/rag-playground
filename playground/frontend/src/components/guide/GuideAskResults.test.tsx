@@ -28,6 +28,10 @@ describe("GuideAskResults", () => {
     render(<GuideAskResults question={QUESTION} candidates={candidates} shown={5} found={{ rank: 3 }} />)
     expect(marked()).toHaveLength(1)
     expect(marked()[0]).toBe(rows()[2])
+    // The brand accent is --color-primary; --color-accent is a neutral legacy alias.
+    expect(marked()[0].className).toContain("data-answer:border-primary")
+    expect(marked()[0].className).toContain("data-answer:outline-primary")
+    expect(marked()[0].className).not.toMatch(/data-answer:(border|outline)-accent/)
   })
 
   it("marks no row when the answer was not found", () => {

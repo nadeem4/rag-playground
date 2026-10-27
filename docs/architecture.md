@@ -470,7 +470,11 @@ visitor has not hidden it, then a coach column that walks Document, Parse, Clean
 Index with real runs (`components/guide/`, `state/guide.ts`, `state/guideResult.ts`).
 Starting it replaces the working pipeline with the chunking primer, after a warning if the
 working copy has unsaved work. While it is on, the Ask dock is hidden but stays mounted, so
-leaving restores it as it was. Two keys hold its state: `rag-playground:guide:v1` in
+leaving restores it as it was. The Ask step runs the Ask panel's own Ask (`askNow` in
+`routes/Shell.tsx`), lists the retrieval result's pieces in the main pane
+(`GuideAskResults`), and asks `POST /api/v2/golds/find` where the sample answer landed. That
+rank is kept as `guideAsk` in the Build session (`state/buildSession.ts`), so a reload
+keeps it and the Fix step can read it as the rank before the fix. Two keys hold its state: `rag-playground:guide:v1` in
 localStorage (`{hidden}`) and `rag-playground:guide-step:v1` in sessionStorage (the step
 number). If storage is blocked, the guide still works for the life of the page.
 

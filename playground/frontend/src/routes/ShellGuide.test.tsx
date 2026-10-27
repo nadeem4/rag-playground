@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import parsedDoc from "@/api/fixtures/parsed_doc.json"
+import hybridResult from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
+import searchOutput from "@/api/fixtures/output.search.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import { outcomeFor, outcomeText } from "@/components/pipeline/outcome"
 import { BUILD_SESSION_KEY } from "@/state/buildSession"
@@ -39,10 +41,41 @@ const STEP_KEY = "rag-playground:guide-step:v1"
 
 let posts: { path: string; body: { through?: string } }[] = []
 let calls: string[] = []
+let asks: string[] = []
+// What POST /api/v2/golds/find answers, and whether POST /api/v2/ask fails.
+let goldAnswer: unknown = { found: null }
+let askFails = false
+
+// Twenty candidates, of which the answer step reads the first five.
+const CANDIDATES = {
+  ...hybridResult,
+  hits: Array.from({ length: 20 }, (_, i) => ({
+    ...hybridResult.hits[0],
+    rank: i + 1,
+    chunk: { ...hybridResult.hits[0].chunk, id: `c${i + 1}`, text: `Piece number ${i + 1} about chunking.` },
+  })),
+}
+const READ_ROWS = { ...searchOutput, payload: { ...searchOutput.payload, results: searchOutput.payload.results.slice(0, 5) } }
+const ASKED = {
+  tracked: {
+    results: {
+      retrieve: { id: "retrieve", status: "done", artifact_id: "ret-g" },
+      use_case: { id: "use_case", status: "done", artifact_id: "out-g" },
+    },
+    history: {},
+  },
+  sigs: {},
+  transcript: [],
+  asked: null,
+  comparisonHidden: null,
+}
 
 beforeEach(() => {
   posts = []
   calls = []
+  asks = []
+  goldAnswer = { found: null }
+  askFails = false
   resetSampleQuestionsCache()
   window.localStorage.clear()
   window.sessionStorage.clear()
@@ -65,6 +98,15 @@ beforeEach(() => {
         posts.push({ path: url, body: JSON.parse(String(init.body)) })
         return ok({ run_id: "r1" }, 202)
       }
+      if (url === "/api/v2/ask" && init?.method === "POST") {
+        asks.push(String(init.body))
+        return askFails ? ok({ detail: "The search service is down." }, 500) : ok({ run_id: "r2" }, 202)
+      }
+      if (url === "/api/v2/golds/find" && init?.method === "POST") return ok(goldAnswer)
+      if (url === "/api/v2/results/ret-g") return ok({})
+      if (url === "/api/v2/results/ret-g/payload") return ok(CANDIDATES)
+      if (url === "/api/v2/results/out-g") return ok({})
+      if (url === "/api/v2/results/out-g/payload") return ok(READ_ROWS)
       if (url === "/api/v2/results/a-parse") return ok({})
       if (url === "/api/v2/results/a-parse/payload") return ok(parsedDoc)
       if (url === "/api/v2/results/a-parse-gone") return ok({})
@@ -266,8 +308,8 @@ describe("the guided run on Build", () => {
     expect(within(coach()).getByText(/no Clean card/)).toBeTruthy()
   })
 
-  it("the last steps tell the visitor how to ask their own question", async () => {
-    await open(5)
+  it("the Fix step tells the visitor how to ask their own question", async () => {
+    await open(6)
     expect(within(coach()).getByText(/ask your own question/)).toBeTruthy()
   })
 
@@ -325,5 +367,75 @@ describe("the guided run on Build", () => {
     expect(aside().hidden).toBe(false)
     expect(main.className).toContain("lg:grid-cols-[380px_minmax(0,1fr)_minmax(320px")
     expect(window.localStorage.getItem("rag-playground:ask-dock:v1")).toBe(dockState)
+  })
+
+  describe("the Ask step", () => {
+    // The guided run's own pipeline: the primer and the size-factors question.
+    const openAsk = async (session?: unknown) => {
+      storeGraph(sampleGraph(TEST_REGISTRY, { sha: PRIMER.sha, filename: PRIMER.filename }, QUESTION))
+      await open(5, session)
+    }
+    it("Run asks once with the size-factors question", async () => {
+      await openAsk()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Ask the question" }))
+      await waitFor(() => expect(asks).toHaveLength(1))
+      expect(asks[0]).toContain(QUESTION)
+      expect(posts).toHaveLength(0)
+    })
+
+    it("says the piece with the answer is below the pieces the answer step reads", async () => {
+      goldAnswer = { found: { index: 10, gold: "Size factors." } }
+      await openAsk(ASKED)
+      await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("11th"))
+      expect(within(coach()).getByRole("status").textContent).toContain("below the 5 pieces")
+      const results = within(screen.getByRole("region", { name: "Ask results" }))
+      expect(results.getByTestId("guide-line").textContent).toContain("5")
+      expect(document.querySelectorAll("[data-answer]")).toHaveLength(1)
+      expect(within(coach()).getByRole("button", { name: "Next step" })).toBeTruthy()
+    })
+
+    it("says no returned piece holds the answer when none does", async () => {
+      goldAnswer = { found: null }
+      await openAsk(ASKED)
+      await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("No piece that was returned holds the answer"))
+      expect(document.querySelectorAll("[data-answer]")).toHaveLength(0)
+    })
+
+    it("says the piece is among those read when it ranks within them", async () => {
+      goldAnswer = { found: { index: 1, gold: "Size factors." } }
+      await openAsk(ASKED)
+      await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("among the 5 pieces"))
+    })
+
+    it("keeps the rank across a reload without asking Pandion again", async () => {
+      goldAnswer = { found: { index: 10, gold: "Size factors." } }
+      await openAsk(ASKED)
+      await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("11th"))
+      cleanup()
+      resetGuideForTests()
+      goldAnswer = { found: null }
+      render(<Shell />)
+      await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("11th"))
+    })
+
+    it("a failed Ask shows the error and hides Next", async () => {
+      askFails = true
+      await openAsk()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Ask the question" }))
+      await waitFor(() => expect(within(coach()).getByText("The search service is down.")).toBeTruthy())
+      expect(within(coach()).queryByRole("button", { name: "Next step" })).toBeNull()
+      expect((within(coach()).getByRole("button", { name: "Ask the question" }) as HTMLButtonElement).disabled).toBe(false)
+    })
+
+    it("hides the Ask dock while the guide is on, and Leave brings it back with its stored state unchanged", async () => {
+      const dockState = JSON.stringify({ open: true, side: "right", width: 500 })
+      window.localStorage.setItem("rag-playground:ask-dock:v1", dockState)
+      await open(5)
+      const aside = document.getElementById("ask-dock") as HTMLElement
+      expect(aside.hidden).toBe(true)
+      fireEvent.click(within(coach()).getByRole("button", { name: "Leave the guided run" }))
+      expect(aside.hidden).toBe(false)
+      expect(window.localStorage.getItem("rag-playground:ask-dock:v1")).toBe(dockState)
+    })
   })
 })

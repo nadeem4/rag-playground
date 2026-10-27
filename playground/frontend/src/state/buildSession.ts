@@ -9,9 +9,19 @@ import { ApiError } from "@/api/client"
 import { v2 } from "@/api/v2"
 import type { AskSnapshot, TranscriptEntry } from "@/components/ask/Transcript"
 
+import type { Found } from "./guideResult"
 import type { Tracked } from "./pipeline"
 
 export const BUILD_SESSION_KEY = "rag-playground:build-session:v2"
+
+/** Where the guided run's Ask step found the answer, for the retrieval result it was read from. */
+export interface GuideAsk {
+  artifact: string
+  found: Found
+  /** How many pieces the answer step reads, and how many Search returned. */
+  shown: number
+  candidates: number
+}
 
 export interface BuildSession {
   tracked: Tracked
@@ -21,6 +31,15 @@ export interface BuildSession {
   transcript: TranscriptEntry[]
   asked: AskSnapshot | null
   comparisonHidden: string | null
+  /** The guided run's Ask step result; the Fix step reads it as the rank before the fix. */
+  guideAsk?: GuideAsk | null
+}
+
+function readGuideAsk(v: unknown): GuideAsk | null {
+  if (!isRecord(v) || typeof v.artifact !== "string" || typeof v.shown !== "number" || typeof v.candidates !== "number") return null
+  if (v.found === null) return { artifact: v.artifact, found: null, shown: v.shown, candidates: v.candidates }
+  if (!isRecord(v.found) || typeof v.found.rank !== "number") return null
+  return { artifact: v.artifact, found: { rank: v.found.rank }, shown: v.shown, candidates: v.candidates }
 }
 
 /** Only a finished step comes back; one left running or waiting belongs to a run that is gone. */
@@ -53,6 +72,7 @@ export function readBuildSession(): BuildSession | null {
     transcript: v.transcript as TranscriptEntry[],
     asked: isRecord(v.asked) ? (v.asked as unknown as AskSnapshot) : null,
     comparisonHidden: typeof v.comparisonHidden === "string" ? v.comparisonHidden : null,
+    guideAsk: readGuideAsk(v.guideAsk),
   }
 }
 

@@ -226,8 +226,12 @@ order: Document, Parse, Clean, Chunk and Index. The first step only loads the do
 Each later step is a real run, started with its **Run** button (for example **Run Parse**),
 and the coach reads the result back to you in plain words. The Inspector shows the card of
 the step you are on. If a step fails, the coach shows the card's own error and stays on that
-step, and **Run** is still there. The last two steps, Ask and Fix, are not ready yet. The
-coach says so, and tells you to leave the guided run if you want to ask your own question.
+step, and **Run** is still there. The Ask step asks the question for real. The main pane
+lists every piece Search returned, in rank order, marks the piece that holds the answer, and
+draws a dashed line after the pieces the answer step reads. The coach says whether the answer
+is among those pieces, below them, or not in the returned pieces at all, with the numbers from
+your run. On a phone the list opens in the output sheet. The last step, Fix, is not ready yet.
+The coach says so, and tells you to leave the guided run if you want to ask your own question.
 
 While the guided run is on, the Ask panel is hidden, not closed. **Leave the guided run**
 ends it and the panel comes back as it was. The invite shows again only while nothing has

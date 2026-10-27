@@ -57,7 +57,7 @@ import {
 } from "@/state/graph"
 import { documentOf, documentsOf, useDocument } from "@/state/document"
 import { starterPipeline, useStarter } from "@/state/starter"
-import { goneResults, readBuildSession, writeBuildSession } from "@/state/buildSession"
+import { goneResults, readBuildSession, writeBuildSession, type GuideAsk } from "@/state/buildSession"
 import { cardOfStepIn, graphToConfig, removedText, servedConfig, unknownStrategy } from "@/state/config"
 import { readWorking } from "@/state/working"
 import { askRun, cardRun, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
@@ -227,6 +227,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   // The rerank result whose comparison the reader hid. Held here, so closing the
   // Ask panel and opening it again keeps it; a new Ask or another reranker opens it.
   const [comparisonHidden, setComparisonHidden] = useState<string | null>(() => session?.comparisonHidden ?? null)
+  // Where the guided run's Ask step found the answer; kept with the session so a reload keeps it.
+  const [guideAsk, setGuideAsk] = useState<GuideAsk | null>(() => session?.guideAsk ?? null)
   const { keys } = useApiKey()
   // The Ask panel's dock: open or closed, its side and its width, remembered in this browser.
   const dock = useAskDock()
@@ -250,8 +252,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
 
   useEffect(() => setTracked((prev) => foldRun(prev, run.nodes)), [run.nodes])
   useEffect(() => {
-    if (Object.keys(tracked.results).length || transcript.length) writeBuildSession({ tracked, sigs, transcript, asked, comparisonHidden })
-  }, [tracked, sigs, transcript, asked, comparisonHidden])
+    if (Object.keys(tracked.results).length || transcript.length) writeBuildSession({ tracked, sigs, transcript, asked, comparisonHidden, guideAsk })
+  }, [tracked, sigs, transcript, asked, comparisonHidden, guideAsk])
   // A restart wipes the server's store: a restored step whose result is gone comes back as not run.
   useEffect(() => {
     if (!session) return
@@ -506,7 +508,19 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   else if (built && segments.length && segments.every((s) => s.state === "done" || s.state === "reused"))
     stripLine = { kind: "built", totalMs: indexSteps.reduce((sum, n) => sum + (results[n.id]?.duration_ms ?? 0), 0) }
 
-  const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, busy, edit, start, inspect: (id) => !isPhone && setInspected(id) })
+  // The Ask panel's Ask, and the guided run's Ask step.
+  const askNow = () => {
+    setComparisonHidden(null)
+    const snap = { ...askSnapshot(graph, registry, pipelineName, pipelineDocs.find((d) => d.sha === searchIn)?.filename), searchSha: searchIn }
+    void start(undefined, false, false, true).then((id) => setAsked(id ? { ...snap, runId: id } : null))
+  }
+
+  const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, columnError, busy, edit, start, ask: askNow, guideAsk, setGuideAsk, inspect: (id) => !isPhone && setInspected(id) })
+  // On a phone the Ask results open in the output sheet as soon as there are some.
+  const hasAskResults = guide.askResults !== null
+  useEffect(() => {
+    if (isPhone && hasAskResults) setOutputOpen(true)
+  }, [isPhone, hasAskResults])
 
   return (
     <main
@@ -667,11 +681,19 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
 
       {isPhone ? (
         // On a phone the output opens in a sheet over the cards, not in a pane far below them.
-        outputOpen && inspectedNode ? (
+        outputOpen && guide.askResults ? (
+          <OutputSheet title="Ask results" sub="The pieces Search returned" onClose={closeOutput}>
+            {guide.askResults}
+          </OutputSheet>
+        ) : outputOpen && inspectedNode ? (
           <OutputSheet title={titleFor(inspectedNode)} sub={`${plainName(inspectedNode.transform)}, ${inspectedNode.transform}`} onClose={closeOutput}>
             <InspectorPanel graph={graph} registry={registry} results={shown} stale={stale} selected={inspected} roomForButton={false} inSheet />
           </OutputSheet>
         ) : null
+      ) : guide.askResults ? (
+        <section aria-label="Guided Ask results" className="min-h-0 overflow-y-auto bg-surface p-4">
+          {guide.askResults}
+        </section>
       ) : (
         <InspectorPanel
           graph={graph}
@@ -722,11 +744,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
             searchIn={searchIn}
             onSearchIn={setSearchSha}
             askedIn={asked ? (asked.searchSha ?? null) : undefined}
-            onAsk={() => {
-              setComparisonHidden(null)
-              const snap = { ...askSnapshot(graph, registry, pipelineName, pipelineDocs.find((d) => d.sha === searchIn)?.filename), searchSha: searchIn }
-              void start(undefined, false, false, true).then((id) => setAsked(id ? { ...snap, runId: id } : null))
-            }}
+            onAsk={askNow}
           />
         )}
       </AskDock>

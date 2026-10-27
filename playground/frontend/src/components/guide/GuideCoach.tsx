@@ -54,7 +54,7 @@ export function GuideCoach({
         {GUIDE_STEPS.map((_, i) => (
           <span
             key={i}
-            className={`h-1.5 flex-1 rounded-full ${i < index ? "bg-primary/50" : i === index ? "bg-primary" : "bg-border"}`}
+            className={`h-1 flex-1 rounded-full ${i < index ? "bg-primary/50" : i === index ? "bg-primary" : "bg-border"}`}
           />
         ))}
       </div>

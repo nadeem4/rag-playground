@@ -32,6 +32,14 @@ describe("GuideCoach", () => {
     expect(screen.getByText(`Guided run · step 3 of ${GUIDE_STEPS.length}`)).toBeTruthy()
   })
 
+  it("draws one progress dot per step with a height on the spacing scale", () => {
+    const { container } = setup()
+    const dots = container.querySelectorAll('[aria-hidden="true"] > span')
+    expect(dots).toHaveLength(GUIDE_STEPS.length)
+    // tokens.css has no `--spacing` multiplier, so fractional steps like h-1.5 emit no CSS.
+    for (const dot of dots) expect(dot.className).toMatch(/(^|\s)h-(1|2|3|4|6|8)(\s|$)/)
+  })
+
   it("fills placeholders from values", () => {
     const { container } = setup()
     expect(container.textContent).toContain("at most 300 characters")

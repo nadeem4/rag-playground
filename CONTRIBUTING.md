@@ -13,6 +13,7 @@ release and record the Home clips. For how the code fits together, see
 - [Styling and fixtures](#styling-and-fixtures)
 - [Adding a strategy](#adding-a-strategy)
 - [Adding an endpoint](#adding-an-endpoint)
+- [Changing a guided step](#changing-a-guided-step)
 - [The package boundary](#the-package-boundary)
 - [The samples](#the-samples)
 - [Staging](#staging)
@@ -204,6 +205,13 @@ a new endpoint or Policy method in [docs/pandion-api.md](docs/pandion-api.md).
 
 A new test of a site rule goes in `tests/api/` (`test_demo.py`, `test_delete_source.py`,
 `test_source_file.py` and the rest) and calls the `/api/v2` route the web calls.
+
+## Changing a guided step
+
+The guided run's steps and all their copy are in `playground/frontend/src/state/guide.ts`.
+Edit the step there; the result lines that come from a real run are in
+`state/guideResult.ts`. `state/guide.test.ts` checks that the copy has no dashes, no
+questions and no numbers, so run it after any wording change.
 
 ## The package boundary
 

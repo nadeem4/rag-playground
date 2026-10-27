@@ -215,6 +215,21 @@ the card says which key it needs and Run waits. The hosted demo writes context f
 Compare with the step on against off. Fixed token count and By sentence also have a free
 **Heading in front** setting that puts the heading path in front of each chunk instead.
 
+### The guided run
+
+When nothing has run yet on Build, an invite offers a guided run. It sits in the pane beside
+the cards on a laptop or tablet, and above the cards on a phone. **Start** replaces the
+working pipeline with a small chunking pipeline and a question about what sets chunk size.
+If you have unsaved work, it warns you first. A coach then walks the steps in order:
+Document, Parse, Clean, Chunk and Index. Each step is a real run, and the coach reads the
+result back to you in plain words. If a step fails, the coach shows the card's own error
+and stays on that step, and **Run** is still there. The last two steps, Ask and Fix, are
+not ready yet and say so.
+
+While the guided run is on, the Ask panel is hidden, not closed. **Leave** ends the guided
+run and the panel comes back as it was. A reload keeps your step and results for as long as
+the tab is open. **I know RAG, hide this** hides the invite in this browser.
+
 ### Start from a template
 
 **Start from a template**, beside the Pipeline picker, opens two sets of cards. The first,

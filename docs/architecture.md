@@ -465,6 +465,15 @@ removed and another added left its id as `clean_1` (`stepOfCardIn`, `cardOfStepI
 Build's per-tab results are in sessionStorage under `rag-playground:build-session:v2`,
 because the old ones were keyed by the old graph's card ids.
 
+**The guided run.** Build can show a guided run: an invite when nothing has run and the
+visitor has not hidden it, then a coach column that walks Document, Parse, Clean, Chunk and
+Index with real runs (`components/guide/`, `state/guide.ts`, `state/guideResult.ts`).
+Starting it replaces the working pipeline with the chunking primer, after a warning if the
+working copy has unsaved work. While it is on, the Ask dock is hidden but stays mounted, so
+leaving restores it as it was. Two keys hold its state: `rag-playground:guide:v1` in
+localStorage (`{hidden}`) and `rag-playground:guide-step:v1` in sessionStorage (the step
+number). If storage is blocked, the guide still works for the life of the page.
+
 The fixture `playground/frontend/src/api/fixtures/starter.config.json` is `samples/starter.yaml` as the
 browser holds it, and two tests pin that converting the app's Starter gives that file, so
 a visitor's Starter keeps its result ids.

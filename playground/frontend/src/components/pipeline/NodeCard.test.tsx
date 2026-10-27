@@ -756,3 +756,24 @@ describe("the output icon", () => {
     expect(within(doc).queryByRole("button", { name: /^See .* output$/ })).toBeNull()
   })
 })
+
+describe("guided run look", () => {
+  it("marks the current card as the current step with an accent ring", () => {
+    const el = renderCard({ guide: "current" })
+    expect(el.getAttribute("aria-current")).toBe("step")
+    expect(el.className).toContain("ring-primary")
+  })
+
+  it("dims a later card without disabling it", () => {
+    const el = renderCard({ guide: "later" })
+    expect(el.getAttribute("aria-current")).toBeNull()
+    expect(el.className).toContain("opacity-50")
+    expect(el.className).not.toContain("pointer-events-none")
+  })
+
+  it("looks the same as before with no guide", () => {
+    const el = renderCard()
+    expect(el.className).not.toContain("ring-primary")
+    expect(el.className).not.toContain("opacity-50")
+  })
+})

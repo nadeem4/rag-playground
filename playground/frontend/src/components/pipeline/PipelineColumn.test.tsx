@@ -306,3 +306,14 @@ describe("locked transforms", () => {
     expect(option.getAttribute("aria-disabled")).toBe("false")
   })
 })
+
+describe("guided run look", () => {
+  it("passes each card its look by node id", () => {
+    setup({ guide: { parse: "current", chunk: "later", index: "later" } })
+    expect(card("parse").getAttribute("aria-current")).toBe("step")
+    expect(card("index").className).toContain("opacity-50")
+    expect(card("chunk").className).toContain("opacity-50")
+    expect(card("source").className).not.toContain("opacity-50")
+    expect(card("source").getAttribute("aria-current")).toBeNull()
+  })
+})

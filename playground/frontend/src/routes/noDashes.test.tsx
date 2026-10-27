@@ -15,6 +15,7 @@ import type { Registry, Source } from "@/api/types"
 import { resetStagesCache } from "@/api/useExplain"
 import { ArtifactInspector } from "@/components/inspectors/registry"
 import { sampleGraph, storeGraph } from "@/state/graph"
+import { GUIDE_INVITE, GUIDE_STEPS } from "@/state/guide"
 
 import { Compare } from "./Compare"
 import { choose } from "@/components/ui/pickerTesting"
@@ -97,6 +98,13 @@ describe("no em-dashes or en-dashes in help behind info buttons", () => {
   it("every field description and lesson in the registry", () => {
     const text = helpText(liveRegistry)
     expect(text.length).toBeGreaterThan(20)
+    expect(text.filter((t) => DASH.test(t))).toEqual([])
+  })
+})
+
+describe("no em-dashes or en-dashes in the guided run copy", () => {
+  it("every step and the invite", () => {
+    const text = [...GUIDE_STEPS.flatMap((s) => [s.title, s.body, s.run, s.why]), ...Object.values(GUIDE_INVITE)]
     expect(text.filter((t) => DASH.test(t))).toEqual([])
   })
 })

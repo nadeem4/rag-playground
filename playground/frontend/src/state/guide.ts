@@ -38,7 +38,7 @@ export const GUIDE_STEPS: GuideStep[] = [
     stage: "source",
     card: "source",
     title: "Pick the document",
-    body: "Every run starts with a document. This one has {pages} pages of notes on chunking. We will ask it one question and follow that question through every step.",
+    body: "Every run starts with a document. This one has {pages} pages of notes on chunking. We will ask it a single question and follow that question through every step.",
     run: "Use this document",
     why: "The playground keeps the document on your computer, or on the demo for a short time. Nothing is shared.",
   },
@@ -48,7 +48,7 @@ export const GUIDE_STEPS: GuideStep[] = [
     title: "Parse turns pages into blocks",
     body: "A PDF is only ink on a page. Parse reads the layout and returns blocks such as headings, paragraphs and lists, in reading order.",
     run: "Run Parse",
-    why: "Each heading and each paragraph becomes one block, so a few pages of prose make only a few dozen blocks.",
+    why: "Each heading and each paragraph becomes its own block, so the blocks are far fewer than the words on the pages.",
   },
   {
     stage: "clean",
@@ -64,7 +64,7 @@ export const GUIDE_STEPS: GuideStep[] = [
     title: "Chunk cuts the text into pieces",
     body: "Search finds pieces, not whole documents. Chunk cuts the text into pieces of at most {size} characters, at natural breaks.",
     run: "Run Chunk",
-    why: "No piece can hold more than {size} characters, so a long sentence can be cut in two. Each half then holds only part of the answer.",
+    why: "No piece can hold more than {size} characters, so a long sentence can be cut between pieces. Each part then holds only some of the answer.",
   },
   {
     stage: "index",
@@ -80,7 +80,7 @@ export const GUIDE_STEPS: GuideStep[] = [
     title: "Ask the question",
     body: "Search compares the question with every piece and lists the closest ones. The answer step reads only the best few.",
     run: "Ask the question",
-    why: "Each half of a cut sentence matches the question only partly, so whole pieces about chunking in general can score higher. The answer is in the index, but it may never reach the best few.",
+    why: "Each part of a cut sentence matches the question only partly, so whole pieces about chunking in general can score higher. The answer is in the index, but it may never reach the best few.",
   },
   {
     stage: "fix",

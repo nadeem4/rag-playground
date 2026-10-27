@@ -59,6 +59,9 @@ describe("the guide steps", () => {
         expect(t).not.toMatch(/[–—]/)
         expect(t).not.toMatch(/\?/)
         expect(t).not.toMatch(/\d/)
+        expect(t).not.toMatch(
+          /\b(dozens?|hundreds?|thousands?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/i,
+        )
         expect(t.length).toBeGreaterThan(0)
       }
     }

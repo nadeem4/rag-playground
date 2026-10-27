@@ -26,6 +26,8 @@ import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from 
 import { ShowingDocument } from "@/components/pipeline/ShowingDocument"
 import { PipelineBar } from "@/components/pipeline/PipelineBar"
 import { RunStrip, stripSegments, type LiveRun, type StripLine } from "@/components/pipeline/RunStrip"
+import { GuideCoach } from "@/components/guide/GuideCoach"
+import { useGuideRun } from "@/components/guide/useGuideRun"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
@@ -504,16 +506,20 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   else if (built && segments.length && segments.every((s) => s.state === "done" || s.state === "reused"))
     stripLine = { kind: "built", totalMs: indexSteps.reduce((sum, n) => sum + (results[n.id]?.duration_ms ?? 0), 0) }
 
+  const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, busy, edit, start, inspect: (id) => !isPhone && setInspected(id) })
+
   return (
     <main
       ref={mainRef}
       style={{ "--ask-w": `${dock.width}px` } as CSSProperties}
       className={cn(
         "grid min-h-0 flex-1 grid-cols-1 gap-px overflow-y-auto bg-hairline md:grid-cols-[380px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:overflow-hidden",
+        // The coach is the first row below xl, and a third column from xl.
+        guide.active && "md:grid-rows-[auto_minmax(0,1fr)] xl:grid-cols-[380px_minmax(0,1fr)_340px] xl:grid-rows-[minmax(0,1fr)]",
         // From lg, an open dock is a third column: its width, but never so wide that the main pane falls
         // under 360 px. Below lg, Ask is a bottom sheet over the page and takes no column.
-        dock.open && dock.side === "right" && "lg:grid-cols-[380px_minmax(0,1fr)_minmax(320px,min(var(--ask-w),calc(100%_-_742px)))]",
-        dock.open && dock.side === "left" && "lg:grid-cols-[minmax(320px,min(var(--ask-w),calc(100%_-_742px)))_380px_minmax(0,1fr)]",
+        !guide.active && dock.open && dock.side === "right" && "lg:grid-cols-[380px_minmax(0,1fr)_minmax(320px,min(var(--ask-w),calc(100%_-_742px)))]",
+        !guide.active && dock.open && dock.side === "left" && "lg:grid-cols-[minmax(320px,min(var(--ask-w),calc(100%_-_742px)))_380px_minmax(0,1fr)]",
       )}
     >
       <section aria-label="Index pipeline" className="flex flex-col bg-surface md:min-h-0">
@@ -617,6 +623,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
             <FirstRun />
           ) : (
             <>
+              {/* On a phone the Inspector is a sheet, so the invitation sits above the cards instead. */}
+              {isPhone && guide.invite ? <div className="p-3">{guide.invite}</div> : null}
               {pipelineDocs.length > 1 ? (
                 <ShowingDocument documents={pipelineDocs} value={shownDoc?.sha ?? ""} onChange={setShownSha} />
               ) : null}
@@ -650,6 +658,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
                 onSweep={(id, preset) => void openSweep(id, preset)}
                 explanations={explanations}
                 history={tracked.history}
+                guide={guide.marks}
               />
             </>
           )}
@@ -671,11 +680,12 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
           stale={stale}
           selected={inspected}
           failedHint={failedNode && INDEX_STAGES.includes(failedNode.stage) ? titleFor(failedNode) : undefined}
-          roomForButton={!dock.open}
+          roomForButton={!dock.open && !guide.active}
+          invite={isPhone ? null : guide.invite}
         />
       )}
 
-      <AskDock dock={dock} count={transcript[0]?.rows.length} building={building} hideButton={isPhone && outputOpen} measure={measureBuild}>
+      <AskDock dock={dock} suppressed={guide.active} count={transcript[0]?.rows.length} building={building} hideButton={isPhone && outputOpen} measure={measureBuild}>
         {(head) => (
           <AskPanel
             head={head}
@@ -720,6 +730,11 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
           />
         )}
       </AskDock>
+      {guide.coach ? (
+        <div className="order-first min-w-0 bg-surface p-3 md:col-span-2 md:min-h-0 md:max-h-[40dvh] md:overflow-y-auto xl:max-h-none xl:order-last xl:col-span-1 xl:overflow-y-auto">
+          <GuideCoach {...guide.coach} />
+        </div>
+      ) : null}
     </main>
   )
 }
@@ -742,6 +757,7 @@ function InspectorPanel({
   failedHint,
   roomForButton,
   inSheet = false,
+  invite,
 }: {
   graph: PipelineGraph
   registry: Registry
@@ -749,6 +765,8 @@ function InspectorPanel({
   stale: Set<string>
   selected: string | null
   failedHint?: string
+  /** The guided run's invitation, shown while nothing has run. */
+  invite?: ReactNode
   /** Ask is closed: the round button sits over the foot of the pane. */
   roomForButton: boolean
   /** Inside the phone's output sheet. */
@@ -765,6 +783,7 @@ function InspectorPanel({
       >
         {failedHint ? <p className="px-3 pt-3 text-sm text-fg-muted">Select the {failedHint} card to see why it failed.</p> : null}
         <EmptyState title="Pick a step">Click a step card to see its output here.</EmptyState>
+        {invite ? <div className="mx-auto w-full max-w-[60ch] px-3 pb-3">{invite}</div> : null}
       </section>
     )
   }

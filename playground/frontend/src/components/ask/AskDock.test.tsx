@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs"
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { useEffect } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { Picker } from "@/components/ui/Picker"
@@ -574,5 +575,54 @@ describe("the settings blocks follow the panel's own width", () => {
     expect(settings).not.toContain("lg:grid-cols-3")
     const css = await buildCss(["@container", "@min-[840px]:grid-cols-3"])
     expect(css).toMatch(/@container \(width >= 840px\)|@container \(min-width: 840px\)/)
+  })
+})
+
+describe("a suppressed dock (the guided run owns the right column)", () => {
+  let mounts = 0
+  function Child() {
+    useEffect(() => {
+      mounts += 1
+    }, [])
+    return <p>child</p>
+  }
+  function Suppressible({ suppressed }: { suppressed: boolean }) {
+    const dock = useAskDock()
+    return (
+      <AskDock dock={dock} suppressed={suppressed} measure={() => BUILD_WIDTH}>
+        {() => <Child />}
+      </AskDock>
+    )
+  }
+
+  it("hides the aside and the round button, and stored state is unchanged", () => {
+    mounts = 0
+    window.localStorage.setItem(DOCK_KEY, JSON.stringify({ open: true, side: "left", width: 500 }))
+    const { rerender } = render(<Suppressible suppressed={false} />)
+    const before = window.localStorage.getItem(DOCK_KEY)
+    rerender(<Suppressible suppressed />)
+    expect(dockEl().hidden).toBe(true)
+    expect((document.querySelector(".ask-fab") as HTMLElement).hidden).toBe(true)
+    rerender(<Suppressible suppressed={false} />)
+    expect(dockEl().hidden).toBe(false)
+    expect(window.localStorage.getItem(DOCK_KEY)).toBe(before)
+    expect(mounts).toBe(1)
+  })
+
+  it("Alt+A does nothing while suppressed", () => {
+    window.localStorage.setItem(DOCK_KEY, JSON.stringify({ open: false, side: "right", width: 440 }))
+    render(<Suppressible suppressed />)
+    altA()
+    expect(dockEl().hidden).toBe(true)
+    expect(JSON.parse(window.localStorage.getItem(DOCK_KEY)!).open).toBe(false)
+  })
+
+  it("renders no sheet backdrop while suppressed", () => {
+    screenSize({ below: true, desktop: false })
+    const { rerender } = render(<Suppressible suppressed={false} />)
+    fireEvent.click(screen.getByRole("button", { name: /^Ask/ }))
+    expect(screen.queryByTestId("ask-backdrop")).toBeTruthy()
+    rerender(<Suppressible suppressed />)
+    expect(screen.queryByTestId("ask-backdrop")).toBeNull()
   })
 })

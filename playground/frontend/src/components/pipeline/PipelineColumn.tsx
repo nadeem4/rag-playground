@@ -58,6 +58,8 @@ export interface PipelineColumnProps {
   explanations?: Record<string, ExplainState>
   /** Per node id: the current and previous run's artifacts, for "(was N)". */
   history?: Record<string, RunHistory>
+  /** Guided run, per node id: the current step and the ones still to come. */
+  guide?: Record<string, "current" | "later">
 }
 
 /**
@@ -126,6 +128,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
               result={p.results[node.id]}
               stale={p.stale.has(node.id)}
               selected={p.selected === node.id}
+              guide={p.guide?.[node.id]}
               busy={p.busy}
               fieldErrors={errs?.fields ?? p.explanations?.[node.id]?.fields}
               message={errs?.message}

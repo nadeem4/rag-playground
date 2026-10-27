@@ -49,6 +49,8 @@ export interface NodeCardProps {
   /** The result belongs to an older config of this node or an ancestor. */
   stale?: boolean
   selected: boolean
+  /** Guided run: the step being explained, or a step still to come (dimmed, still usable). */
+  guide?: "current" | "later"
   /** A run is in flight; Run buttons are disabled. */
   busy: boolean
   fieldErrors?: FieldErrors
@@ -411,7 +413,7 @@ export function NodeCard(p: NodeCardProps) {
       aria-label={`${p.title} ${p.node.transform}`}
       data-node-id={p.node.id}
       data-look={isSource ? undefined : shown.look}
-      aria-current={p.selected ? "true" : undefined}
+      aria-current={p.guide === "current" ? "step" : p.selected ? "true" : undefined}
       data-showing={p.showing ? "true" : undefined}
       onClick={p.onSelect}
       className={cn(
@@ -421,6 +423,8 @@ export function NodeCard(p: NodeCardProps) {
           ? "z-10 bg-surface-raised shadow-raised"
           : "bg-surface transition-colors duration-(--dur-fast) hover:border-field-border hover:bg-surface-raised",
         p.explainOpen && "outline-1 -outline-offset-1 outline-fg-muted outline-solid",
+        p.guide === "current" && "ring-2 ring-primary",
+        p.guide === "later" && "opacity-50",
         // The step whose output is on show beside the cards.
         p.showing && !p.explainOpen && "border-primary outline-1 -outline-offset-1 outline-primary outline-solid",
       )}

@@ -523,7 +523,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, columnError, busy, edit, start, ask: askNow, guideAsk, setGuideAsk, guideAfter, setGuideAfter, selectCard, inspect: (id) => !isPhone && setInspected(id) })
   // The ending's "Try it on your own document": the saved pipeline stays the working copy, minus its file.
   const [savedName, setSavedName] = useState("")
-  const useOwnDocument = () => {
+  const tryOwnDocument = () => {
     guide.leave()
     clearDocument()
     if (sourceNode) selectCard(sourceNode.id)
@@ -773,7 +773,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
               <button type="button" onClick={guide.leave} className="cursor-pointer self-start bg-transparent p-0 text-xs text-muted-foreground underline hover:text-fg">
                 Leave the guided run
               </button>
-              <GuideEnd graph={graph} rule={GUIDE_RULE} onSaved={(s) => setSavedName(s.name)} onOwn={useOwnDocument} onLeave={guide.leave} />
+              <GuideEnd graph={graph} rule={GUIDE_RULE} onSaved={(s) => setSavedName(s.name)} onOwn={tryOwnDocument} onLeave={guide.leave} />
             </aside>
           ) : (
             <GuideCoach {...guide.coach} onSeeResults={isPhone && hasAskResults && !outputOpen ? () => setOutputOpen(true) : undefined} />

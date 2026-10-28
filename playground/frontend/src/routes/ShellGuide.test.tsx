@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import parsedDoc from "@/api/fixtures/parsed_doc.json"
@@ -7,7 +7,7 @@ import searchOutput from "@/api/fixtures/output.search.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import { outcomeFor, outcomeText } from "@/components/pipeline/outcome"
 import { BUILD_SESSION_KEY } from "@/state/buildSession"
-import { documentOf, resetDocumentForTests } from "@/state/document"
+import { chooseDocument, documentOf, resetDocumentForTests } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, signature, storeGraph } from "@/state/graph"
 import { GUIDE_FIX, GUIDE_RULE, GUIDE_STEPS, resetGuideForTests } from "@/state/guide"
 import { readCurrentId, readPipelines, resetPipelinesForTests, savePipeline } from "@/state/pipelines"
@@ -768,6 +768,16 @@ describe("the guided run on Build", () => {
       expect(screen.getByRole("region", { name: "Document" })).toBeTruthy()
     })
 
+    it("choosing your own PDF after Try it keeps the saved settings and the saved pipeline", async () => {
+      await keep()
+      const id = readCurrentId()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Try it on your own document" }))
+      await waitFor(() => expect(screen.queryByRole("complementary", { name: "Guided run" })).toBeNull())
+      await act(() => chooseDocument({ sha: "ef".repeat(32), filename: "mine.pdf" }))
+      await waitFor(() => expect(documentOf(stored())?.filename).toBe("mine.pdf"))
+      expect(node("chunk").config.chunk_size).toBe(800)
+      expect(readCurrentId()).toBe(id)
+    })
     it("Keep playing here closes the coach and keeps everything", async () => {
       await keep()
       const id = readCurrentId()
@@ -785,4 +795,5 @@ describe("the guided run on Build", () => {
       expect(readPipelines()).toHaveLength(0)
       expect(documentOf(stored())?.sha).toBe(PRIMER.sha)
     })
-  })})
+  })
+})

@@ -16,7 +16,17 @@ import { TEST_REGISTRY } from "@/state/testRegistry"
 import { Shell } from "./Shell"
 
 class SilentEventSource {
-  onmessage = null
+  static instances: SilentEventSource[] = []
+  constructor() {
+    SilentEventSource.instances.push(this)
+  }
+  // Ends the run the stream belongs to, as the server does at the end of a run.
+  end() {
+    act(() => {
+      this.onmessage?.(new MessageEvent("message", { data: JSON.stringify({ ts: 1, event: "stream_end", status: "finished", ok: true }), lastEventId: "1" }))
+    })
+  }
+  onmessage: ((ev: MessageEvent) => void) | null = null
   onerror = null
   onopen = null
   close() {}
@@ -72,6 +82,7 @@ const ASKED = {
 }
 
 beforeEach(() => {
+  SilentEventSource.instances = []
   posts = []
   calls = []
   asks = []
@@ -210,6 +221,25 @@ describe("the guided run on Build", () => {
       expect(within(coach()).getByText("Getting the earlier steps ready")).toBeTruthy()
       expect(window.location.search).toBe("")
       expect(window.sessionStorage.getItem(STEP_KEY)).toBe("3")
+      // The line stays until the run ends, then goes, and the step can run.
+      await waitFor(() => expect(SilentEventSource.instances.length).toBeGreaterThan(0))
+      expect(within(coach()).getByRole("button", { name: "Run Chunk" }).hasAttribute("disabled")).toBe(true)
+      SilentEventSource.instances[SilentEventSource.instances.length - 1].end()
+      await waitFor(() => expect(within(coach()).queryByText("Getting the earlier steps ready")).toBeNull())
+      fireEvent.click(within(coach()).getByRole("button", { name: "Run Chunk" }))
+      await waitFor(() => expect(posts).toHaveLength(2))
+      expect(posts[1].body.through).toMatch(/^chunk/)
+    })
+
+    it("?guide=parse starts at step 2 without a preparation run, and Parse runs from the document", async () => {
+      link("parse")
+      await open()
+      await waitFor(() => expect(within(coach()).getByText(/step 2 of 7/)).toBeTruthy())
+      expect(posts).toHaveLength(0)
+      expect(within(coach()).queryByText("Getting the earlier steps ready")).toBeNull()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Run Parse" }))
+      await waitFor(() => expect(posts).toHaveLength(1))
+      expect(posts[0].body.through).toMatch(/^parse/)
     })
 
     it("?guide=1 starts at step 1 and runs nothing", async () => {

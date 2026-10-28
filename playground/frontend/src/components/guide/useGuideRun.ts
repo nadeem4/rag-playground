@@ -102,6 +102,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   // A link from the Read page (`?guide=<stage>`) opens the guided run at that step. Read once, then dropped.
   const [linked] = useState(() => guideStartFor(new URLSearchParams(window.location.search).get("guide")))
   const linkHandled = useRef(false)
+  const busySeen = useRef(false)
   const [startAt, setStartAt] = useState(0)
   // "wait": the guide pipeline is being stored; "run": the earlier steps are running.
   const [preparing, setPreparing] = useState<"wait" | "run" | null>(null)
@@ -224,8 +225,15 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
       if (!ready || step === null) return
       setPreparing("run")
       const before = stageNode(graph, GUIDE_STEPS[step - 1].stage)
-      if (before) void a.start(before.id, false, false)
-    } else if (preparing === "run" && !a.busy) setPreparing(null)
+      busySeen.current = false
+      // A run that never starts (a missing key, say) must not leave the line up.
+      if (before) void a.start(before.id, false, false).then((id) => id === undefined && setPreparing(null))
+      else setPreparing(null)
+    } else if (preparing === "run") {
+      // Clear only after the run was seen busy, so a busy flag set late cannot end the line at once.
+      if (a.busy) busySeen.current = true
+      else if (busySeen.current) setPreparing(null)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- follows the preparing phase, the graph and the run
   }, [preparing, ready, a.busy])
 
@@ -287,7 +295,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   else if (done && node && outcome?.kind === "ready") line = stepResultLine(node.stage, type, outcome.data, { filename, pages })
   else if (done && outcome?.kind === "error") line = "The result could not be read. Run this step again."
   let blockedReason = ""
-  let state: GuideCoachProps["state"] = a.busy ? "running" : done ? "done" : "ready"
+  let state: GuideCoachProps["state"] = a.busy || preparing !== null ? "running" : done ? "done" : "ready"
   if (!node) {
     state = "blocked"
     blockedReason = `This pipeline has no ${spec.stage === "source" ? "Document" : spec.stage[0].toUpperCase() + spec.stage.slice(1)} card, so this step cannot run. Leave the guided run and start it again.`

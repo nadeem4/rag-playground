@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import parsedDoc from "@/api/fixtures/parsed_doc.json"
@@ -7,9 +7,9 @@ import searchOutput from "@/api/fixtures/output.search.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import { outcomeFor, outcomeText } from "@/components/pipeline/outcome"
 import { BUILD_SESSION_KEY } from "@/state/buildSession"
-import { resetDocumentForTests } from "@/state/document"
+import { chooseDocument, documentOf, resetDocumentForTests } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, signature, storeGraph } from "@/state/graph"
-import { GUIDE_FIX, GUIDE_STEPS, resetGuideForTests } from "@/state/guide"
+import { GUIDE_FIX, GUIDE_RULE, GUIDE_STEPS, resetGuideForTests } from "@/state/guide"
 import { readCurrentId, readPipelines, resetPipelinesForTests, savePipeline } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
@@ -723,6 +723,103 @@ describe("the guided run on Build", () => {
       fireEvent.click(within(coach()).getByRole("button", { name: "Leave the guided run" }))
       expect(aside.hidden).toBe(false)
       expect(window.localStorage.getItem("rag-playground:ask-dock:v1")).toBe(dockState)
+    })
+  })
+
+  describe("the ending", () => {
+    const done = (id: string, artifact_id?: string) => ({ id, status: "done", artifact_id })
+    const withSize = (size: number) => {
+      const g = sampleGraph(TEST_REGISTRY, { sha: PRIMER.sha, filename: PRIMER.filename }, QUESTION)
+      storeGraph({ ...g, nodes: g.nodes.map((n) => (n.stage === "chunk" ? { ...n, config: { ...n.config, chunk_size: size } } : n)) })
+    }
+    const BEFORE = { artifact: "ret-g", found: { rank: 11 }, shown: 5, candidates: 20 }
+    const session = (results: Record<string, unknown>) => ({ ...ASKED, tracked: { results, history: {} }, guideAsk: BEFORE })
+    const AFTER_RUN = { retrieve: done("retrieve", "ret-a"), use_case: done("use_case", "out-a"), index: done("index", "idx-1") }
+    const finish = async () => {
+      withSize(800)
+      goldAnswer = { found: { index: 0, gold: "Size factors." } }
+      await open(6, session(AFTER_RUN))
+      await waitFor(() => expect(within(coach()).getByRole("button", { name: "Finish" })).toBeTruthy())
+      fireEvent.click(within(coach()).getByRole("button", { name: "Finish" }))
+    }
+    const keep = async () => {
+      await finish()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Save" }))
+      await waitFor(() => expect(within(coach()).getByRole("button", { name: "Try it on your own document" })).toBeTruthy())
+    }
+
+    it("Finish shows the rule and the save form in the coach", async () => {
+      await finish()
+      expect(within(coach()).getByLabelText("Keep this pipeline")).toBeTruthy()
+      expect(within(coach()).getByText(GUIDE_RULE)).toBeTruthy()
+    })
+
+    it("Save then Try it on your own document loads the saved pipeline with no document", async () => {
+      await keep()
+      const id = readCurrentId()
+      expect(id).toBeTruthy()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Try it on your own document" }))
+      await waitFor(() => expect(screen.queryByRole("complementary", { name: "Guided run" })).toBeNull())
+      expect(readCurrentId()).toBe(id)
+      expect(documentOf(stored())).toBeNull()
+      expect(node("chunk").config.chunk_size).toBe(800)
+      const name = readPipelines().find((p) => p.id === id)!.name
+      expect(screen.getByText(`Your pipeline ${name} is loaded with its settings. Choose your own PDF on the Document card, then press Build the index.`)).toBeTruthy()
+      expect(screen.getByRole("region", { name: "Document" })).toBeTruthy()
+      expect(screen.getByRole("region", { name: "Document" }).textContent).not.toMatch(/[–—]/)
+    })
+
+    it("Try it on your own document has no dashes and moves focus to the Document region", async () => {
+      await keep()
+      expect(document.activeElement).toBe(within(coach()).getByRole("button", { name: "Try it on your own document" }))
+      fireEvent.click(within(coach()).getByRole("button", { name: "Try it on your own document" }))
+      await waitFor(() => expect(screen.queryByRole("complementary", { name: "Guided run" })).toBeNull())
+      const region = screen.getByRole("region", { name: "Document" })
+      await waitFor(() => expect(document.activeElement).toBe(region))
+      const name = readPipelines().find((p) => p.id === readCurrentId())!.name
+      const notice = screen.getByText(new RegExp(`^Your pipeline ${name} is loaded`)).textContent ?? ""
+      expect(notice).not.toMatch(/[–—]/)
+    })
+
+    it("does not show the Document screen for a frame before the Starter is stored on a first visit", async () => {
+      const seen: boolean[] = []
+      const watcher = new MutationObserver((records) => {
+        for (const r of records)
+          for (const n of Array.from(r.addedNodes))
+            if (n instanceof Element && (n.matches('section[aria-label="Document"]') || n.querySelector('section[aria-label="Document"]'))) seen.push(true)
+      })
+      watcher.observe(document.body, { childList: true, subtree: true })
+      await open()
+      watcher.disconnect()
+      expect(seen).toEqual([])
+    })
+
+    it("choosing your own PDF after Try it keeps the saved settings and the saved pipeline", async () => {
+      await keep()
+      const id = readCurrentId()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Try it on your own document" }))
+      await waitFor(() => expect(screen.queryByRole("complementary", { name: "Guided run" })).toBeNull())
+      await act(() => chooseDocument({ sha: "ef".repeat(32), filename: "mine.pdf" }))
+      await waitFor(() => expect(documentOf(stored())?.filename).toBe("mine.pdf"))
+      expect(node("chunk").config.chunk_size).toBe(800)
+      expect(readCurrentId()).toBe(id)
+    })
+    it("Keep playing here closes the coach and keeps everything", async () => {
+      await keep()
+      const id = readCurrentId()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Keep playing here" }))
+      await waitFor(() => expect(screen.queryByRole("complementary", { name: "Guided run" })).toBeNull())
+      expect(readCurrentId()).toBe(id)
+      expect(documentOf(stored())?.sha).toBe(PRIMER.sha)
+      expect(node("chunk").config.chunk_size).toBe(800)
+    })
+
+    it("Leave from the ending closes the coach without saving", async () => {
+      await finish()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Leave the guided run" }))
+      await waitFor(() => expect(screen.queryByRole("complementary", { name: "Guided run" })).toBeNull())
+      expect(readPipelines()).toHaveLength(0)
+      expect(documentOf(stored())?.sha).toBe(PRIMER.sha)
     })
   })
 })

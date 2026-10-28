@@ -8,7 +8,7 @@ import liveRegistry from "@/api/fixtures/registry.json"
 import hybridResult from "@/api/fixtures/retrieval_result.hybrid_rrf.json"
 import searchOutput from "@/api/fixtures/output.search.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
-import { chooseDocument, documentsOf, loadSampleDocument, resetDocumentForTests, withDocuments } from "@/state/document"
+import { chooseDocument, clearDocument, documentsOf, loadSampleDocument, resetDocumentForTests, withDocuments } from "@/state/document"
 import { addCleaner, addEnrich, addReranker, chatSampleGraph, initialGraph, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
 import { graphToConfig } from "@/state/config"
 import { decodePipeline, encodePipeline, readCurrentId, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId, STARTER_ID, usableGraph } from "@/state/pipelines"
@@ -2175,6 +2175,14 @@ describe("the document comes with the pipeline", () => {
     await act(async () => settle.resolve(new Response(JSON.stringify([SAMPLE_CARD]), { status: 200 })))
     await waitFor(() => expect(card("parse")).toBeTruthy())
     expect(within(card("source")).getByTestId("document-item").textContent).toContain("chunking-primer.pdf")
+  })
+  it("an emptied document with the Starter loaded shows the Document card, not the waiting text", async () => {
+    setup()
+    await act(async () => settle.resolve(new Response(JSON.stringify([SAMPLE_CARD]), { status: 200 })))
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    await act(async () => clearDocument())
+    expect(await screen.findByRole("region", { name: "Document" })).toBeTruthy()
+    expect(screen.queryByText("Getting the Starter pipeline ready")).toBeNull()
   })
   it("with no sample to start from, asks for a document once: the first-visit card, with no note above it", async () => {
     setup()

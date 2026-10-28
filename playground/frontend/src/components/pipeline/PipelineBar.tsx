@@ -16,11 +16,10 @@ import {
   deletePipeline,
   droppedText,
   encodePipeline,
-  FULL_OF_KEPT,
-  fullOfKept,
   isEdited,
   keptReason,
   renamePipeline,
+  saveRefusal,
   savePipeline,
   setCurrentId,
   STARTER_ID,
@@ -121,8 +120,7 @@ export function PipelineBar({
     const made = naming === "rename" && saved ? null : savePipeline(name, graph)
     const ok = naming === "rename" && saved ? renamePipeline(saved.id, name) : made !== null
     if (!ok) {
-      const full = naming !== "rename" && name.trim() !== "" && fullOfKept()
-      setNameError(full ? FULL_OF_KEPT : name.trim() ? "The pipeline could not be saved in this browser." : "Give the pipeline a name.")
+      setNameError(saveRefusal(name, naming !== "rename"))
       return
     }
     if (made?.dropped) setFlash(droppedText(made.dropped))

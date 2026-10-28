@@ -50,7 +50,7 @@ export function FirstRun() {
   }
 
   return (
-    <section aria-label="Document" className="flex min-w-0 flex-col gap-3 border-b border-hairline bg-surface p-3">
+    <section aria-label="Document" tabIndex={-1} className="flex outline-none min-w-0 flex-col gap-3 border-b border-hairline bg-surface p-3">
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold">Document</h3>
         <p className="m-0 flex flex-wrap items-baseline gap-x-2 text-sm text-fg-muted">

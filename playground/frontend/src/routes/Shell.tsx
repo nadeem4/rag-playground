@@ -27,6 +27,7 @@ import { ShowingDocument } from "@/components/pipeline/ShowingDocument"
 import { PipelineBar } from "@/components/pipeline/PipelineBar"
 import { RunStrip, stripSegments, type LiveRun, type StripLine } from "@/components/pipeline/RunStrip"
 import { GuideCoach } from "@/components/guide/GuideCoach"
+import { GuideEnd } from "@/components/guide/GuideEnd"
 import { useGuideRun } from "@/components/guide/useGuideRun"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -55,9 +56,9 @@ import {
   useStoredGraph,
   type PipelineGraph,
 } from "@/state/graph"
-import { documentOf, documentsOf, useDocument } from "@/state/document"
+import { clearDocument, documentOf, documentsOf, useDocument } from "@/state/document"
 import { starterPipeline, useStarter } from "@/state/starter"
-import { readGuide } from "@/state/guide"
+import { GUIDE_RULE, readGuide } from "@/state/guide"
 import { goneResults, readBuildSession, writeBuildSession, type GuideAsk } from "@/state/buildSession"
 import { cardOfStepIn, graphToConfig, removedText, servedConfig, unknownStrategy } from "@/state/config"
 import { readWorking } from "@/state/working"
@@ -147,9 +148,12 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   const [fromEvaluate] = useState(() => new URLSearchParams(window.location.search).get("from") === "evaluate")
   // Arriving fresh, or from Home's sample (`?starter=<sample>`), Build opens the Starter, ready to build.
   const starterApplied = useRef(false)
+  // True once the effect below has decided what to store, so the first screen is not drawn before that.
+  const [starterSettled, setStarterSettled] = useState(false)
   useEffect(() => {
     if (starterApplied.current || (!starter && !noStarter)) return
     starterApplied.current = true
+    setStarterSettled(true)
     const asked = new URLSearchParams(window.location.search).get("starter")
     if (asked !== null) dropParam("starter")
     const stored = readStoredGraph(registry)
@@ -520,6 +524,26 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   }
 
   const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, columnError, busy, edit, start, ask: askNow, guideAsk, setGuideAsk, guideAfter, setGuideAfter, selectCard, inspect: (id) => !isPhone && setInspected(id) })
+  // The ending's "Try it on your own document": the saved pipeline stays the working copy, minus its file.
+  const [savedName, setSavedName] = useState("")
+  // After Try it, keyboard focus goes to the Document screen (empty document) or its card, not to the page.
+  const [focusDocument, setFocusDocument] = useState(false)
+  useEffect(() => {
+    if (!focusDocument) return
+    const target =
+      document.querySelector<HTMLElement>('[data-testid="pipeline-scroll"] section[aria-label="Document"]') ??
+      (sourceNode ? document.querySelector<HTMLElement>(`[data-node-id="${sourceNode.id}"]`) : null)
+    if (!target) return
+    target.focus()
+    setFocusDocument(false)
+  })
+  const tryOwnDocument = () => {
+    guide.leave()
+    clearDocument()
+    if (sourceNode) selectCard(sourceNode.id)
+    setFocusDocument(true)
+    setBarNotice(`Your pipeline ${savedName} is loaded with its settings. Choose your own PDF on the Document card, then press Build the index.`)
+  }
   // On a phone the Ask results open in the output sheet as soon as there are some.
   // A new Ask (a new result) opens it again; the coach's See the results button brings it back after a close.
   const hasAskResults = guide.askResults !== null
@@ -635,7 +659,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
         {/* Keyed by the screen it holds: the column after a sample loads starts at the top,
             not at the first-visit card's scroll position. Below md the page scrolls as one. */}
         <div key={firstRun ? "first-run" : "column"} data-testid="pipeline-scroll" data-scroll-box className="md:min-h-0 md:flex-1 md:overflow-y-auto">
-          {firstRun && sourceNode && !noStarter ? (
+          {firstRun && sourceNode && ((!starter && !noStarter) || !starterSettled) ? (
             <p role="status" className="p-3 text-sm text-fg-muted">
               Getting the Starter pipeline ready
             </p>
@@ -756,7 +780,19 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
       </AskDock>
       {guide.coach ? (
         <div className="order-first min-w-0 bg-surface p-3 md:col-span-2 xl:min-h-0 xl:order-last xl:col-span-1 xl:overflow-y-auto">
-          <GuideCoach {...guide.coach} onSeeResults={isPhone && hasAskResults && !outputOpen ? () => setOutputOpen(true) : undefined} />
+          {guide.ending ? (
+            <aside
+              aria-label="Guided run"
+              className="guide-coach flex min-w-0 flex-col gap-3 xl:max-h-full xl:overflow-y-auto rounded-panel border border-primary bg-surface-raised p-4 shadow-raised"
+            >
+              <button type="button" onClick={guide.leave} className="cursor-pointer self-start bg-transparent p-0 text-xs text-muted-foreground underline hover:text-fg">
+                Leave the guided run
+              </button>
+              <GuideEnd graph={graph} rule={GUIDE_RULE} onSaved={(s) => setSavedName(s.name)} onOwn={tryOwnDocument} onLeave={guide.leave} />
+            </aside>
+          ) : (
+            <GuideCoach {...guide.coach} onSeeResults={isPhone && hasAskResults && !outputOpen ? () => setOutputOpen(true) : undefined} />
+          )}
         </div>
       ) : null}
     </main>

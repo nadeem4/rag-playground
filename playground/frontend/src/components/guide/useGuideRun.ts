@@ -86,6 +86,10 @@ export interface GuideRun {
   askBefore: boolean
   /** The coach's props; null when the guided run is not on. */
   coach: GuideCoachProps | null
+  /** True after Finish: the coach is replaced by the ending, which saves the pipeline. */
+  ending: boolean
+  /** Close the guided run, keeping the pipeline as it is. */
+  leave: () => void
 }
 
 /** State and wiring of the guided run on Build; the parts it connects are in components/guide. */
@@ -94,6 +98,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   const hidden = useGuideHidden()
   const [step, setStepState] = useState<number | null>(() => readGuide().step)
   const [confirming, setConfirming] = useState(false)
+  const [ending, setEnding] = useState(false)
   const questions = useSampleQuestions(GUIDE_SAMPLE)
   const target = guideGraph(registry, a.samples, questions)
 
@@ -106,6 +111,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
 
   const { guideAsk, setGuideAsk, guideAfter, setGuideAfter } = a
   const goTo = (n: number | null) => {
+    setEnding(false)
     setStepState(n)
     setGuideStep(n)
     // Leaving the guided run forgets where the answer landed, so a new run starts clean.
@@ -189,7 +195,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   let invite: ReactNode = null
   if (step === null && confirming) invite = createElement(GuideReplace, { onContinue: begin, onCancel: () => setConfirming(false) })
   else if (showInvite) invite = createElement(GuideInvite, { onStart: start })
-  if (step === null) return { active: false, invite, marks: undefined, askResults: null, askKey: null, askBefore: false, coach: null }
+  if (step === null) return { active: false, invite, marks: undefined, askResults: null, askKey: null, askBefore: false, coach: null, ending: false, leave: () => goTo(null) }
 
   // Each card is marked by the first step that points at it.
   const first = new Map<string, number>()
@@ -294,6 +300,8 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
     askResults,
     askKey: askResults ? (shownAsk?.artifact ?? null) : null,
     askBefore: askResults !== null && onFix && !asked,
+    ending,
+    leave: () => goTo(null),
     coach: {
       index,
       question,
@@ -313,7 +321,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
         }
         else void a.start(node.id, false, index !== INDEX_STEP)
       },
-      onNext: () => goTo(index === GUIDE_STEPS.length - 1 ? null : index + 1),
+      onNext: () => (index === GUIDE_STEPS.length - 1 ? setEnding(true) : goTo(index + 1)),
       onLeave: () => goTo(null),
     },
   }

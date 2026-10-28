@@ -7,9 +7,9 @@ import searchOutput from "@/api/fixtures/output.search.json"
 import { resetSampleQuestionsCache } from "@/api/samples"
 import { outcomeFor, outcomeText } from "@/components/pipeline/outcome"
 import { BUILD_SESSION_KEY } from "@/state/buildSession"
-import { resetDocumentForTests } from "@/state/document"
+import { documentOf, resetDocumentForTests } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, signature, storeGraph } from "@/state/graph"
-import { GUIDE_FIX, GUIDE_STEPS, resetGuideForTests } from "@/state/guide"
+import { GUIDE_FIX, GUIDE_RULE, GUIDE_STEPS, resetGuideForTests } from "@/state/guide"
 import { readCurrentId, readPipelines, resetPipelinesForTests, savePipeline } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
@@ -725,4 +725,64 @@ describe("the guided run on Build", () => {
       expect(window.localStorage.getItem("rag-playground:ask-dock:v1")).toBe(dockState)
     })
   })
-})
+
+  describe("the ending", () => {
+    const done = (id: string, artifact_id?: string) => ({ id, status: "done", artifact_id })
+    const withSize = (size: number) => {
+      const g = sampleGraph(TEST_REGISTRY, { sha: PRIMER.sha, filename: PRIMER.filename }, QUESTION)
+      storeGraph({ ...g, nodes: g.nodes.map((n) => (n.stage === "chunk" ? { ...n, config: { ...n.config, chunk_size: size } } : n)) })
+    }
+    const BEFORE = { artifact: "ret-g", found: { rank: 11 }, shown: 5, candidates: 20 }
+    const session = (results: Record<string, unknown>) => ({ ...ASKED, tracked: { results, history: {} }, guideAsk: BEFORE })
+    const AFTER_RUN = { retrieve: done("retrieve", "ret-a"), use_case: done("use_case", "out-a"), index: done("index", "idx-1") }
+    const finish = async () => {
+      withSize(800)
+      goldAnswer = { found: { index: 0, gold: "Size factors." } }
+      await open(6, session(AFTER_RUN))
+      await waitFor(() => expect(within(coach()).getByRole("button", { name: "Finish" })).toBeTruthy())
+      fireEvent.click(within(coach()).getByRole("button", { name: "Finish" }))
+    }
+    const keep = async () => {
+      await finish()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Save" }))
+      await waitFor(() => expect(within(coach()).getByRole("button", { name: "Try it on your own document" })).toBeTruthy())
+    }
+
+    it("Finish shows the rule and the save form in the coach", async () => {
+      await finish()
+      expect(within(coach()).getByLabelText("Keep this pipeline")).toBeTruthy()
+      expect(within(coach()).getByText(GUIDE_RULE)).toBeTruthy()
+    })
+
+    it("Save then Try it on your own document loads the saved pipeline with no document", async () => {
+      await keep()
+      const id = readCurrentId()
+      expect(id).toBeTruthy()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Try it on your own document" }))
+      await waitFor(() => expect(screen.queryByRole("complementary", { name: "Guided run" })).toBeNull())
+      expect(readCurrentId()).toBe(id)
+      expect(documentOf(stored())).toBeNull()
+      expect(node("chunk").config.chunk_size).toBe(800)
+      const name = readPipelines().find((p) => p.id === id)!.name
+      expect(screen.getByText(`Your pipeline ${name} is loaded with its settings. Choose your own PDF on the Document card, then press Build the index.`)).toBeTruthy()
+      expect(screen.getByRole("region", { name: "Document" })).toBeTruthy()
+    })
+
+    it("Keep playing here closes the coach and keeps everything", async () => {
+      await keep()
+      const id = readCurrentId()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Keep playing here" }))
+      await waitFor(() => expect(screen.queryByRole("complementary", { name: "Guided run" })).toBeNull())
+      expect(readCurrentId()).toBe(id)
+      expect(documentOf(stored())?.sha).toBe(PRIMER.sha)
+      expect(node("chunk").config.chunk_size).toBe(800)
+    })
+
+    it("Leave from the ending closes the coach without saving", async () => {
+      await finish()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Leave the guided run" }))
+      await waitFor(() => expect(screen.queryByRole("complementary", { name: "Guided run" })).toBeNull())
+      expect(readPipelines()).toHaveLength(0)
+      expect(documentOf(stored())?.sha).toBe(PRIMER.sha)
+    })
+  })})

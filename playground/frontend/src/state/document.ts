@@ -355,6 +355,12 @@ export function removeDocument(sha: string): void {
   storeWorking({ ...current, documents: removedDocument(current.documents, sha) })
 }
 
+/** Empty the working pipeline's documents, so the Document card asks for a file. */
+export function clearDocument(): void {
+  const current = readWorking()
+  if (current?.documents.length) storeWorking({ ...current, documents: [] })
+}
+
 /** True when `from` is a sample other than `next` and `text` is one of that sample's own questions. */
 function isSampleQuestion(from: DocRef, text: string, next: DocRef): boolean | Promise<boolean> {
   const card = state.samples?.find((c) => c.sha === from.sha)

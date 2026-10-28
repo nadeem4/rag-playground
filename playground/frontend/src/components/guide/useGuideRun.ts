@@ -1,4 +1,4 @@
-import { createElement, useEffect, useMemo, useState, type ReactNode } from "react"
+import { createElement, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
 import type { NodeState } from "@/api/runState"
 import { useSampleQuestions } from "@/api/samples"
@@ -22,6 +22,7 @@ import {
   GUIDE_SAMPLE,
   GUIDE_STEPS,
   guideGraph,
+  guideStartFor,
   readGuide,
   readGuideLoaded,
   setGuideLoaded,
@@ -98,6 +99,13 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   const hidden = useGuideHidden()
   const [step, setStepState] = useState<number | null>(() => readGuide().step)
   const [confirming, setConfirming] = useState(false)
+  // A link from the Read page (`?guide=<stage>`) opens the guided run at that step. Read once, then dropped.
+  const [linked] = useState(() => guideStartFor(new URLSearchParams(window.location.search).get("guide")))
+  const linkHandled = useRef(false)
+  const busySeen = useRef(false)
+  const [startAt, setStartAt] = useState(0)
+  // "wait": the guide pipeline is being stored; "run": the earlier steps are running.
+  const [preparing, setPreparing] = useState<"wait" | "run" | null>(null)
   const [ending, setEnding] = useState(false)
   const questions = useSampleQuestions(GUIDE_SAMPLE)
   const target = guideGraph(registry, a.samples, questions)
@@ -169,7 +177,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
     if (step !== null && nodeId) a.inspect(nodeId)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- follows the step and its card only
   }, [step, nodeId])
-  const begin = () => {
+  const begin = (at = 0) => {
     if (!target) return
     setConfirming(false)
     setLoaded(false)
@@ -178,23 +186,61 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
     setGuideAsk(null)
     setGuideAfter(null)
     a.edit(target)
-    goTo(0)
+    goTo(at)
+    // Steps before the chosen one run as one run, once the pipeline above is the working copy.
+    setPreparing(at > 1 ? "wait" : null)
   }
-  const start = () => {
+  const start = (at = 0) => {
+    setStartAt(at)
     const doc = documentOf(graph)
-    if (!doc) return begin()
+    if (!doc || step !== null) return begin(at)
     const id = readCurrentId()
     const current = id === STARTER_ID ? a.starter : (readPipelines().find((p) => p.id === id) ?? null)
     const onSample = a.samples?.some((c) => c.sha === doc.sha) ?? false
     const work = current?.id === STARTER_ID ? isEdited(current, graph) || !onSample : isUnsaved(current, graph)
     if (work) setConfirming(true)
-    else begin()
+    else begin(at)
   }
+  useEffect(() => {
+    if (linked === null || linkHandled.current || !target) return
+    linkHandled.current = true
+    start(linked)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the sample and question have loaded
+  }, [target])
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (!params.has("guide")) return
+    params.delete("guide")
+    const rest = params.toString()
+    window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""))
+  }, [])
+  const ready = (() => {
+    const src = graph.nodes.find((n) => n.stage === "source")
+    const q = graph.nodes.find((n) => n.stage === "query")
+    const want = target?.nodes.find((n) => n.stage === "query")
+    return !!target && src?.config.sha === a.samples?.find((c) => c.name === GUIDE_SAMPLE)?.sha && q?.config.text === want?.config.text
+  })()
+  useEffect(() => {
+    if (preparing === "wait") {
+      if (!ready || step === null) return
+      setPreparing("run")
+      const before = stageNode(graph, GUIDE_STEPS[step - 1].stage)
+      busySeen.current = false
+      // A run that never starts (a missing key, say) must not leave the line up.
+      if (before) void a.start(before.id, false, false).then((id) => id === undefined && setPreparing(null))
+      else setPreparing(null)
+    } else if (preparing === "run") {
+      // Clear only after the run was seen busy, so a busy flag set late cannot end the line at once.
+      if (a.busy) busySeen.current = true
+      else if (busySeen.current) setPreparing(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- follows the preparing phase, the graph and the run
+  }, [preparing, ready, a.busy])
 
   const showInvite = !hidden && step === null && target !== null && Object.keys(results).length === 0
   let invite: ReactNode = null
-  if (step === null && confirming) invite = createElement(GuideReplace, { onContinue: begin, onCancel: () => setConfirming(false) })
-  else if (showInvite) invite = createElement(GuideInvite, { onStart: start })
+  if (step === null && confirming) invite = createElement(GuideReplace, { onContinue: () => begin(startAt), onCancel: () => setConfirming(false) })
+  else if (showInvite) invite = createElement(GuideInvite, { onStart: () => start() })
   if (step === null) return { active: false, invite, marks: undefined, askResults: null, askKey: null, askBefore: false, coach: null, ending: false, leave: () => goTo(null) }
 
   // Each card is marked by the first step that points at it.
@@ -249,7 +295,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   else if (done && node && outcome?.kind === "ready") line = stepResultLine(node.stage, type, outcome.data, { filename, pages })
   else if (done && outcome?.kind === "error") line = "The result could not be read. Run this step again."
   let blockedReason = ""
-  let state: GuideCoachProps["state"] = a.busy ? "running" : done ? "done" : "ready"
+  let state: GuideCoachProps["state"] = a.busy || preparing !== null ? "running" : done ? "done" : "ready"
   if (!node) {
     state = "blocked"
     blockedReason = `This pipeline has no ${spec.stage === "source" ? "Document" : spec.stage[0].toUpperCase() + spec.stage.slice(1)} card, so this step cannot run. Leave the guided run and start it again.`
@@ -311,6 +357,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
       result: line,
       error,
       blockedReason,
+      preparing: preparing !== null,
       extra,
       onRun: () => {
         if (!node) return

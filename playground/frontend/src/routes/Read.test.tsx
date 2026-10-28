@@ -1,29 +1,12 @@
-import { cleanup, render, screen, within } from "@testing-library/react"
+﻿import { cleanup, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
 import type { Registry } from "@/api/types"
-import { decodePipeline } from "@/state/pipelines"
 
-import { Read, TRY_IT_ENABLED, tryLink } from "./Read"
+import { Read } from "./Read"
 
 const registry = liveRegistry as unknown as Registry
-const PRIMER_SHA = "cd".repeat(32)
-const COLUMNS_SHA = "ab".repeat(32)
-
-const sample = (name: string, sha: string, question = "What is it about?") => ({
-  name,
-  title: name,
-  blurb: "",
-  shows: "",
-  stresses: "parse",
-  pages: 3,
-  default: false,
-  filename: `${name}.pdf`,
-  sha,
-  question,
-})
-
 const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
 
 beforeEach(() => {
@@ -31,7 +14,6 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string) => {
       if (url === "/api/v2/strategies") return ok({ stages: registry })
-      if (url === "/api/samples") return ok([sample("chunking-primer", PRIMER_SHA, "Why do chunk boundaries matter?"), sample("two-column-report", COLUMNS_SHA, "What does the report recommend?")])
       return new Response("not found", { status: 404 })
     }),
   )
@@ -97,23 +79,24 @@ describe("Read", () => {
     expect(within(section("Rerank")).getByText("No post on this yet.")).toBeTruthy()
   })
 
-  it("shows no Try it on Build buttons while the switch is off, and still opens Evaluate", async () => {
+  it("offers Try this step on Build for the six stages the guided run covers", async () => {
     render(<Read />)
     await screen.findByRole("region", { name: "Chunk" })
-    expect(TRY_IT_ENABLED).toBe(false)
-    expect(screen.queryByRole("link", { name: "Try it on Build" })).toBeNull()
-    expect(within(section("Evaluate")).getByRole("link", { name: "Open Evaluate" }).getAttribute("href")).toBe("/evaluate")
+    const stages: [string, string][] = [["Document", "source"], ["Parse", "parse"], ["Clean", "clean"], ["Chunk", "chunk"], ["Index", "index"], ["Retrieve", "retrieve"]]
+    for (const [title, stage] of stages) {
+      expect(within(section(title)).getByRole("link", { name: "Try this step on Build" }).getAttribute("href")).toBe(`/build?guide=${stage}`)
+    }
+    expect(screen.getAllByRole("link", { name: "Try this step on Build" })).toHaveLength(6)
   })
 
-  it("the link builder still opens Build on the stage's sample with its own question", () => {
-    const columns = { name: "two-column-report", title: "Two-column report", blurb: "", shows: "", stresses: "parse" as const, pages: 3, default: false, filename: "two-column-report.pdf", sha: COLUMNS_SHA, question: "What does the report recommend?" }
-    const href = tryLink(registry, columns, "Parse")
-    expect(href.startsWith("/build?pipeline=")).toBe(true)
-    const decoded = decodePipeline(href.slice("/build?pipeline=".length), registry)
-    if (!decoded?.ok) throw new Error("the link does not open")
-    expect(decoded.name).toBe("Read: Parse")
-    expect(decoded.graph.nodes.find((n) => n.stage === "source")!.config.sha).toBe(COLUMNS_SHA)
-    expect(decoded.graph.nodes.find((n) => n.stage === "query")!.config.text).toBe("What does the report recommend?")
+  it("offers no Build button for Overview, Rerank or Answer, and still opens Evaluate", async () => {
+    render(<Read />)
+    await screen.findByRole("region", { name: "Chunk" })
+    for (const title of ["Overview", "Rerank", "Answer"]) {
+      expect(within(section(title)).queryByRole("link", { name: "Try this step on Build" })).toBeNull()
+    }
+    expect(within(section("Evaluate")).queryByRole("link", { name: "Try this step on Build" })).toBeNull()
+    expect(within(section("Evaluate")).getByRole("link", { name: "Open Evaluate" }).getAttribute("href")).toBe("/evaluate")
   })
 
   it("our own words have no em-dash or en-dash", async () => {
@@ -122,6 +105,6 @@ describe("Read", () => {
     const clone = container.cloneNode(true) as HTMLElement
     // Post titles are the owner's and stay verbatim.
     clone.querySelectorAll('a[target="_blank"]').forEach((a) => a.remove())
-    expect(clone.textContent).not.toMatch(/[–—]/)
+    expect(clone.textContent).not.toMatch(/[â€“â€”]/)
   })
 })

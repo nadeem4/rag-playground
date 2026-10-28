@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react"
+﻿import { cleanup, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
@@ -7,22 +7,6 @@ import type { Registry } from "@/api/types"
 import { Read } from "./Read"
 
 const registry = liveRegistry as unknown as Registry
-const PRIMER_SHA = "cd".repeat(32)
-const COLUMNS_SHA = "ab".repeat(32)
-
-const sample = (name: string, sha: string, question = "What is it about?") => ({
-  name,
-  title: name,
-  blurb: "",
-  shows: "",
-  stresses: "parse",
-  pages: 3,
-  default: false,
-  filename: `${name}.pdf`,
-  sha,
-  question,
-})
-
 const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200 })
 
 beforeEach(() => {
@@ -30,7 +14,6 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (url: string) => {
       if (url === "/api/v2/strategies") return ok({ stages: registry })
-      if (url === "/api/samples") return ok([sample("chunking-primer", PRIMER_SHA, "Why do chunk boundaries matter?"), sample("two-column-report", COLUMNS_SHA, "What does the report recommend?")])
       return new Response("not found", { status: 404 })
     }),
   )
@@ -122,6 +105,6 @@ describe("Read", () => {
     const clone = container.cloneNode(true) as HTMLElement
     // Post titles are the owner's and stay verbatim.
     clone.querySelectorAll('a[target="_blank"]').forEach((a) => a.remove())
-    expect(clone.textContent).not.toMatch(/[–—]/)
+    expect(clone.textContent).not.toMatch(/[â€“â€”]/)
   })
 })

@@ -805,11 +805,11 @@ The Read page lists the author's posts on each step, in pipeline order, with the
 each was published. Steps with no post yet say so.
 
 Each step that the guided run covers has a **Try this step on Build** link. These are Document,
-Parse, Clean, Chunk, Index and Search. The link opens Build with the guided run at that step.
+Parse, Clean, Chunk, Index and Retrieve. The link opens Build with the guided run at that step.
 For a later step, Build loads the small chunking pipeline and runs the steps before it, so the
-earlier cards show as run. The coach says "Getting the earlier steps ready" while that happens,
-then shows "step N of 7" and the step you picked. The `?guide=` part of the address goes away
-once the run has started.
+earlier cards show as run. The coach shows "step N of 7" and the step you picked at once. It
+also says "Getting the earlier steps ready" until those runs finish, and then that line goes
+away. The `?guide=` part of the address goes away once the run has started.
 
 ## Your data and privacy
 

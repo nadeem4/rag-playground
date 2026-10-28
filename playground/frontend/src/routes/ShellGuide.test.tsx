@@ -231,6 +231,15 @@ describe("the guided run on Build", () => {
       expect(posts[1].body.through).toMatch(/^chunk/)
     })
 
+    it("?guide=retrieve starts at step 6 and runs the earlier steps once through Index", async () => {
+      link("retrieve")
+      await open()
+      await waitFor(() => expect(within(coach()).getByText(/step 6 of 7/)).toBeTruthy())
+      await waitFor(() => expect(posts).toHaveLength(1))
+      expect(posts[0].body.through).toBe(node("index").id)
+      expect(window.location.search).toBe("")
+    })
+
     it("?guide=parse starts at step 2 without a preparation run, and Parse runs from the document", async () => {
       link("parse")
       await open()

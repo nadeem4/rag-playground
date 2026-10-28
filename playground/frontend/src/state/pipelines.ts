@@ -216,6 +216,12 @@ export function savePipeline(
 /** Why a save was refused when every item in a full list is kept. */
 export const FULL_OF_KEPT = "The list is full of older pipelines that could not be converted. Delete one in the Library to save this."
 
+/** The sentence to show when `savePipeline(name, ...)` returned null. */
+export function saveRefusal(name: string, checkFull = true): string {
+  if (checkFull && name.trim() !== "" && fullOfKept()) return FULL_OF_KEPT
+  return name.trim() ? "The pipeline could not be saved in this browser." : "Give the pipeline a name."
+}
+
 /** The list is full and every item is kept, so a save is refused rather than drop one. */
 export function fullOfKept(): boolean {
   const list = freshPipelines()

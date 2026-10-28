@@ -148,9 +148,12 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   const [fromEvaluate] = useState(() => new URLSearchParams(window.location.search).get("from") === "evaluate")
   // Arriving fresh, or from Home's sample (`?starter=<sample>`), Build opens the Starter, ready to build.
   const starterApplied = useRef(false)
+  // True once the effect below has decided what to store, so the first screen is not drawn before that.
+  const [starterSettled, setStarterSettled] = useState(false)
   useEffect(() => {
     if (starterApplied.current || (!starter && !noStarter)) return
     starterApplied.current = true
+    setStarterSettled(true)
     const asked = new URLSearchParams(window.location.search).get("starter")
     if (asked !== null) dropParam("starter")
     const stored = readStoredGraph(registry)
@@ -523,10 +526,22 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, columnError, busy, edit, start, ask: askNow, guideAsk, setGuideAsk, guideAfter, setGuideAfter, selectCard, inspect: (id) => !isPhone && setInspected(id) })
   // The ending's "Try it on your own document": the saved pipeline stays the working copy, minus its file.
   const [savedName, setSavedName] = useState("")
+  // After Try it, keyboard focus goes to the Document screen (empty document) or its card, not to the page.
+  const [focusDocument, setFocusDocument] = useState(false)
+  useEffect(() => {
+    if (!focusDocument) return
+    const target =
+      document.querySelector<HTMLElement>('[data-testid="pipeline-scroll"] section[aria-label="Document"]') ??
+      (sourceNode ? document.querySelector<HTMLElement>(`[data-node-id="${sourceNode.id}"]`) : null)
+    if (!target) return
+    target.focus()
+    setFocusDocument(false)
+  })
   const tryOwnDocument = () => {
     guide.leave()
     clearDocument()
     if (sourceNode) selectCard(sourceNode.id)
+    setFocusDocument(true)
     setBarNotice(`Your pipeline ${savedName} is loaded with its settings. Choose your own PDF on the Document card, then press Build the index.`)
   }
   // On a phone the Ask results open in the output sheet as soon as there are some.
@@ -644,7 +659,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
         {/* Keyed by the screen it holds: the column after a sample loads starts at the top,
             not at the first-visit card's scroll position. Below md the page scrolls as one. */}
         <div key={firstRun ? "first-run" : "column"} data-testid="pipeline-scroll" data-scroll-box className="md:min-h-0 md:flex-1 md:overflow-y-auto">
-          {firstRun && sourceNode && !starter && !noStarter ? (
+          {firstRun && sourceNode && ((!starter && !noStarter) || !starterSettled) ? (
             <p role="status" className="p-3 text-sm text-fg-muted">
               Getting the Starter pipeline ready
             </p>

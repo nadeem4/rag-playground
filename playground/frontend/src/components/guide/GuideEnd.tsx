@@ -1,10 +1,10 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { CONTROL } from "@/components/fields/types"
 import { Button } from "@/components/ui/button"
 import type { PipelineGraph } from "@/state/graph"
 import { stageNode } from "@/state/guide"
-import { savePipeline, saveRefusal, type SavedPipeline } from "@/state/pipelines"
+import { droppedText, savePipeline, saveRefusal, type SavedPipeline } from "@/state/pipelines"
 
 interface Props {
   graph: PipelineGraph
@@ -20,6 +20,7 @@ export function GuideEnd({ graph, rule, onSaved, onOwn, onLeave }: Props) {
   const [name, setName] = useState(typeof size === "number" ? `Chunks of ${size}` : "")
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<SavedPipeline | null>(null)
+  const [dropped, setDropped] = useState("")
 
   function save() {
     const made = savePipeline(name, graph)
@@ -29,8 +30,13 @@ export function GuideEnd({ graph, rule, onSaved, onOwn, onLeave }: Props) {
     }
     setError(null)
     setSaved(made.saved)
+    setDropped(made.dropped ? droppedText(made.dropped) : "")
     onSaved(made.saved)
   }
+  const tryRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (saved) tryRef.current?.focus()
+  }, [saved])
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -38,10 +44,10 @@ export function GuideEnd({ graph, rule, onSaved, onOwn, onLeave }: Props) {
       {saved ? (
         <>
           <p role="status" className="m-0 text-sm text-fg">
-            {`${saved.name} is in your Library. Save as at the top of Build does the same later.`}
+            {`${saved.name} is in your Library. Save as at the top of Build does the same later.${dropped ? ` ${dropped}` : ""}`}
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={onOwn}>Try it on your own document</Button>
+            <Button ref={tryRef} onClick={onOwn}>Try it on your own document</Button>
             <Button variant="ghost" onClick={onLeave}>
               Keep playing here
             </Button>

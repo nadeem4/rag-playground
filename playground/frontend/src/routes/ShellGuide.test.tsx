@@ -766,6 +766,32 @@ describe("the guided run on Build", () => {
       const name = readPipelines().find((p) => p.id === id)!.name
       expect(screen.getByText(`Your pipeline ${name} is loaded with its settings. Choose your own PDF on the Document card, then press Build the index.`)).toBeTruthy()
       expect(screen.getByRole("region", { name: "Document" })).toBeTruthy()
+      expect(screen.getByRole("region", { name: "Document" }).textContent).not.toMatch(/[–—]/)
+    })
+
+    it("Try it on your own document has no dashes and moves focus to the Document region", async () => {
+      await keep()
+      expect(document.activeElement).toBe(within(coach()).getByRole("button", { name: "Try it on your own document" }))
+      fireEvent.click(within(coach()).getByRole("button", { name: "Try it on your own document" }))
+      await waitFor(() => expect(screen.queryByRole("complementary", { name: "Guided run" })).toBeNull())
+      const region = screen.getByRole("region", { name: "Document" })
+      await waitFor(() => expect(document.activeElement).toBe(region))
+      const name = readPipelines().find((p) => p.id === readCurrentId())!.name
+      const notice = screen.getByText(new RegExp(`^Your pipeline ${name} is loaded`)).textContent ?? ""
+      expect(notice).not.toMatch(/[–—]/)
+    })
+
+    it("does not show the Document screen for a frame before the Starter is stored on a first visit", async () => {
+      const seen: boolean[] = []
+      const watcher = new MutationObserver((records) => {
+        for (const r of records)
+          for (const n of Array.from(r.addedNodes))
+            if (n instanceof Element && (n.matches('section[aria-label="Document"]') || n.querySelector('section[aria-label="Document"]'))) seen.push(true)
+      })
+      watcher.observe(document.body, { childList: true, subtree: true })
+      await open()
+      watcher.disconnect()
+      expect(seen).toEqual([])
     })
 
     it("choosing your own PDF after Try it keeps the saved settings and the saved pipeline", async () => {

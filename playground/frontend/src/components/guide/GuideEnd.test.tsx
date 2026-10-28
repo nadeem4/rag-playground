@@ -10,6 +10,7 @@ import {
   readCurrentId,
   readPipelines,
   resetPipelinesForTests,
+  savePipeline,
 } from "@/state/pipelines"
 import { TEST_REGISTRY as R } from "@/state/testRegistry"
 
@@ -86,8 +87,26 @@ describe("GuideEnd", () => {
     expect(screen.getByText(FULL_OF_KEPT)).toBeTruthy()
   })
 
-  it("uses no dashes in its copy", () => {
+  it("says which pipeline was removed when the list was already full", () => {
+    for (let i = 0; i < MAX_PIPELINES; i++) savePipeline(`Old ${i}`, graph)
+    expect(readPipelines()).toHaveLength(MAX_PIPELINES)
+    setup()
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Newest" } })
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+    const text = screen.getByRole("status").textContent ?? ""
+    expect(text).toContain("Newest is in your Library.")
+    expect(text).toMatch(/the oldest pipeline, was removed to keep 20/)
+  })
+
+  it("moves focus to Try it on your own document after saving", () => {
+    setup()
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Try it on your own document" }))
+  })
+
+  it("uses no dashes in its copy, before or after saving", () => {
     const { container } = setup()
+    expect(container.textContent).not.toMatch(/[–—]/)
     fireEvent.click(screen.getByRole("button", { name: "Save" }))
     expect(container.textContent).not.toMatch(/[–—]/)
   })

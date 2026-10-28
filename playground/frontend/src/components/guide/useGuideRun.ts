@@ -15,7 +15,9 @@ import type { GuideAsk } from "@/state/buildSession"
 import { askNodes, infoFor, type PipelineGraph } from "@/state/graph"
 import {
   GUIDE_FIX,
+  GUIDE_FIX_REACHED,
   GUIDE_NEUTRAL,
+  guideFindError,
   GUIDE_RULE,
   GUIDE_SAMPLE,
   GUIDE_STEPS,
@@ -80,6 +82,8 @@ export interface GuideRun {
   askResults: ReactNode
   /** The artifact the shown Ask results came from; a new one means a new Ask. */
   askKey: string | null
+  /** True while the Fix step still shows the Ask step's results, before it has asked again. */
+  askBefore: boolean
   /** The coach's props; null when the guided run is not on. */
   coach: GuideCoachProps | null
 }
@@ -185,7 +189,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   let invite: ReactNode = null
   if (step === null && confirming) invite = createElement(GuideReplace, { onContinue: begin, onCancel: () => setConfirming(false) })
   else if (showInvite) invite = createElement(GuideInvite, { onStart: start })
-  if (step === null) return { active: false, invite, marks: undefined, askResults: null, askKey: null, coach: null }
+  if (step === null) return { active: false, invite, marks: undefined, askResults: null, askKey: null, askBefore: false, coach: null }
 
   // Each card is marked by the first step that points at it.
   const first = new Map<string, number>()
@@ -222,7 +226,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   const askError = [askCards.query, askCards.retrieve, askCards.rerank, askCards.useCase].map((n) => (n ? a.errors[n.id]?.message : undefined)).find(Boolean)
   let error = failed ? errorHeadline(own.error ?? "") : ((errorNode && a.errors[errorNode.id]?.message) ?? (onAsk || onFix ? askError : undefined) ?? null)
   if (!error && (onAsk || onFix) && !a.busy && a.columnError) error = a.columnError
-  if (!error && (onAsk || onFix) && findFailed !== null && findFailed === retrieveId) error = "Could not check where the answer landed. Ask the question again."
+  if (!error && (onAsk || onFix) && findFailed !== null && findFailed === retrieveId) error = guideFindError(onFix ? "Ask again" : spec.run)
   // The step is done only when its own node is, even if a later card ran.
   const isSource = node?.stage === "source"
   const done = onFix
@@ -255,7 +259,15 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   const askAgain = onFix && sizeSet && indexFresh
   // The Ask step's Why explains a miss; when the answer ranks among the pieces the answer step reads there is no miss to explain.
   const reached = onAsk && asked !== null && asked.found !== null && asked.found.rank <= asked.shown
-  const stepOut = onFix ? { ...spec, run: askAgain ? "Ask again" : spec.run } : reached ? { ...spec, why: "" } : spec
+  // The Fix step's Why says the piece rises, so it shows only once the rank did rise; and its body names no miss when there was none.
+  const askedFound = guideAsk?.found ?? null
+  const noMiss = askedFound !== null && guideAsk !== null && askedFound.rank <= guideAsk.shown
+  const fixWorked = done && asked !== null && fixImproved({ before: askedFound, after: asked.found })
+  const stepOut = onFix
+    ? { ...spec, run: askAgain ? "Ask again" : spec.run, body: noMiss ? GUIDE_FIX_REACHED : spec.body, why: fixWorked ? spec.why : "" }
+    : reached
+      ? { ...spec, why: "" }
+      : spec
 
   let extra: ReactNode = null
   if (onFix && node) {
@@ -281,6 +293,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
     marks,
     askResults,
     askKey: askResults ? (shownAsk?.artifact ?? null) : null,
+    askBefore: askResults !== null && onFix && !asked,
     coach: {
       index,
       question,

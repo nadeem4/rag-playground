@@ -478,9 +478,14 @@ keeps it and the Fix step can read it as the rank before the fix. The Fix step b
 index (`start` on the Index card), then asks again, and keeps that rank apart as
 `guideAfter`, so the Ask step's rank is never overwritten. `fixResultLine` and `fixImproved`
 (`state/guideResult.ts`) word the result and decide whether the rule is shown. Leaving the
-guided run clears both. Two keys hold its state: `rag-playground:guide:v1` in
-localStorage (`{hidden}`) and `rag-playground:guide-step:v1` in sessionStorage (the step
-number). If storage is blocked, the guide still works for the life of the page.
+guided run clears both. Three keys hold its state: `rag-playground:guide:v1` in
+localStorage (`{hidden}`), `rag-playground:guide-step:v1` in sessionStorage (the step
+number) and `rag-playground:guide-loaded:v1` in sessionStorage (step 1's document is
+loaded; cleared on Leave). While the guide is on, the hidden Ask panel gets an empty
+transcript, so only the coach has an Ask again button. The Fix step's Why shows only when
+`fixImproved` is true, and its body leaves out the word miss when the Ask step already
+found the answer among the pieces read. If storage is blocked, the guide still works for
+the life of the page.
 
 The fixture `playground/frontend/src/api/fixtures/starter.config.json` is `samples/starter.yaml` as the
 browser holds it, and two tests pin that converting the app's Starter gives that file, so

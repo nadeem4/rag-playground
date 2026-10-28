@@ -33,6 +33,11 @@ export const GUIDE_LINE = "The answer step reads only the {shown} above this lin
 export const GUIDE_RULE = "When an answer lives in one long sentence or table row, make the pieces bigger than it, or split by sentence."
 export const GUIDE_NEUTRAL = "One setting does not fix every miss. Try another chunk size, or leave the guided run to ask your own question."
 
+/** Fix step's body when the Ask step already found the answer among the pieces read, so there is no miss to name. */
+export const GUIDE_FIX_REACHED =
+  "The answer was already among the pieces the answer step reads. To see what the chunk size changes, set it to {size} on the Chunk card, then build the index again."
+/** Error when the check for where the answer landed failed; `button` is the label of the step's own button. */
+export const guideFindError = (button: string): string => `Could not check where the answer landed. Press ${button} to try again.`
 export const GUIDE_INVITE = {
   heading: "New to RAG? Take the guided run.",
   body: "Build a pipeline step by step, find where an answer gets lost, and fix it. It takes about five minutes and needs no API key.",

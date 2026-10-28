@@ -361,6 +361,17 @@ describe("the guided run on Build", () => {
       await waitFor(() => expect(runButton("Build the index").disabled).toBe(false))
     })
 
+    it("on a phone, the sheet says Before the fix until the question is asked again", async () => {
+      vi.stubGlobal(
+        "matchMedia",
+        vi.fn((q: string) => ({ matches: q === "(max-width: 47.99rem)" || q === "(max-width: 63.99rem)", addEventListener: () => {}, removeEventListener: () => {} })),
+      )
+      withSize(400)
+      await open(6, session({ retrieve: done("retrieve", "ret-g") }))
+      fireEvent.click(await within(coach()).findByRole("button", { name: "See the results" }))
+      expect(within(screen.getByRole("dialog", { name: /Ask results/ })).getByText("Before the fix")).toBeTruthy()
+    })
+
     it("names the fix size in the step text whatever the chunk size is now", async () => {
       withSize(400)
       await open(6, session({ retrieve: done("retrieve", "ret-g") }))
@@ -424,6 +435,27 @@ describe("the guided run on Build", () => {
       expect(within(coach()).getByRole("status").textContent).not.toMatch(/moved|1st/)
       expect(within(coach()).queryByText(/long sentence or table row/)).toBeNull()
       expect(within(coach()).getByText(/does not fix every miss/)).toBeTruthy()
+    })
+
+    it("shows the Why only when the fix raised the rank", async () => {
+      withSize(800)
+      goldAnswer = { found: { index: 0, gold: "Size factors." } }
+      await open(6, session(AFTER_RUN))
+      await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("1st"))
+      expect(coach().textContent).toContain("so it rises to the top")
+      cleanup()
+      resetGuideForTests()
+      goldAnswer = { found: null }
+      await open(6, session(AFTER_RUN))
+      await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("still not found"))
+      expect(coach().textContent).not.toContain("so it rises to the top")
+    })
+
+    it("does not call it a miss when the Ask step already found the answer among the pieces read", async () => {
+      withSize(400)
+      await open(6, session({ retrieve: done("retrieve", "ret-g") }, { guideAsk: { artifact: "ret-g", found: { rank: 2 }, shown: 5, candidates: 20 } }))
+      expect(coach().textContent).not.toMatch(/miss/)
+      expect(coach().textContent).toContain(`set it to ${GUIDE_FIX.chunk_size} on the Chunk card`)
     })
 
     it("keeps the Ask step's rank and the new rank across a reload without asking again", async () => {

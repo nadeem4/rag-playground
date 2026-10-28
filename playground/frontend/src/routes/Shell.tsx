@@ -688,7 +688,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
       {isPhone ? (
         // On a phone the output opens in a sheet over the cards, not in a pane far below them.
         outputOpen && guide.askResults ? (
-          <OutputSheet title="Ask results" sub="The pieces Search returned" onClose={closeOutput}>
+          <OutputSheet title="Ask results" sub={guide.askBefore ? "Before the fix" : "The pieces Search returned"} onClose={closeOutput}>
             {guide.askResults}
           </OutputSheet>
         ) : outputOpen && inspectedNode ? (

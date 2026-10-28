@@ -5,7 +5,12 @@ import type { SampleCard, SampleQuestion } from "@/api/types"
 
 import {
   GUIDE_FIX,
+  GUIDE_FIX_REACHED,
   GUIDE_INVITE,
+  GUIDE_LINE,
+  GUIDE_NEUTRAL,
+  GUIDE_RULE,
+  guideFindError,
   GUIDE_QUESTION_ID,
   GUIDE_SAMPLE,
   GUIDE_STEPS,
@@ -19,6 +24,7 @@ import {
   useGuideHidden,
 } from "./guide"
 import { sampleGraph } from "./graph"
+import { askResultLine, fixResultLine } from "./guideResult"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
 const primer: SampleCard = {
@@ -64,6 +70,34 @@ describe("the guide steps", () => {
         )
         expect(t.length).toBeGreaterThan(0)
       }
+    }
+  })
+
+  it("has no dashes and no questions in the fix, rule, line, neutral and error copy or the result lines", () => {
+    const f1 = { rank: 1 }
+    const f6 = { rank: 6 }
+    const found = (rank: number) => ({ rank })
+    const texts = [
+      GUIDE_LINE,
+      GUIDE_RULE,
+      GUIDE_NEUTRAL,
+      GUIDE_FIX_REACHED,
+      guideFindError("Ask again"),
+      guideFindError("Ask the question"),
+      askResultLine({ found: null, shown: 5, candidates: 20 }),
+      askResultLine({ found: null, shown: 1, candidates: 1 }),
+      askResultLine({ found: found(2), shown: 5, candidates: 20 }),
+      askResultLine({ found: found(11), shown: 1, candidates: 20 }),
+      fixResultLine({ before: null, after: null, chunk: "12 pieces." }),
+      fixResultLine({ before: f6, after: null, chunk: null }),
+      fixResultLine({ before: null, after: f1, chunk: null }),
+      fixResultLine({ before: f6, after: f6, chunk: null }),
+      fixResultLine({ before: f6, after: f1, chunk: null }),
+      fixResultLine({ before: f1, after: f6, chunk: null }),
+    ]
+    for (const t of texts) {
+      expect(t).not.toMatch(/[–—]/)
+      expect(t).not.toMatch(/\?/)
     }
   })
 

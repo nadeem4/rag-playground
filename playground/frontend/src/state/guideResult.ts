@@ -23,22 +23,33 @@ export function stepResultLine(
 
 /** What the answer step can see: the target piece among the pieces it reads, below them, or missing. */
 export function askResultLine(f: { found: Found; shown: number; candidates: number }): string {
-  const read = fmt(f.shown)
-  if (!f.found) return `No piece that was returned holds the answer. Search looked through ${fmt(f.candidates)} pieces.`
+  const read = `${fmt(f.shown)} ${f.shown === 1 ? "piece" : "pieces"}`
+  if (!f.found) return `No piece that was returned holds the answer. Search looked through ${fmt(f.candidates)} ${f.candidates === 1 ? "piece" : "pieces"}.`
   if (f.found.rank <= f.shown) {
-    return `The piece with the answer is ${ordinal(f.found.rank)}, so it is among the ${read} pieces the answer step reads.`
+    return `The piece with the answer is ${ordinal(f.found.rank)}, so it is among the ${read} the answer step reads.`
   }
-  return `The piece with the answer is ${ordinal(f.found.rank)}, which is below the ${read} pieces the answer step reads.`
+  return `The piece with the answer is ${ordinal(f.found.rank)}, which is below the ${read} the answer step reads.`
 }
 
-/** What a fix changed: the rank before and after, never an invented rank. */
+/** The fix helped only when the answer is now found and was missing or ranked lower before. */
+export function fixImproved(f: { before: Found; after: Found }): boolean {
+  return f.after !== null && (f.before === null || f.after.rank < f.before.rank)
+}
+
+/** What a fix changed: the rank before and after, never an invented rank. `chunk` is the real Chunk outcome, added as its own sentence. */
 export function fixResultLine(f: { before: Found; after: Found; chunk: string | null }): string {
-  const where = f.chunk ? ` in ${f.chunk}` : ""
-  if (!f.after) {
-    return f.before
-      ? `The piece with the answer was ${ordinal(f.before.rank)} before, and it is still not found${where}.`
-      : `The piece with the answer is still not found${where}.`
+  const tail = f.chunk ? ` ${f.chunk}` : ""
+  return `${rankSentence(f)}${tail}`
+}
+
+function rankSentence({ before, after }: { before: Found; after: Found }): string {
+  if (!after) {
+    return before
+      ? `The piece with the answer was ${ordinal(before.rank)} before, and it is still not found.`
+      : "The piece with the answer is still not found."
   }
-  if (!f.before) return `The piece with the answer was not found before. Now it is ${ordinal(f.after.rank)}${where}.`
-  return `The piece with the answer moved from ${ordinal(f.before.rank)} to ${ordinal(f.after.rank)}${where}.`
+  if (!before) return `The piece with the answer was not found before. Now it is ${ordinal(after.rank)}.`
+  if (after.rank === before.rank) return `The piece with the answer is still ${ordinal(after.rank)}, the same as before.`
+  if (after.rank < before.rank) return `The piece with the answer moved from ${ordinal(before.rank)} to ${ordinal(after.rank)}.`
+  return `The piece with the answer fell from ${ordinal(before.rank)} to ${ordinal(after.rank)}.`
 }

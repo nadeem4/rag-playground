@@ -16,6 +16,8 @@ export interface GuideCoachProps {
   onRun: () => void
   onNext: () => void
   onLeave: () => void
+  /** On a phone, when results exist and their sheet is closed. */
+  onSeeResults?: () => void
   extra?: ReactNode
 }
 
@@ -32,15 +34,17 @@ export function GuideCoach({
   onRun,
   onNext,
   onLeave,
+  onSeeResults,
   extra,
 }: GuideCoachProps) {
   const total = GUIDE_STEPS.length
   const last = index === total - 1
   const done = state === "done"
+  const why = fill(step.why, values)
   return (
     <aside
       aria-label="Guided run"
-      className="guide-coach flex min-w-0 max-h-full flex-col gap-3 overflow-y-auto rounded-panel border border-primary bg-surface-raised p-4 shadow-raised"
+      className="guide-coach flex min-w-0 flex-col gap-3 xl:max-h-full xl:overflow-y-auto rounded-panel border border-primary bg-surface-raised p-4 shadow-raised"
     >
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         <p className="m-0 whitespace-nowrap text-xs font-medium text-muted-foreground">
@@ -83,11 +87,18 @@ export function GuideCoach({
       >
         {done ? result : state === "ready" ? error : null}
       </div>
+      {onSeeResults ? (
+        <Button variant="outline" className="self-start" onClick={onSeeResults}>
+          See the results
+        </Button>
+      ) : null}
       {done ? (
         <>
-          <p className="m-0 border-l-2 border-primary pl-3 text-sm text-fg">
-            <strong>Why:</strong> {fill(step.why, values)}
-          </p>
+          {why ? (
+            <p className="m-0 border-l-2 border-primary pl-3 text-sm text-fg">
+              <strong>Why:</strong> {why}
+            </p>
+          ) : null}
           <Button className="self-start" onClick={onNext}>
             {last ? "Finish" : "Next step"}
           </Button>

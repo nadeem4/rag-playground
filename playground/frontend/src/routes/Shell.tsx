@@ -57,7 +57,8 @@ import {
 } from "@/state/graph"
 import { documentOf, documentsOf, useDocument } from "@/state/document"
 import { starterPipeline, useStarter } from "@/state/starter"
-import { goneResults, readBuildSession, writeBuildSession } from "@/state/buildSession"
+import { readGuide } from "@/state/guide"
+import { goneResults, readBuildSession, writeBuildSession, type GuideAsk } from "@/state/buildSession"
 import { cardOfStepIn, graphToConfig, removedText, servedConfig, unknownStrategy } from "@/state/config"
 import { readWorking } from "@/state/working"
 import { askRun, cardRun, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
@@ -227,6 +228,10 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   // The rerank result whose comparison the reader hid. Held here, so closing the
   // Ask panel and opening it again keeps it; a new Ask or another reranker opens it.
   const [comparisonHidden, setComparisonHidden] = useState<string | null>(() => session?.comparisonHidden ?? null)
+  // Where the guided run's Ask step found the answer; kept with the session so a reload keeps it.
+  const [guideAsk, setGuideAsk] = useState<GuideAsk | null>(() => session?.guideAsk ?? null)
+  // And where "Ask again" in the Fix step found it, kept apart from the first.
+  const [guideAfter, setGuideAfter] = useState<GuideAsk | null>(() => session?.guideAfter ?? null)
   const { keys } = useApiKey()
   // The Ask panel's dock: open or closed, its side and its width, remembered in this browser.
   const dock = useAskDock()
@@ -250,8 +255,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
 
   useEffect(() => setTracked((prev) => foldRun(prev, run.nodes)), [run.nodes])
   useEffect(() => {
-    if (Object.keys(tracked.results).length || transcript.length) writeBuildSession({ tracked, sigs, transcript, asked, comparisonHidden })
-  }, [tracked, sigs, transcript, asked, comparisonHidden])
+    if (Object.keys(tracked.results).length || transcript.length) writeBuildSession({ tracked, sigs, transcript, asked, comparisonHidden, guideAsk, guideAfter })
+  }, [tracked, sigs, transcript, asked, comparisonHidden, guideAsk, guideAfter])
   // A restart wipes the server's store: a restored step whose result is gone comes back as not run.
   useEffect(() => {
     if (!session) return
@@ -432,7 +437,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
         selectCard(routed.nodeId)
         // An error on a retrieval, rerank or answer step is shown in the Ask panel.
         const stage = graph.nodes.find((n) => n.id === routed.nodeId)?.stage
-        if (stage && ASK_STAGES.includes(stage)) dock.setOpen(true)
+        // The guided run hides the dock and shows the error in its coach: the dock stays as it was.
+        if (stage && ASK_STAGES.includes(stage) && readGuide().step === null) dock.setOpen(true)
       }
     } finally {
       setSubmitting(false)
@@ -506,7 +512,21 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   else if (built && segments.length && segments.every((s) => s.state === "done" || s.state === "reused"))
     stripLine = { kind: "built", totalMs: indexSteps.reduce((sum, n) => sum + (results[n.id]?.duration_ms ?? 0), 0) }
 
-  const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, busy, edit, start, inspect: (id) => !isPhone && setInspected(id) })
+  // The Ask panel's Ask, and the guided run's Ask step.
+  const askNow = () => {
+    setComparisonHidden(null)
+    const snap = { ...askSnapshot(graph, registry, pipelineName, pipelineDocs.find((d) => d.sha === searchIn)?.filename), searchSha: searchIn }
+    void start(undefined, false, false, true).then((id) => setAsked(id ? { ...snap, runId: id } : null))
+  }
+
+  const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, columnError, busy, edit, start, ask: askNow, guideAsk, setGuideAsk, guideAfter, setGuideAfter, selectCard, inspect: (id) => !isPhone && setInspected(id) })
+  // On a phone the Ask results open in the output sheet as soon as there are some.
+  // A new Ask (a new result) opens it again; the coach's See the results button brings it back after a close.
+  const hasAskResults = guide.askResults !== null
+  const askKey = guide.askKey
+  useEffect(() => {
+    if (isPhone && hasAskResults) setOutputOpen(true)
+  }, [isPhone, hasAskResults, askKey])
 
   return (
     <main
@@ -667,11 +687,19 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
 
       {isPhone ? (
         // On a phone the output opens in a sheet over the cards, not in a pane far below them.
-        outputOpen && inspectedNode ? (
+        outputOpen && guide.askResults ? (
+          <OutputSheet title="Ask results" sub={guide.askBefore ? "Before the fix" : "The pieces Search returned"} onClose={closeOutput}>
+            {guide.askResults}
+          </OutputSheet>
+        ) : outputOpen && inspectedNode ? (
           <OutputSheet title={titleFor(inspectedNode)} sub={`${plainName(inspectedNode.transform)}, ${inspectedNode.transform}`} onClose={closeOutput}>
             <InspectorPanel graph={graph} registry={registry} results={shown} stale={stale} selected={inspected} roomForButton={false} inSheet />
           </OutputSheet>
         ) : null
+      ) : guide.askResults ? (
+        <section aria-label="Guided Ask results" className="min-h-0 overflow-y-auto bg-surface p-4">
+          {guide.askResults}
+        </section>
       ) : (
         <InspectorPanel
           graph={graph}
@@ -706,7 +734,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
             keyProvider={keyNoticeProvider}
             asked={asked !== null && asked.runId === runId && !busy ? asked : null}
             runError={fromAsk && (columnError || run.error) ? "The run could not start. See the note above the cards." : null}
-            transcript={transcript}
+            transcript={guide.active ? [] : transcript}
             comparisonHidden={comparisonHidden}
             onComparison={setComparisonHidden}
             onLog={onLog}
@@ -722,17 +750,13 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
             searchIn={searchIn}
             onSearchIn={setSearchSha}
             askedIn={asked ? (asked.searchSha ?? null) : undefined}
-            onAsk={() => {
-              setComparisonHidden(null)
-              const snap = { ...askSnapshot(graph, registry, pipelineName, pipelineDocs.find((d) => d.sha === searchIn)?.filename), searchSha: searchIn }
-              void start(undefined, false, false, true).then((id) => setAsked(id ? { ...snap, runId: id } : null))
-            }}
+            onAsk={askNow}
           />
         )}
       </AskDock>
       {guide.coach ? (
-        <div className="order-first min-w-0 bg-surface p-3 md:col-span-2 md:min-h-0 md:max-h-[40dvh] md:overflow-y-auto xl:max-h-none xl:order-last xl:col-span-1 xl:overflow-y-auto">
-          <GuideCoach {...guide.coach} />
+        <div className="order-first min-w-0 bg-surface p-3 md:col-span-2 xl:min-h-0 xl:order-last xl:col-span-1 xl:overflow-y-auto">
+          <GuideCoach {...guide.coach} onSeeResults={isPhone && hasAskResults && !outputOpen ? () => setOutputOpen(true) : undefined} />
         </div>
       ) : null}
     </main>

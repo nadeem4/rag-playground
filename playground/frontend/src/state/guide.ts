@@ -26,6 +26,18 @@ export const GUIDE_SAMPLE = "chunking-primer"
 export const GUIDE_QUESTION_ID = "size-factors"
 export const GUIDE_FIX = { chunk_size: 800, chunk_overlap: 80 }
 
+/** The dashed line in the Ask results, after the pieces the answer step reads. */
+export const GUIDE_LINE = "The answer step reads only the {shown} above this line."
+
+/** The Fix step's one rule, shown only when the answer rose; otherwise the neutral line. */
+export const GUIDE_RULE = "When an answer lives in one long sentence or table row, make the pieces bigger than it, or split by sentence."
+export const GUIDE_NEUTRAL = "One setting does not fix every miss. Try another chunk size, or leave the guided run to ask your own question."
+
+/** Fix step's body when the Ask step already found the answer among the pieces read, so there is no miss to name. */
+export const GUIDE_FIX_REACHED =
+  "The answer was already among the pieces the answer step reads. To see what the chunk size changes, set it to {size} on the Chunk card, then build the index again."
+/** Error when the check for where the answer landed failed; `button` is the label of the step's own button. */
+export const guideFindError = (button: string): string => `Could not check where the answer landed. Press ${button} to try again.`
 export const GUIDE_INVITE = {
   heading: "New to RAG? Take the guided run.",
   body: "Build a pipeline step by step, find where an answer gets lost, and fix it. It takes about five minutes and needs no API key.",
@@ -122,6 +134,7 @@ export function stageNode(graph: PipelineGraph, stage: GuideStage): GraphNode | 
 
 const HIDDEN_KEY = "rag-playground:guide:v1"
 const STEP_KEY = "rag-playground:guide-step:v1"
+const LOADED_KEY = "rag-playground:guide-loaded:v1"
 let hidden: boolean | null = null
 let step: number | null | undefined
 const listeners = new Set<() => void>()
@@ -165,8 +178,27 @@ export function setGuideHidden(value: boolean): void {
   listeners.forEach((l) => l())
 }
 
+/** Step 1 only loads the document, so "loaded" is its own flag; it survives a reload with the step. */
+export function readGuideLoaded(): boolean {
+  try {
+    return window.sessionStorage.getItem(LOADED_KEY) === "1"
+  } catch {
+    return false
+  }
+}
+
+export function setGuideLoaded(value: boolean): void {
+  try {
+    if (value) window.sessionStorage.setItem(LOADED_KEY, "1")
+    else window.sessionStorage.removeItem(LOADED_KEY)
+  } catch {
+    // Blocked storage: remembered for this page only.
+  }
+}
+
 export function setGuideStep(n: number | null): void {
   step = n
+  if (n === null) setGuideLoaded(false)
   try {
     if (n === null) window.sessionStorage.removeItem(STEP_KEY)
     else window.sessionStorage.setItem(STEP_KEY, String(n))

@@ -5,7 +5,7 @@ import index from "@/api/fixtures/index.lancedb.json"
 import parsedDoc from "@/api/fixtures/parsed_doc.json"
 import { outcomeFor, outcomeText } from "@/components/pipeline/outcome"
 
-import { askResultLine, fixResultLine, stepResultLine } from "./guideResult"
+import { askResultLine, fixImproved, fixResultLine, stepResultLine } from "./guideResult"
 
 const doc = { filename: "report.pdf", pages: 3 }
 const cardText = (...a: Parameters<typeof outcomeFor>) => outcomeText(outcomeFor(...a)!)
@@ -46,6 +46,13 @@ describe("askResultLine", () => {
     expect(askResultLine({ found: { rank: 22 }, shown: 3, candidates: 30 })).toContain("22nd")
   })
 
+  it("says piece, not pieces, when the count is 1", () => {
+    expect(askResultLine({ found: { rank: 1 }, shown: 1, candidates: 20 })).toContain("the 1 piece the answer step reads")
+    expect(askResultLine({ found: { rank: 4 }, shown: 1, candidates: 20 })).toContain("the 1 piece the answer step reads")
+    expect(askResultLine({ found: null, shown: 5, candidates: 1 })).toContain("through 1 piece.")
+    expect(askResultLine({ found: { rank: 1 }, shown: 5, candidates: 20 })).toContain("the 5 pieces the answer step reads")
+  })
+
   it("not found names the candidates", () => {
     const s = askResultLine({ found: null, shown: 5, candidates: 20 })
     expect(s).toContain("20")
@@ -76,5 +83,36 @@ describe("fixResultLine", () => {
 
   it("names the chunk when given", () => {
     expect(fixResultLine({ before: { rank: 11 }, after: { rank: 1 }, chunk: "chunk-7" })).toContain("chunk-7")
+  })
+
+  it("says the rank did not change, without claiming a move", () => {
+    const s = fixResultLine({ before: { rank: 3 }, after: { rank: 3 }, chunk: null })
+    expect(s).toContain("3rd")
+    expect(s).not.toMatch(/moved/)
+    expect(s).toMatch(/same|still/i)
+  })
+
+  it("never says moved from X to X, and the result lines of the other steps never say it either", () => {
+    expect(fixResultLine({ before: { rank: 3 }, after: { rank: 3 }, chunk: null })).toBe("The piece with the answer is still 3rd, the same as before.")
+    for (const r of [1, 2, 3, 11]) expect(fixResultLine({ before: { rank: r }, after: { rank: r }, chunk: null })).not.toMatch(/moved|from/)
+    expect(stepResultLine("chunk", "chunk_set", chunkRecursive, doc)).not.toMatch(/moved from/)
+  })
+
+  it("says the answer fell when the rank is worse", () => {
+    const s = fixResultLine({ before: { rank: 2 }, after: { rank: 6 }, chunk: null })
+    expect(s).toContain("2nd")
+    expect(s).toContain("6th")
+    expect(s).not.toMatch(/moved/)
+  })
+})
+
+describe("fixImproved", () => {
+  it("is true only when the answer is found and was missing or ranked lower before", () => {
+    expect(fixImproved({ before: { rank: 11 }, after: { rank: 1 } })).toBe(true)
+    expect(fixImproved({ before: null, after: { rank: 4 } })).toBe(true)
+    expect(fixImproved({ before: { rank: 3 }, after: { rank: 3 } })).toBe(false)
+    expect(fixImproved({ before: { rank: 2 }, after: { rank: 6 } })).toBe(false)
+    expect(fixImproved({ before: { rank: 11 }, after: null })).toBe(false)
+    expect(fixImproved({ before: null, after: null })).toBe(false)
   })
 })

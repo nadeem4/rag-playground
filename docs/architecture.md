@@ -484,7 +484,7 @@ number) and `rag-playground:guide-loaded:v1` in sessionStorage (step 1's documen
 loaded; cleared on Leave). While the guide is on, the hidden Ask panel gets an empty
 transcript, so only the coach has an Ask again button. The Fix step's Why shows only when
 `fixImproved` is true, and its body leaves out the word miss when the Ask step already
-found the answer among the pieces read. If storage is blocked, the guide still works for
+found the answer among the pieces read. The last step renders `GuideEnd` (`components/guide/GuideEnd.tsx`): it saves the working pipeline with `savePipeline` under a name taken from the run's chunk size, then offers Try it on your own document (clears the document, keeps the saved pipeline and its settings, and shows a notice on Build) or Keep playing here. If storage is blocked, the guide still works for
 the life of the page.
 
 The fixture `playground/frontend/src/api/fixtures/starter.config.json` is `samples/starter.yaml` as the

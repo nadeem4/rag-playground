@@ -240,6 +240,14 @@ to take away, and when it did not, it says one setting does not fix every miss. 
 the fix shows only when the piece moved up. The main pane keeps the first list until you ask
 again, then shows the new one; on a phone the sheet is titled "Before the fix" until then.
 
+When the fix is done, the coach ends by offering to keep the pipeline. A box holds a name, filled in
+for you from the chunk size the run used, and **Save** puts the pipeline in your Library. You can
+change the name first. After it is saved, **Try it on your own document** ends the guided run,
+clears the sample document, and keeps the saved pipeline with all its settings. Build then shows
+the Document card and a note that says the pipeline is loaded. Choose your own PDF on the
+Document card, then press **Build the index**. **Keep playing here** ends the guided run and
+leaves everything as it is. The saved pipeline stays in your Library either way.
+
 While the guided run is on, the Ask panel is hidden, not closed. **Leave the guided run**
 ends it and the panel comes back as it was. The invite shows again only while nothing has
 run on Build. A reload keeps your step and results for as long as the tab is open.

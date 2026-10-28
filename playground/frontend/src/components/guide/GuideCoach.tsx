@@ -13,6 +13,8 @@ export interface GuideCoachProps {
   /** A failed run's own error line; shown while the step stays ready. */
   error?: string | null
   blockedReason?: string
+  /** True while the earlier steps run, after the guided run was opened at a later step. */
+  preparing?: boolean
   onRun: () => void
   onNext: () => void
   onLeave: () => void
@@ -31,6 +33,7 @@ export function GuideCoach({
   result,
   error,
   blockedReason,
+  preparing,
   onRun,
   onNext,
   onLeave,
@@ -80,12 +83,14 @@ export function GuideCoach({
         role="status"
         aria-live="polite"
         className={
-          done && result
+          preparing
+            ? "text-sm text-muted-foreground"
+            : done && result
             ? "rounded-control border border-border bg-surface p-2 font-mono text-xs text-fg"
             : "text-sm text-danger empty:hidden"
         }
       >
-        {done ? result : state === "ready" ? error : null}
+        {preparing ? "Getting the earlier steps ready" : done ? result : state === "ready" ? error : null}
       </div>
       {onSeeResults ? (
         <Button variant="outline" className="self-start" onClick={onSeeResults}>

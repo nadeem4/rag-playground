@@ -2,6 +2,8 @@ import { useSyncExternalStore } from "react"
 
 import type { GraphNode, Registry, SampleCard, SampleQuestion, Stage } from "@/api/types"
 
+import type { PostStage } from "@/learn/posts"
+
 import { sampleGraph, type PipelineGraph } from "./graph"
 
 /**
@@ -130,6 +132,25 @@ export function guideGraph(
 export function stageNode(graph: PipelineGraph, stage: GuideStage): GraphNode | undefined {
   const s: Stage = stage === "fix" ? "chunk" : stage === "ask" ? "retrieve" : stage
   return graph.nodes.find((n) => n.stage === s)
+}
+
+const STAGE_STEP: Partial<Record<PostStage, number>> = { source: 0, parse: 1, clean: 2, chunk: 3, index: 4, retrieve: 5 }
+
+/** The guided-run step for a Read page stage; null for a stage the guide has no step for. */
+export function guideIndexFor(stage: PostStage): number | null {
+  return STAGE_STEP[stage] ?? null
+}
+
+/** Where the Read page sends a reader to open the guided run at a stage. */
+export function guideLink(stage: PostStage): string {
+  return `/build?guide=${stage}`
+}
+
+/** The step a `?guide=` value asks for: 1 or 0 is the first step, a stage name is its step, anything else is null. */
+export function guideStartFor(value: string | null): number | null {
+  if (value === "0" || value === "1") return 0
+  if (value === null || !Object.hasOwn(STAGE_STEP, value)) return null
+  return guideIndexFor(value as PostStage)
 }
 
 const HIDDEN_KEY = "rag-playground:guide:v1"

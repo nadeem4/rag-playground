@@ -196,6 +196,55 @@ describe("the guided run on Build", () => {
     expect(node("chunk").config.chunk_size).not.toBe(123)
   })
 
+  describe("opened by a link", () => {
+    const link = (value: string) => window.history.replaceState(null, "", `/build?guide=${value}`)
+
+    it("?guide=chunk starts at step 4, runs the earlier steps once through Clean and drops the param", async () => {
+      link("chunk")
+      await open()
+      await waitFor(() => expect(within(coach()).getByText(/step 4 of 7/)).toBeTruthy())
+      expect(node("source").config.sha).toBe(PRIMER.sha)
+      expect(node("query").config.text).toBe(QUESTION)
+      await waitFor(() => expect(posts).toHaveLength(1))
+      expect(posts[0].body.through).toMatch(/^clean/)
+      expect(within(coach()).getByText("Getting the earlier steps ready")).toBeTruthy()
+      expect(window.location.search).toBe("")
+      expect(window.sessionStorage.getItem(STEP_KEY)).toBe("3")
+    })
+
+    it("?guide=1 starts at step 1 and runs nothing", async () => {
+      link("1")
+      await open()
+      await waitFor(() => expect(within(coach()).getByText(/step 1 of 7/)).toBeTruthy())
+      expect(posts).toHaveLength(0)
+      expect(window.location.search).toBe("")
+    })
+
+    it("an unknown value starts nothing", async () => {
+      link("nonsense")
+      await open()
+      await waitFor(() => expect(invite()).toBeTruthy())
+      expect(screen.queryByRole("complementary", { name: "Guided run" })).toBeNull()
+      expect(posts).toHaveLength(0)
+      expect(window.location.search).toBe("")
+    })
+
+    it("with unsaved work it shows the replace warning instead of replacing", async () => {
+      const mine = sampleGraph(TEST_REGISTRY, { sha: "ee".repeat(32), filename: "mine.pdf" }, "Mine?")
+      savePipeline("Mine", mine)
+      storeGraph({ ...mine, nodes: mine.nodes.map((n) => (n.stage === "chunk" ? { ...n, config: { ...n.config, chunk_size: 123 } } : n)) })
+      link("chunk")
+      await open()
+      await waitFor(() => expect(screen.getByText(/This replaces the pipeline you are working on/)).toBeTruthy())
+      expect(screen.queryByRole("complementary", { name: "Guided run" })).toBeNull()
+      expect(node("chunk").config.chunk_size).toBe(123)
+      expect(posts).toHaveLength(0)
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }))
+      await waitFor(() => expect(within(coach()).getByText(/step 4 of 7/)).toBeTruthy())
+      await waitFor(() => expect(posts).toHaveLength(1))
+    })
+  })
+
   it("Run on step 2 sends the run through the parse node", async () => {
     await open(1)
     fireEvent.click(within(coach()).getByRole("button", { name: "Run Parse" }))

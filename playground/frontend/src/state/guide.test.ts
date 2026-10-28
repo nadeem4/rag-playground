@@ -16,6 +16,9 @@ import {
   GUIDE_STEPS,
   fill,
   guideGraph,
+  guideIndexFor,
+  guideLink,
+  guideStartFor,
   readGuide,
   resetGuideForTests,
   setGuideHidden,
@@ -163,5 +166,32 @@ describe("guide storage", () => {
     expect(result.current).toBe(false)
     act(() => setGuideHidden(true))
     expect(result.current).toBe(true)
+  })
+})
+
+describe("opening the guided run at a stage", () => {
+  it("maps a Read page stage to its step, or null when the guide has none", () => {
+    expect(guideIndexFor("source")).toBe(0)
+    expect(guideIndexFor("parse")).toBe(1)
+    expect(guideIndexFor("clean")).toBe(2)
+    expect(guideIndexFor("chunk")).toBe(3)
+    expect(guideIndexFor("index")).toBe(4)
+    expect(guideIndexFor("retrieve")).toBe(5)
+    for (const s of ["overview", "rerank", "use_case", "evaluate"] as const) expect(guideIndexFor(s)).toBeNull()
+  })
+
+  it("links to Build with the stage", () => {
+    expect(guideLink("chunk")).toBe("/build?guide=chunk")
+  })
+
+  it("reads the guide address value: 1 or 0 is the first step, a stage name is its step, anything else nothing", () => {
+    expect(guideStartFor("1")).toBe(0)
+    expect(guideStartFor("0")).toBe(0)
+    expect(guideStartFor("chunk")).toBe(3)
+    expect(guideStartFor("rerank")).toBeNull()
+    expect(guideStartFor("nonsense")).toBeNull()
+    expect(guideStartFor("constructor")).toBeNull()
+    expect(guideStartFor("")).toBeNull()
+    expect(guideStartFor(null)).toBeNull()
   })
 })

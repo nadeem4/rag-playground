@@ -468,7 +468,7 @@ because the old ones were keyed by the old graph's card ids.
 **The guided run.** Build can show a guided run: an invite when nothing has run and the
 visitor has not hidden it, then a coach column that walks Document, Parse, Clean, Chunk and
 Index with real runs (`components/guide/`, `state/guide.ts`, `state/guideResult.ts`).
-Starting it replaces the working pipeline with the chunking primer, after a warning if the
+The Read page links to `/build?guide=<stage>` (`guideLink`); `useGuideRun` reads the value once with `guideStartFor`, opens the run at that step, runs the steps before it, and drops the parameter from the address. Starting it replaces the working pipeline with the chunking primer, after a warning if the
 working copy has unsaved work. While it is on, the Ask dock is hidden but stays mounted, so
 leaving restores it as it was. The Ask step runs the Ask panel's own Ask (`askNow` in
 `routes/Shell.tsx`), lists the retrieval result's pieces in the main pane

@@ -251,6 +251,7 @@ leaves everything as it is. The saved pipeline stays in your Library either way.
 While the guided run is on, the Ask panel is hidden, not closed. **Leave the guided run**
 ends it and the panel comes back as it was. The invite shows again only while nothing has
 run on Build. A reload keeps your step and results for as long as the tab is open.
+The Read page can also open the guided run at a chosen step; see [Read](#read).
 **I know RAG, hide this** hides the invite in this browser. The only way to bring a hidden
 invite back is to clear this site's data in the browser.
 
@@ -802,6 +803,13 @@ why in plain words.
 
 The Read page lists the author's posts on each step, in pipeline order, with the date
 each was published. Steps with no post yet say so.
+
+Each step that the guided run covers has a **Try this step on Build** link. These are Document,
+Parse, Clean, Chunk, Index and Search. The link opens Build with the guided run at that step.
+For a later step, Build loads the small chunking pipeline and runs the steps before it, so the
+earlier cards show as run. The coach says "Getting the earlier steps ready" while that happens,
+then shows "step N of 7" and the step you picked. The `?guide=` part of the address goes away
+once the run has started.
 
 ## Your data and privacy
 

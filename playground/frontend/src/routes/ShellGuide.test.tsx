@@ -369,6 +369,25 @@ describe("the guided run on Build", () => {
       expect(text).not.toContain("400")
     })
 
+    it("gives the size instruction once, and only while Chunk size is not the fix value", async () => {
+      withSize(400)
+      await open(6, session({ retrieve: done("retrieve", "ret-g") }))
+      expect(coach().textContent?.match(/Set Chunk size to 800/g)).toHaveLength(1)
+      cleanup()
+      withSize(800)
+      await open(6, session({ index: done("index", "idx-1"), chunk: done("chunk") }))
+      await waitFor(() => expect(runButton("Ask again")).toBeTruthy())
+      expect(coach().textContent).not.toMatch(/Set Chunk size to/)
+    })
+
+    it("has one Ask again button, not a second one from the hidden Ask panel's transcript", async () => {
+      withSize(800)
+      const entry = { runId: "old", question: QUESTION, pipeline: "Working copy", reranker: "none", found: null, rows: [], searchIn: undefined }
+      await open(6, session({ index: done("index", "idx-1"), chunk: done("chunk") }, { transcript: [entry] }))
+      await waitFor(() => expect(runButton("Ask again")).toBeTruthy())
+      expect(screen.getAllByRole("button", { name: /Ask again/, hidden: true })).toHaveLength(1)
+    })
+
     it("Build the index runs the index node, not an Ask", async () => {
       withSize(800)
       await open(6, session({ retrieve: done("retrieve", "ret-g") }))
@@ -610,6 +629,57 @@ describe("the guided run on Build", () => {
       fireEvent.click(screen.getByRole("button", { name: "Ask" }))
       fireEvent.click(within(document.getElementById("ask-dock")!).getByRole("button", { name: /^Ask$/ }))
       await waitFor(() => expect((document.getElementById("ask-dock") as HTMLElement).hidden).toBe(false))
+    })
+
+    it("gives the Why line only when the answer is below the pieces read or not found", async () => {
+      goldAnswer = { found: { index: 0, gold: "Size factors." } }
+      await openAsk(ASKED)
+      await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("1st"))
+      expect(coach().textContent).not.toContain("Why:")
+      expect(coach().textContent).not.toContain("may never reach")
+      cleanup()
+      resetGuideForTests()
+      resetSampleQuestionsCache()
+      goldAnswer = { found: { index: 10, gold: "Size factors." } }
+      window.sessionStorage.removeItem(BUILD_SESSION_KEY)
+      await openAsk({ ...ASKED, tracked: { ...ASKED.tracked, results: { ...ASKED.tracked.results, retrieve: { id: "retrieve", status: "done", artifact_id: "ret-a" }, use_case: { id: "use_case", status: "done", artifact_id: "out-a" } } } })
+      await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("11th"))
+      expect(coach().textContent).toContain("may never reach")
+    })
+
+    it("lays the coach out in full below xl: no height cap or inner scroll without the xl prefix", async () => {
+      await openAsk()
+      const wrap = coach().parentElement as HTMLElement
+      for (const el of [coach(), wrap]) {
+        const bad = el.className.split(/\s+/).filter((c) => /(^|:)(max-h-|overflow-y-auto)/.test(c) && !c.startsWith("xl:"))
+        expect(bad).toEqual([])
+      }
+    })
+
+    describe("on a phone", () => {
+      const phone = () =>
+        vi.stubGlobal(
+          "matchMedia",
+          vi.fn((q: string) => ({ matches: q === "(max-width: 47.99rem)" || q === "(max-width: 63.99rem)", addEventListener: () => {}, removeEventListener: () => {} })),
+        )
+      it("offers See the results once the sheet is closed, and it reopens the sheet", async () => {
+        phone()
+        goldAnswer = { found: { index: 10, gold: "Size factors." } }
+        await openAsk(ASKED)
+        await waitFor(() => expect(screen.getByRole("dialog", { name: /Ask results/ })).toBeTruthy())
+        expect(within(coach()).queryByRole("button", { name: "See the results" })).toBeNull()
+        fireEvent.click(screen.getByRole("button", { name: "Close the output" }))
+        expect(screen.queryByRole("dialog", { name: /Ask results/ })).toBeNull()
+        fireEvent.click(within(coach()).getByRole("button", { name: "See the results" }))
+        expect(screen.getByRole("dialog", { name: /Ask results/ })).toBeTruthy()
+      })
+
+      it("has no See the results button on a wide screen", async () => {
+        goldAnswer = { found: { index: 10, gold: "Size factors." } }
+        await openAsk(ASKED)
+        await waitFor(() => expect(within(coach()).getByRole("status").textContent).toContain("11th"))
+        expect(within(coach()).queryByRole("button", { name: "See the results" })).toBeNull()
+      })
     })
 
     it("hides the Ask dock while the guide is on, and Leave brings it back with its stored state unchanged", async () => {

@@ -521,10 +521,12 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
 
   const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, columnError, busy, edit, start, ask: askNow, guideAsk, setGuideAsk, guideAfter, setGuideAfter, selectCard, inspect: (id) => !isPhone && setInspected(id) })
   // On a phone the Ask results open in the output sheet as soon as there are some.
+  // A new Ask (a new result) opens it again; the coach's See the results button brings it back after a close.
   const hasAskResults = guide.askResults !== null
+  const askKey = guide.askKey
   useEffect(() => {
     if (isPhone && hasAskResults) setOutputOpen(true)
-  }, [isPhone, hasAskResults])
+  }, [isPhone, hasAskResults, askKey])
 
   return (
     <main
@@ -732,7 +734,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
             keyProvider={keyNoticeProvider}
             asked={asked !== null && asked.runId === runId && !busy ? asked : null}
             runError={fromAsk && (columnError || run.error) ? "The run could not start. See the note above the cards." : null}
-            transcript={transcript}
+            transcript={guide.active ? [] : transcript}
             comparisonHidden={comparisonHidden}
             onComparison={setComparisonHidden}
             onLog={onLog}
@@ -753,8 +755,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
         )}
       </AskDock>
       {guide.coach ? (
-        <div className="order-first min-w-0 bg-surface p-3 md:col-span-2 md:min-h-0 md:max-h-[40dvh] md:overflow-y-auto xl:max-h-none xl:order-last xl:col-span-1 xl:overflow-y-auto">
-          <GuideCoach {...guide.coach} />
+        <div className="order-first min-w-0 bg-surface p-3 md:col-span-2 xl:min-h-0 xl:order-last xl:col-span-1 xl:overflow-y-auto">
+          <GuideCoach {...guide.coach} onSeeResults={isPhone && hasAskResults && !outputOpen ? () => setOutputOpen(true) : undefined} />
         </div>
       ) : null}
     </main>

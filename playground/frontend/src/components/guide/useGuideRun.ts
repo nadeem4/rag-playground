@@ -78,6 +78,8 @@ export interface GuideRun {
   marks: Record<string, "current" | "later"> | undefined
   /** The Ask results for the main pane (Ask and Fix steps); null until there are some. */
   askResults: ReactNode
+  /** The artifact the shown Ask results came from; a new one means a new Ask. */
+  askKey: string | null
   /** The coach's props; null when the guided run is not on. */
   coach: GuideCoachProps | null
 }
@@ -183,7 +185,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   let invite: ReactNode = null
   if (step === null && confirming) invite = createElement(GuideReplace, { onContinue: begin, onCancel: () => setConfirming(false) })
   else if (showInvite) invite = createElement(GuideInvite, { onStart: start })
-  if (step === null) return { active: false, invite, marks: undefined, askResults: null, coach: null }
+  if (step === null) return { active: false, invite, marks: undefined, askResults: null, askKey: null, coach: null }
 
   // Each card is marked by the first step that points at it.
   const first = new Map<string, number>()
@@ -251,7 +253,9 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
   const question = String(graph.nodes.find((n) => n.stage === "query")?.config.text ?? "")
   // The Fix step's run: build the index, and once it is fresh, ask again.
   const askAgain = onFix && sizeSet && indexFresh
-  const stepOut = onFix ? { ...spec, run: askAgain ? "Ask again" : spec.run } : spec
+  // The Ask step's Why explains a miss; when the answer ranks among the pieces the answer step reads there is no miss to explain.
+  const reached = onAsk && asked !== null && asked.found !== null && asked.found.rank <= asked.shown
+  const stepOut = onFix ? { ...spec, run: askAgain ? "Ask again" : spec.run } : reached ? { ...spec, why: "" } : spec
 
   let extra: ReactNode = null
   if (onFix && node) {
@@ -259,7 +263,6 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
     extra = createElement(
       "div",
       { className: "flex flex-col items-start gap-2" },
-      createElement("p", { className: "m-0 text-sm text-fg" }, `Set Chunk size to ${GUIDE_FIX.chunk_size}.`),
       createElement(Button, { variant: "outline", onClick: () => a.selectCard(node.id) }, "Open Chunk settings"),
       improved !== null ? createElement("p", { className: "m-0 text-sm text-fg" }, improved ? GUIDE_RULE : GUIDE_NEUTRAL) : null,
     )
@@ -277,6 +280,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
     invite: null,
     marks,
     askResults,
+    askKey: askResults ? (shownAsk?.artifact ?? null) : null,
     coach: {
       index,
       question,

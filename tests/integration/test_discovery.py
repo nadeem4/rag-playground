@@ -22,4 +22,6 @@ def test_the_app_has_no_step_of_its_own():
 
 def test_the_catalog_lists_every_pandion_strategy():
     catalog = pandion.catalog()
-    assert sum(len(strategies) for strategies in catalog.values()) == len(PLUGIN_MODULES)
+    # One plugin module holds the route checks, which are not strategies.
+    strategies = sum(len(s) for stage, s in catalog.items() if stage != "route")
+    assert strategies == len(PLUGIN_MODULES) - 1

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from fnmatch import fnmatchcase
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from pandion.docinfo import DocumentInfo
 from pandion.routing import route_check
@@ -21,7 +21,7 @@ def _glob(text: str, pattern: str) -> bool:
 
 
 class FileTypeSettings(BaseModel):
-    types: list[str]
+    types: list[str] = Field(description="The file types to match, such as pdf or docx.")
 
 
 @route_check(
@@ -35,7 +35,7 @@ def file_type(info: DocumentInfo, s: FileTypeSettings) -> bool:
 
 
 class PatternSettings(BaseModel):
-    pattern: str
+    pattern: str = Field(description="The text to match. * matches any text. Case is ignored.")
 
 
 @route_check(
@@ -60,10 +60,10 @@ def path(info: DocumentInfo, s: PatternSettings) -> bool:
 
 
 class KeySettings(BaseModel):
-    key: str
-    equals: str | None = None
-    contains: str | None = None
-    pattern: str | None = None
+    key: str = Field(description="The name of the label or property. Case is ignored.")
+    equals: str | None = Field(None, description="True when the value is exactly this. Case is ignored.")
+    contains: str | None = Field(None, description="True when the value has this text in it. Case is ignored.")
+    pattern: str | None = Field(None, description="True when the value matches this. * matches any text.")
 
     @model_validator(mode="after")
     def _one_operator(self):
@@ -115,7 +115,7 @@ def properties(info: DocumentInfo, s: KeySettings) -> bool:
 
 
 class TextLayerSettings(BaseModel):
-    has: bool = True
+    has: bool = Field(True, description="True to match a PDF with selectable text, false to match one with only images.")
 
 
 @route_check(
@@ -130,7 +130,7 @@ def text_layer(info: DocumentInfo, s: TextLayerSettings) -> bool:
 
 
 class WordsSettings(BaseModel):
-    words: list[str]
+    words: list[str] = Field(description="True when any of these words is in the first page. Case is ignored.")
 
 
 @route_check(

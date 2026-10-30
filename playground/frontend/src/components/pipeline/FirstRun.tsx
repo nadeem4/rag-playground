@@ -21,8 +21,9 @@ const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eig
 const count = (n: number) => WORDS[n] ?? String(n)
 export function FirstRun() {
   const { samples, error: samplesError } = useSamples()
-  const { upload, addLink, busy: uploading, error: uploadError, accept } = useUpload()
+  const { upload, addLink, busy: uploading, error: uploadError, accept, linkLine } = useUpload()
   const [link, setLink] = useState("")
+  const [sending, setSending] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   // Shared with the Pick a file or link menu: while either uploads or loads a sample, the other waits.
   const { sampleLoading } = useDocument()
@@ -98,34 +99,40 @@ export function FirstRun() {
             void upload(file)
           }}
         />
-        <Button variant="outline" size="sm" className="self-start" busy={uploading !== null} disabled={waiting} onClick={() => fileRef.current?.click()}>
+        <Button variant="outline" size="sm" className="self-start" busy={uploading !== null && !sending} disabled={waiting} onClick={() => fileRef.current?.click()}>
           <Upload aria-hidden strokeWidth={1.75} />
-          {uploading ?? "Upload a file"}
+          {(sending ? null : uploading) ?? "Upload a file"}
         </Button>
-        <p className="m-0 text-xs text-fg-muted">Or paste a link to a web page or PDF</p>
+        <label htmlFor="first-run-link" className="m-0 text-xs text-fg-muted">
+          Or paste a link to a web page or PDF
+        </label>
         <form
           noValidate
           className="flex gap-2"
           onSubmit={(e) => {
             e.preventDefault()
             if (waiting || !link.trim()) return
-            void addLink(link).then((ok) => ok && setLink(""))
+            setSending(true)
+            void addLink(link)
+              .then((ok) => ok && setLink(""))
+              .finally(() => setSending(false))
           }}
         >
           <input
+            id="first-run-link"
             type="url"
             value={link}
             placeholder="https://example.com/guide.html"
-            aria-label="Link to a web page or PDF"
             readOnly={waiting}
             aria-disabled={waiting || undefined}
             className="min-h-[36px] min-w-0 flex-1 rounded-control border border-field-border bg-surface px-2 text-sm text-fg outline-none placeholder:text-fg-muted focus-visible:outline-2 focus-visible:outline-(--focus-ring) aria-disabled:opacity-50"
             onChange={(e) => setLink(e.target.value)}
           />
-          <Button type="submit" size="sm" disabled={waiting || !link.trim()}>
-            Add
+          <Button type="submit" size="sm" aria-label="Add link" busy={sending && uploading !== null} disabled={waiting || !link.trim()}>
+            {(sending ? uploading : null) ?? "Add"}
           </Button>
         </form>
+        {demo ? <p className="m-0 text-xs text-fg-muted">{linkLine}</p> : null}
         {uploadError ? (
           <p role="alert" className="text-xs break-words text-danger">
             {uploadError}

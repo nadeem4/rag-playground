@@ -789,7 +789,7 @@ describe("First run (plan I-15)", () => {
     expect(document.querySelector("[data-testid=run-all-blocked]")).toBeNull()
   })
 
-  it("still shows when files are already uploaded, and offers them through Pick a document", async () => {
+  it("still shows when files are already uploaded, and offers them through Pick a file or link", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) =>
@@ -2094,7 +2094,7 @@ describe("the document comes with the pipeline", () => {
   const stored = (sha: string, filename = "chunking-primer.pdf") => storeGraph(setConfig(initialGraph(TEST_REGISTRY), "source", { sha, filename }))
   const cardWarning = () => card("source")?.querySelector("[data-testid=document-removed]") ?? null
 
-  it("shows the document in use on the Document card, with Add a document and no file picker of its own", async () => {
+  it("shows the document in use on the Document card, with Add a file or link and no file picker of its own", async () => {
     stored(SAMPLE_SHA)
     setup()
     const doc = await waitFor(() => {

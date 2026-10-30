@@ -41,7 +41,7 @@ afterEach(() => {
 const stored = (sha: string, filename: string) => storeGraph(sampleGraph(registry, { sha, filename }))
 
 describe("DocumentNote", () => {
-  it("says the missing file, what it blocks, and offers Pick a document, as a stale-tone status", async () => {
+  it("says the missing file, what it blocks, and offers Pick a file or link, as a stale-tone status", async () => {
     stored("ef".repeat(32), "NK_Resume.pdf")
     render(<DocumentNote action="build the index" />)
     const note = await screen.findByTestId("document-note")

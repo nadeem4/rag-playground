@@ -43,6 +43,8 @@ let appCalls = 0
 let posted: (string | null)[] = []
 let uploadRefusal = ""
 let linkPosts: string[] = []
+let linkStatus = 200
+let holdLink: Promise<void> | null = null
 const registry = liveRegistry as unknown as Registry
 
 beforeEach(() => {
@@ -54,6 +56,8 @@ beforeEach(() => {
   appCalls = 0
   posted = []
   linkPosts = []
+  linkStatus = 200
+  holdLink = null
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -69,6 +73,8 @@ beforeEach(() => {
       if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
       if (url === "/api/v2/documents/url") {
         linkPosts.push(JSON.parse(String(init?.body)).url)
+        if (holdLink) await holdLink
+        if (linkStatus !== 200) return new Response(JSON.stringify({ detail: "That address is not on the public internet, so it was not fetched." }), { status: linkStatus })
         return ok(SAMPLE)
       }
       if (url === "/api/v2/documents" && init?.method === "POST") return new Response(JSON.stringify({ detail: uploadRefusal }), { status: 413 })
@@ -126,25 +132,59 @@ describe("FirstRun", () => {
     expect(uploadButton()).not.toBeNull()
   })
 
-  it("takes a link on the card: submitting a URL adds it, an empty box does nothing", async () => {
+  it("takes a link on the card: submitting a URL adds it and clears the box; an empty box posts nothing", async () => {
     render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    const box = screen.getByLabelText("Link to a web page or PDF")
-    const add = screen.getByRole("button", { name: "Add" })
-    fireEvent.click(add)
+    const box = screen.getByLabelText("Or paste a link to a web page or PDF") as HTMLInputElement
+    const add = screen.getByRole("button", { name: "Add link" }) as HTMLButtonElement
+    expect(add.disabled).toBe(true)
+    fireEvent.change(box, { target: { value: "   " } })
     fireEvent.submit(box.closest("form")!)
     expect(linkPosts).toEqual([])
+    expect(screen.queryByRole("alert")).toBeNull()
     fireEvent.change(box, { target: { value: "https://example.com/guide.html" } })
     fireEvent.click(add)
     await waitFor(() => expect(linkPosts).toEqual(["https://example.com/guide.html"]))
     await waitFor(() => expect(documentOf(readStoredGraph(registry))?.sha).toBe(SAMPLE.sha))
+    await waitFor(() => expect(box.value).toBe(""))
+  })
+
+  it("while a link is fetched, the box waits, Add shows the fetch, Upload keeps its words, and a second submit posts nothing", async () => {
+    let release = () => {}
+    holdLink = new Promise<void>((r) => (release = r))
+    render(<FirstRun />)
+    await screen.findAllByRole("listitem")
+    const box = screen.getByLabelText("Or paste a link to a web page or PDF") as HTMLInputElement
+    fireEvent.change(box, { target: { value: "https://example.com/guide.html" } })
+    const form = box.closest("form")!
+    fireEvent.submit(form)
+    await waitFor(() => expect(box.readOnly).toBe(true))
+    fireEvent.submit(form)
+    expect(box.getAttribute("aria-disabled")).toBe("true")
+    const add = screen.getByRole("button", { name: "Add link" }) as HTMLButtonElement
+    expect(add.disabled).toBe(true)
+    expect(add.textContent).toContain("Fetching example.com")
+    expect((uploadButton() as HTMLButtonElement).textContent).toBe("Upload a file")
+    expect((uploadButton() as HTMLButtonElement).disabled).toBe(true)
+    expect(linkPosts).toHaveLength(1)
+    release()
+    await waitFor(() => expect(box.readOnly).toBe(false))
+  })
+
+  it("shows the server's sentence when a link is refused", async () => {
+    linkStatus = 400
+    render(<FirstRun />)
+    await screen.findAllByRole("listitem")
+    fireEvent.change(screen.getByLabelText("Or paste a link to a web page or PDF"), { target: { value: "https://localhost/admin" } })
+    fireEvent.click(screen.getByRole("button", { name: "Add link" }))
+    expect((await screen.findByRole("alert")).textContent).toBe("That address is not on the public internet, so it was not fetched.")
   })
 
   it("shows a refusal under the link box when the text is not a link", async () => {
     render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    fireEvent.change(screen.getByLabelText("Link to a web page or PDF"), { target: { value: "not a link" } })
-    fireEvent.click(screen.getByRole("button", { name: "Add" }))
+    fireEvent.change(screen.getByLabelText("Or paste a link to a web page or PDF"), { target: { value: "not a link" } })
+    fireEvent.click(screen.getByRole("button", { name: "Add link" }))
     expect((await screen.findByRole("alert")).textContent).toBe("That is not a link. Paste one that starts with https://")
     expect(linkPosts).toEqual([])
   })

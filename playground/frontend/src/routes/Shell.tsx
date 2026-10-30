@@ -469,7 +469,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   }
 
   // Plan I-15: the first-visit card, whenever no file is selected. This
-  // browser's uploads are in its Pick a document menu.
+  // browser's uploads are in its Pick a file or link menu.
   const sourceNode = graph.nodes.find((n) => n.stage === "source")
   const firstRun = sourceNode !== undefined && !sourceNode.config.sha
   // The working copy's document may not exist in this browser (opened from a

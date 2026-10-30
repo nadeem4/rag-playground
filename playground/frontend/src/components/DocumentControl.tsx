@@ -328,7 +328,7 @@ export function DocumentControl({
                   }
                 }}
               />
-              <Button type="submit" size="sm" disabled={waiting || !link.trim()}>
+              <Button type="submit" size="sm" aria-label="Add link" disabled={waiting || !link.trim()}>
                 Add
               </Button>
             </form>

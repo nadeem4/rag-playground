@@ -92,7 +92,7 @@ afterEach(() => {
 })
 
 describe("DocumentControl", () => {
-  it("names the current document, and opens a menu of samples, your uploads and Upload a document", async () => {
+  it("names the current document, and opens a menu of samples, your uploads and Upload a file", async () => {
     stored(SAMPLE_SHA, "chunking-primer.pdf")
     serve({ sources: [UP], samples: [SAMPLE] })
     render(<DocumentControl />)
@@ -185,7 +185,7 @@ describe("DocumentControl", () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger()))
   })
 
-  it("while an upload runs, the samples, your uploads and Upload a document wait, so a pick cannot race it", async () => {
+  it("while an upload runs, the samples, your uploads and Upload a file wait, so a pick cannot race it", async () => {
     stored(SAMPLE_SHA, "chunking-primer.pdf")
     serve({ sources: [UP], samples: [SAMPLE] })
     holdUpload = true
@@ -237,7 +237,7 @@ describe("DocumentControl", () => {
     expect(trigger().getAttribute("aria-label")).toBe("Change the document. Now NK_Resume.pdf.")
   })
 
-  it("reads Pick a document when there is none", async () => {
+  it("reads Pick a file or link when there is none", async () => {
     serve({ sources: [], samples: [SAMPLE] })
     render(<DocumentControl />)
     await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Pick a file or link"))
@@ -320,7 +320,7 @@ describe("DocumentControl", () => {
     expect(within(menu).getByRole("menuitem", { name: "Retry" })).toBeTruthy()
   })
 
-  it("opens from a page's Pick a document button", async () => {
+  it("opens from a page's Pick a file or link button", async () => {
     stored("ef".repeat(32), "NK_Resume.pdf")
     serve({ sources: [], samples: [SAMPLE] })
     render(
@@ -387,7 +387,7 @@ describe("DocumentControl", () => {
     fireEvent.change(within(menu).getByLabelText("Link to a web page or PDF"), {
       target: { value: " https://en.wikipedia.org/wiki/Retrieval-augmented_generation " },
     })
-    fireEvent.click(within(menu).getByRole("button", { name: "Add" }))
+    fireEvent.click(within(menu).getByRole("button", { name: "Add link" }))
     await waitFor(() => expect(documentOf(readStoredGraph(registry))?.sha).toBe(LINK.sha))
     expect(posts()).toEqual([
       { url: "/api/v2/documents/url", method: "POST", body: { url: "https://en.wikipedia.org/wiki/Retrieval-augmented_generation" } },
@@ -407,11 +407,11 @@ describe("DocumentControl", () => {
     const menu = await screen.findByRole("menu")
     const box = within(menu).getByLabelText("Link to a web page or PDF")
     fireEvent.change(box, { target: { value: "not a link" } })
-    fireEvent.click(within(menu).getByRole("button", { name: "Add" }))
+    fireEvent.click(within(menu).getByRole("button", { name: "Add link" }))
     expect((await within(menu).findByRole("alert")).textContent).toBe("That is not a link. Paste one that starts with https://")
     expect(posts()).toEqual([])
     fireEvent.change(box, { target: { value: "https://localhost/admin" } })
-    fireEvent.click(within(menu).getByRole("button", { name: "Add" }))
+    fireEvent.click(within(menu).getByRole("button", { name: "Add link" }))
     await waitFor(() =>
       expect(within(menu).getByRole("alert").textContent).toBe("That address is not on the public internet, so it was not fetched."),
     )

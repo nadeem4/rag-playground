@@ -272,7 +272,7 @@ export function documentBusy(): boolean {
   return state.uploading !== null || state.sampleLoading !== null
 }
 
-/** A page's "Pick a document" or "Change" button: open the page's Document control menu, and give focus back to that button when it closes. */
+/** A page's "Pick a file or link" or "Change" button: open the page's Document control menu, and give focus back to that button when it closes. */
 export function openDocumentMenu(event?: { currentTarget: EventTarget | null }): void {
   setDocumentMenuOpen(true)
   opener = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null

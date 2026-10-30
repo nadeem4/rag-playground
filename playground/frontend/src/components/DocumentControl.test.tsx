@@ -105,7 +105,7 @@ describe("DocumentControl", () => {
     const items = within(menu).getAllByRole("menuitemradio")
     expect(items.map((i) => i.getAttribute("aria-checked"))).toEqual(["true", "false"])
     expect(within(menu).getByText("Your uploads")).toBeTruthy()
-    expect(within(menu).getByRole("menuitem", { name: "Upload a document" })).toBeTruthy()
+    expect(within(menu).getByRole("menuitem", { name: "Upload a file" })).toBeTruthy()
     expect(menu.textContent).toContain("The pipeline runs on this document. Your files stay on this machine.")
   })
 
@@ -193,7 +193,7 @@ describe("DocumentControl", () => {
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
     await waitFor(() => expect(within(menu).getAllByRole("menuitemradio")).toHaveLength(2))
-    fireEvent.change(screen.getByLabelText("Upload a document file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
+    fireEvent.change(screen.getByLabelText("Upload a file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
     await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Uploading fresh.pdf"))
     for (const item of within(menu).getAllByRole("menuitemradio")) expect(item.getAttribute("aria-disabled")).toBe("true")
     expect(within(menu).getByRole("menuitem", { name: /Uploading fresh\.pdf/ }).getAttribute("aria-disabled")).toBe("true")
@@ -208,7 +208,7 @@ describe("DocumentControl", () => {
     holdUpload = true
     // The first-visit card holds the control itself.
     render(<FirstRun />)
-    const inputs = screen.getAllByLabelText("Upload a document file")
+    const inputs = screen.getAllByLabelText("Upload a file")
     fireEvent.change(inputs[inputs.length - 1], { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
     await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Uploading fresh.pdf"))
     expect(trigger().getAttribute("aria-busy")).toBe("true")
@@ -240,8 +240,8 @@ describe("DocumentControl", () => {
   it("reads Pick a document when there is none", async () => {
     serve({ sources: [], samples: [SAMPLE] })
     render(<DocumentControl />)
-    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Pick a document"))
-    expect(trigger().textContent).toBe("Pick a document")
+    await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Pick a file or link"))
+    expect(trigger().textContent).toBe("Pick a file or link")
   })
 
   it("picks an upload without a request, and a sample through the sample endpoint", async () => {
@@ -269,7 +269,7 @@ describe("DocumentControl", () => {
     render(<DocumentControl />)
     fireEvent.keyDown(trigger(), { key: "Enter" })
     await screen.findByRole("menu")
-    fireEvent.change(screen.getByLabelText("Upload a document file"), { target: { files: [new File(["x"], "sheet.xlsx")] } })
+    fireEvent.change(screen.getByLabelText("Upload a file"), { target: { files: [new File(["x"], "sheet.xlsx")] } })
     expect((await screen.findByRole("alert")).textContent).toBe(
       "Upload of sheet.xlsx failed: This kind of file cannot be read here. Upload PDF, Word, PowerPoint, HTML, Markdown, text or images.",
     )
@@ -280,7 +280,7 @@ describe("DocumentControl", () => {
     stored(SAMPLE_SHA, "chunking-primer.pdf")
     serve({ sources: [], samples: [SAMPLE] })
     render(<DocumentControl />)
-    fireEvent.change(screen.getByLabelText("Upload a document file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
+    fireEvent.change(screen.getByLabelText("Upload a file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
     await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Change the document. Now fresh.pdf."))
     expect(documentOf(readStoredGraph(registry))?.sha).toBe("34".repeat(32))
   })
@@ -329,7 +329,7 @@ describe("DocumentControl", () => {
         <DocumentNote action="run these recipes" />
       </>,
     )
-    fireEvent.click(await screen.findByRole("button", { name: "Pick a document" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Pick a file or link" }))
     expect(await screen.findByRole("menu")).toBeTruthy()
   })
 
@@ -355,7 +355,7 @@ describe("DocumentControl", () => {
     serve({ sources: [], samples: [SAMPLE] })
     const chosen: unknown[] = []
     render(<DocumentControl value={null} onChoose={(d) => void chosen.push(d)} />)
-    fireEvent.change(screen.getByLabelText("Upload a document file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
+    fireEvent.change(screen.getByLabelText("Upload a file"), { target: { files: [new File(["%PDF"], "fresh.pdf", { type: "application/pdf" })] } })
     await waitFor(() => expect(chosen).toEqual([{ sha: "34".repeat(32), filename: "fresh.pdf" }]))
     expect(documentOf(readStoredGraph(registry))?.sha).toBe(SAMPLE_SHA)
   })
@@ -365,7 +365,7 @@ describe("DocumentControl", () => {
     uploadAnswer = { sha: "78".repeat(32), filename: "field-guide.docx", size: 20480, content_type: "application/octet-stream" }
     serve({ sources: [], samples: [SAMPLE] })
     render(<DocumentControl />)
-    const input = screen.getByLabelText("Upload a document file")
+    const input = screen.getByLabelText("Upload a file")
     await waitFor(() => expect(input.getAttribute("accept")).toBe(".pdf,.docx,.pptx,.html,.htm,.md,.txt,.png,.jpg,.jpeg"))
     fireEvent.change(input, { target: { files: [new File(["PK"], "field-guide.docx")] } })
     await waitFor(() => expect(trigger().getAttribute("aria-label")).toBe("Change the document. Now field-guide.docx."))
@@ -424,7 +424,7 @@ describe("DocumentControl", () => {
     render(<DocumentControl />)
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
-    const item = within(menu).getByRole("menuitem", { name: "Or add a link" })
+    const item = within(menu).getByRole("menuitem", { name: "Or paste a link to a web page or PDF" })
     fireEvent.keyDown(menu, { key: "End" })
     await waitFor(() => expect(document.activeElement).toBe(item))
     fireEvent.keyDown(item, { key: "Enter" })
@@ -450,7 +450,7 @@ describe("adding to a pipeline's documents (Build)", () => {
     serve({ sources: [UP], samples: [SAMPLE] })
     stored(primer.sha, primer.filename)
     render(<DocumentControl adds={[primer]} />)
-    expect(trigger().textContent).toBe("Add a document")
+    expect(trigger().textContent).toBe("Add a file or link")
     fireEvent.keyDown(trigger(), { key: "Enter" })
     const menu = await screen.findByRole("menu")
     await waitFor(() => expect(within(menu).getAllByRole("menuitemradio")).toHaveLength(2))
@@ -462,6 +462,6 @@ describe("adding to a pipeline's documents (Build)", () => {
   it("picks as the plain control does when the pipeline has no document yet", async () => {
     serve({ sources: [UP], samples: [SAMPLE] })
     render(<DocumentControl adds={[]} />)
-    expect(trigger().textContent).toBe("Pick a document")
+    expect(trigger().textContent).toBe("Pick a file or link")
   })
 })

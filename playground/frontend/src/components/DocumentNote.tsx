@@ -10,7 +10,7 @@ export function needsDocument(status: DocStatus): boolean {
 
 /**
  * The one stale-tone note Build, Compare and Evaluate share about the page's
- * document. Missing or none: what it blocks, and a "Pick a document" button
+ * document. Missing or none: what it blocks, and a "Pick a file or link" button
  * that opens the page's Document control menu. Changed since the results on
  * the page were made: says so, with no button. A sample saved with an old
  * fingerprint that just moved to its current copy: one status-tone line.
@@ -69,7 +69,7 @@ export function DocumentNote({
       </p>
       {blocked ? (
         <Button variant="outline" size="sm" className="border-stale bg-transparent text-stale hover:bg-surface-hover" onClick={openDocumentMenu}>
-          Pick a document
+          Pick a file or link
         </Button>
       ) : null}
     </div>

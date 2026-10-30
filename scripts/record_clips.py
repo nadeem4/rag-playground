@@ -298,9 +298,9 @@ def build_scene(page: Page, base: str, poster: Path | None) -> float:
 
     # 2. Add several documents: a second sample joins the first.
     mark()
-    page.get_by_role("button", name=re.compile("^Add a document")).click()
+    page.get_by_role("button", name=re.compile("^Add a file or link")).click()
     pause(page, 1200)
-    page.get_by_label(re.compile("^Add a document")).get_by_text("A weather station manual").click()
+    page.get_by_label(re.compile("^Add a file or link")).get_by_text("A weather station manual").click()
     pause(page, 2500)
 
     # 3. Watch every step: the build, then the step cards, for each document.

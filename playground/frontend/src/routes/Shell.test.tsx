@@ -777,7 +777,7 @@ describe("First run (plan I-15)", () => {
       vi.fn(async (url: string, init?: RequestInit) => (url === "/api/samples" ? new Response("{}", { status: 500 }) : base(url, init))),
     )
     render(<Shell />)
-    expect(await screen.findByRole("button", { name: "Upload a document" })).toBeTruthy()
+    expect(await screen.findByRole("button", { name: "Upload a file" })).toBeTruthy()
     // The Ask panel's status line carries the first-run guidance; no empty state sits above it.
     expect(panel().getByTestId("index-status").textContent).toBe("Pick a document in the Document step, then build the index.")
     expect(document.body.textContent).not.toContain("Nothing to show yet")
@@ -802,8 +802,8 @@ describe("First run (plan I-15)", () => {
     const upload = await found<HTMLElement>('[aria-label="Document"]')
     expect(panel().getByTestId("index-status").textContent).toBe("Pick a document in the Document step, then build the index.")
     expect(card("parse")).toBeNull()
-    expect(within(upload).getByTestId("document-trigger").textContent).toBe("Pick a document")
-    expect(within(upload).getByRole("button", { name: "Upload a document" })).toBeTruthy()
+    expect(within(upload).getByTestId("document-trigger").textContent).toBe("Pick a file or link")
+    expect(within(upload).getByRole("button", { name: "Upload a file" })).toBeTruthy()
   })
 
   it("does not show when the stored graph already has a source", async () => {
@@ -995,7 +995,7 @@ describe("Build is pipeline first", () => {
     expect(readStoredGraph(TEST_REGISTRY)!.nodes.find((n) => n.stage === "chunk")!.config).toMatchObject({ chunk_size: 400, chunk_overlap: 80 })
     expect((screen.getByRole("button", { name: "Build the index" }) as HTMLButtonElement).disabled).toBe(false)
     // The document is changed in the pipeline's Document step, not in the header or the pipeline bar.
-    expect(within(card("source")).getByRole("button", { name: "Add a document. This pipeline reads 1 document." })).toBeTruthy()
+    expect(within(card("source")).getByRole("button", { name: "Add a file or link. This pipeline reads 1 document." })).toBeTruthy()
     expect(screen.getAllByTestId("document-trigger")).toHaveLength(1)
     expect(screen.queryByTestId("documents-line")).toBeNull()
   })
@@ -1530,7 +1530,7 @@ describe("saved pipelines on Build", () => {
       ),
     )
     setup()
-    const upload = await screen.findByLabelText("Upload a document to start")
+    const upload = await screen.findByLabelText("Upload a file to start")
     await act(async () => {
       fireEvent.change(upload, { target: { files: [new File(["%PDF-1.4"], "my-notes.pdf", { type: "application/pdf" })] } })
     })
@@ -2103,7 +2103,7 @@ describe("the document comes with the pipeline", () => {
     })
     expect(within(doc).getByText("Document")).toBeTruthy()
     await waitFor(() => expect(within(doc).getByTestId("document-item").textContent).toContain("chunking-primer.pdf"))
-    expect(within(doc).getByTestId("document-trigger").textContent).toBe("Add a document")
+    expect(within(doc).getByTestId("document-trigger").textContent).toBe("Add a file or link")
     fireEvent.click(within(doc).getByText("Document"))
     expect(within(doc).queryByRole("combobox")).toBeNull()
     expect(within(doc).queryByRole("button", { name: /upload/i })).toBeNull()
@@ -2187,7 +2187,7 @@ describe("the document comes with the pipeline", () => {
   it("with no sample to start from, asks for a document once: the first-visit card, with no note above it", async () => {
     setup()
     await act(async () => settle.resolve(new Response(JSON.stringify([]), { status: 200 })))
-    await screen.findByRole("button", { name: "Upload a document" })
+    await screen.findByRole("button", { name: "Upload a file" })
     expect(screen.queryByTestId("document-note")).toBeNull()
   })
 })

@@ -37,12 +37,12 @@ const IN_PIPELINE = "In this pipeline"
 
 /**
  * The Document control: a link that opens a menu to change the document (the
- * samples, this browser's uploads, Upload a document and a link box). It sits beside the
+ * samples, this browser's uploads, Upload a file and a link box). It sits beside the
  * Document element that names the document: in Build's Document step ("Add or
  * change"), under Evaluate's Documents, and on Compare's Document line. When
  * the saved upload is gone its name says so, and the menu opens on a warning.
  * While the lists load it reads as ready, never missing. Its open state is the
- * store's, so a page's "Pick a document" button opens it too; one page shows
+ * store's, so a page's "Pick a file or link" button opens it too; one page shows
  * one control.
  *
  * By default a pick becomes the working pipeline's document. A page that keeps
@@ -96,11 +96,11 @@ export function DocumentControl({
   const name = busy
     ? busy
     : adding
-      ? `Add a document. This pipeline reads ${count} ${count === 1 ? "document" : "documents"}.`
+      ? `Add a file or link. This pipeline reads ${count} ${count === 1 ? "document" : "documents"}.`
       : missing
         ? `Document ${doc?.filename} is missing. Pick another or upload it again.`
         : empty
-          ? "Pick a document"
+          ? "Pick a file or link"
           : `${label} the document. Now ${doc.filename}.`
   // Nothing is ticked while the file is missing: the menu is there to pick another. Adding, none is:
   // the ones already in the pipeline say so instead.
@@ -160,7 +160,7 @@ export function DocumentControl({
         accept={accept}
         className="sr-only"
         tabIndex={-1}
-        aria-label="Upload a document file"
+        aria-label="Upload a file"
         onChange={(e) => {
           const file = e.target.files?.[0]
           e.target.value = ""
@@ -175,7 +175,7 @@ export function DocumentControl({
           aria-busy={busy ? true : undefined}
           className="inline-flex min-h-[1.5rem] items-center text-sm font-semibold text-primary underline underline-offset-4 outline-none hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)"
         >
-          {busy ?? (adding ? "Add a document" : empty ? "Pick a document" : label)}
+          {busy ?? (adding ? "Add a file or link" : empty ? "Pick a file or link" : label)}
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
           <DropdownMenu.Content
@@ -287,7 +287,7 @@ export function DocumentControl({
               }}
             >
               <Upload aria-hidden strokeWidth={1.75} className="size-4" />
-              {busy ?? "Upload a document"}
+              {busy ?? "Upload a file"}
             </DropdownMenu.Item>
             {/* A menu item, so the arrow keys reach the link box: choosing it moves focus into the box. */}
             <DropdownMenu.Item
@@ -297,7 +297,7 @@ export function DocumentControl({
                 linkRef.current?.focus()
               }}
             >
-              Or add a link
+              Or paste a link to a web page or PDF
             </DropdownMenu.Item>
             <form
               noValidate

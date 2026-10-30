@@ -1417,7 +1417,7 @@ describe("the pipeline's document", () => {
     savePipeline("No file yet", setConfig(sampleGraph(registry, SOURCE), "source", {}))
     render(<Evaluate />)
     expect((await screen.findByTestId("document-note")).textContent).toBe(
-      "Pick a document under Documents to run the evaluation.Pick a document",
+      "Pick a document under Documents to run the evaluation.Pick a file or link",
     )
     expect(screen.queryByText("No pipeline to evaluate")).toBeNull()
   })

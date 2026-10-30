@@ -40,8 +40,7 @@ def check_through(p: Pipeline, through: str | None) -> None:
     """A `through` that names no step is a 400 before anything runs."""
     if through is None:
         return
-    cleaners = p.to_dict()["index"].get("clean", [])
-    names = ["parse", "clean", *[f"clean.{n}" for n in range(1, len(cleaners) + 1)], "chunk", "index"]
+    names = p.index.step_names()
     if through not in names:
         raise HTTPException(
             status_code=400,

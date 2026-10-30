@@ -31,11 +31,17 @@ def step(s: StageResult | None) -> dict[str, Any] | None:
 
 
 def index_report(report: Any) -> dict[str, Any]:
-    """An index run (what `p.index.run` returns): each document's steps, and the index."""
+    """An index run (what `p.index.run` returns): each document's steps, the
+    category and reason for each document (a sibling of `documents`, because a
+    key inside a document's dict would read as a step), and the index."""
     return {
         "ok": report.ok,
         "documents": {
             doc: {name: step(s) for name, s in document.stages.items()}
+            for doc, document in report.documents.items()
+        },
+        "categories": {
+            doc: {"category": document.category, "reason": document.reason}
             for doc, document in report.documents.items()
         },
         "index": step(report.index),

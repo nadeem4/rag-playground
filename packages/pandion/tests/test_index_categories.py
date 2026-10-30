@@ -253,3 +253,8 @@ def test_retrieval_and_evaluation_see_the_categories_of_the_last_run(tmp_path, _
     assert nodes(p.retrieval.graph("q", documents=documents)[0]).items() >= ran.items()
     again = p.index._index(documents, stop="parse", remember=False)
     assert {d: r.category for d, r in again.documents.items()} == picks
+
+
+def test_step_names_cover_the_most_cleaners_of_any_category():
+    assert index().step_names() == ["parse", "clean", "clean.1", "chunk", "index"]
+    assert index(OLD).step_names() == ["parse", "clean", "clean.1", "chunk", "index"]

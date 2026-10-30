@@ -76,6 +76,7 @@ __all__ = [
     "parse_question_set",
     "regression",
     "trace",
+    "with_stage",
     "write_questions",
 ]
 
@@ -756,6 +757,17 @@ COMPARE_STAGES: dict[str, str] = {
 }
 
 
+def with_stage(data: dict[str, Any], stage: str, block: Any) -> dict[str, Any]:
+    """`data` (a pipeline file) with `stage` set to `block`. In a file with
+    categories, parse, clean and chunk are set in every category."""
+    if stage in ("parse", "clean", "chunk") and "categories" in data:
+        for category in data["categories"].values():
+            category[stage] = copy.deepcopy(block)
+    else:
+        data.setdefault(COMPARE_STAGES[stage], {})[stage] = block
+    return data
+
+
 def _check_through(pipeline: Pipeline, stage: str, through: str) -> None:
     """A ValueError when `through` names no step of `pipeline` (as `index.run`
     says it) or stops before the varied `stage`, which would leave nothing to compare."""
@@ -998,8 +1010,7 @@ def compare(
         block = _block(copy.deepcopy(variant))
         if stage in ("clean", "rerank") and isinstance(block, dict):
             block = [block]
-        data = copy.deepcopy(base)
-        data.setdefault(section, {})[stage] = block
+        data = with_stage(copy.deepcopy(base), stage, block)
         try:
             pipelines.append(Pipeline._of(from_dict(data, base=p.config.path)))
         except ConfigError as exc:

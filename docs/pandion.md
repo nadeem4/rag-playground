@@ -409,7 +409,8 @@ index:                  # shared by every category
 
 Every category shares one `embed` and one `store`, so `embed`, `store`, `source` and
 `enrich` stay under `index`. A file with both `categories` and `index.parse` is refused,
-and so is a route whose last rule has a `when`.
+and so is a route whose last rule has a `when`. A category id may use only lowercase
+letters, digits, underscore and dash, and any other is a `ConfigError` that names it.
 
 A file without `categories` still works. Pandion reads its `index.parse`, `clean` and
 `chunk` as one category named `default`, and writes it back the same way, so its
@@ -1265,6 +1266,11 @@ that step, as `index.run(through=...)` does, so comparing ten chunkers with
 with that stage changed (`r.pipeline.to_yaml()` writes it as a file), and `r.to_dict()`
 is all of it as plain JSON. A variant whose index run fails is reported, with
 `r.index.ok` false and no `report`.
+
+In a pipeline with categories, comparing `parse`, `clean` or `chunk` sets each variant in every
+category. `pandion.evaluation.with_stage(data, stage, block)` does this to a pipeline file's
+dict, and `p.index.step_names()` lists the steps `through` can name: `parse`, `clean`,
+`clean.N` for as many cleaners as the category with the most has, `chunk` and `index`.
 
 `print(results)` gives one plain line per variant and names the best one: the variant
 with the highest hit rate (answers found out of the questions scored), then the one with

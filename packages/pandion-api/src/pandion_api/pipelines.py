@@ -8,13 +8,14 @@ run code the request chose. Then the site's Policy has its say.
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 import yaml
 from fastapi import HTTPException, Request
 
 from pandion import ConfigError, Pipeline
-from pandion.evaluation import COMPARE_STAGES
+from pandion.evaluation import COMPARE_STAGES, with_stage
 
 NOT_A_MAPPING = "The pipeline must be a mapping of settings, in the pipeline file's shape."
 PLUGINS_REFUSED = (
@@ -95,10 +96,13 @@ def _block(value: Any) -> Any:
 
 def variant_config(config: dict[str, Any], stage: str, variant: Any) -> dict[str, Any]:
     """`config` with one stage replaced by `variant`, taken as compare takes it:
-    a bare name is {"use": name}, and one block for clean or rerank is a list of one."""
+    a bare name is {"use": name}, and one block for clean or rerank is a list of one.
+    With categories, parse, clean and chunk are set in every category."""
     block = _block(variant)
     if stage in ("clean", "rerank") and isinstance(block, dict):
         block = [block]
+    data = copy.deepcopy(config)
     section = COMPARE_STAGES[stage]
-    current = config.get(section)
-    return {**config, section: {**(current if isinstance(current, dict) else {}), stage: block}}
+    if not isinstance(data.get(section), dict):
+        data[section] = {}
+    return with_stage(data, stage, block)

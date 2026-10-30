@@ -739,12 +739,16 @@ class IndexPipeline:
         last cleaner (see `_stop_for`)."""
         if through is None or through == "index":
             return None
-        most = max(len(c.clean) for c in self.config.index.categories.values())
-        cleans = [f"clean.{n}" for n in range(1, most + 1)]
-        if through in ("parse", "clean", "chunk", *cleans):
+        names = self.step_names()
+        if through in names:
             return through
-        named = ", ".join(["parse", "clean", *cleans, "chunk", "index"])
-        raise ValueError(f"through names the step to stop after: one of {named}, not '{through}'.")
+        raise ValueError(f"through names the step to stop after: one of {', '.join(names)}, not '{through}'.")
+
+    def step_names(self) -> list[str]:
+        """The steps `through` can name: parse, clean, clean.N for as many
+        cleaners as the category with the most has, chunk and index."""
+        most = max(len(c.clean) for c in self.config.index.categories.values())
+        return ["parse", "clean", *[f"clean.{n}" for n in range(1, most + 1)], "chunk", "index"]
 
     @staticmethod
     def _stop_for(stop: str, category: CategoryConfig) -> str:

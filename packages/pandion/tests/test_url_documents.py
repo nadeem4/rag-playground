@@ -158,4 +158,6 @@ def test_a_local_file_entry_in_the_manifest_has_no_filename(tmp_path):
     assert set(Manifest.load(tmp_path / "index" / MANIFEST).documents["report.pdf"]) == {
         "content_hash",
         "chunk_set",
+        "category",
+        "reason",
     }

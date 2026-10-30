@@ -67,20 +67,30 @@ def run_sources(ctx: Any, step: str) -> Sources:
     return sources
 
 
-def file_record(sha: str, filename: str, path: Path) -> dict[str, Any]:
-    """What a source step returns: a raw file is a stored file, not its bytes."""
-    return {
+def file_record(
+    sha: str, filename: str, path: Path, metadata: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """What a source step returns: a raw file is a stored file, not its bytes.
+    `metadata` is labels the source knows about the document; a route can read
+    them with the `metadata` check."""
+    record = {
         "sha": sha,
         "filename": filename,
         "path": str(path),
         "mime": mimetypes.guess_type(filename)[0] or DEFAULT_MIME,
     }
+    if metadata:
+        record["metadata"] = dict(metadata)
+    return record
 
 
-def raw_file(ctx: Any, data: bytes, filename: str) -> dict[str, Any]:
+def raw_file(
+    ctx: Any, data: bytes, filename: str, metadata: dict[str, str] | None = None
+) -> dict[str, Any]:
     """Store `data` as a source file called `filename` and return what a
     source step returns, the same as the upload source: sha, filename, path
-    and mime. A custom source ends with `return raw_file(ctx, data, filename)`."""
+    and mime, plus `metadata` when given. A custom source ends with
+    `return raw_file(ctx, data, filename)`."""
     sources = run_sources(ctx, "raw_file")
     stored = sources.add_bytes(data, filename)
-    return file_record(stored.sha, filename, sources.path(stored.sha, filename))
+    return file_record(stored.sha, filename, sources.path(stored.sha, filename), metadata)

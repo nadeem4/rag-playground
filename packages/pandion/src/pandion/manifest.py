@@ -10,8 +10,14 @@ unchanged, and writes it again after a sync that worked.
   "index_recipe": "<sha256 of the index settings>",
   "index_artifact": "<artifact id of the lancedb index>",
   "documents": {
-    "guides/chunking.pdf": {"content_hash": "<sha256 of the bytes>", "chunk_set": "<artifact id>"},
-    "https://example.com/guide": {"content_hash": "...", "chunk_set": "...", "filename": "guide.html"}
+    "guides/chunking.pdf": {
+      "content_hash": "<sha256 of the bytes>", "chunk_set": "<artifact id>",
+      "category": "reports", "reason": "Rule 1: path matches guides/**"
+    },
+    "https://example.com/guide": {
+      "content_hash": "...", "chunk_set": "...", "category": "text",
+      "reason": "Chosen when added", "metadata": {"team": "ops"}, "filename": "guide.html"
+    }
   }
 }
 ```
@@ -22,6 +28,11 @@ document's id is its URL, and its entry also has `filename`: the name the
 fetched page was stored under, whose suffix came from its content type
 (`pandion.fetch`). An entry has `filename` only when it differs from the last
 part of the id, so the entries of local files are as before.
+
+An entry also records the document's `category` and the `reason` for it, and
+its `metadata` labels when it has any. A document keeps them until it is moved,
+even when its bytes change or the route changes. An entry from before
+categories has none of the three and counts as unsorted: the next sync sorts it.
 """
 
 from __future__ import annotations
@@ -65,8 +76,8 @@ def recipe_hash(index_settings: Any) -> str:
 class Manifest:
     index_recipe: str | None = None
     index_artifact: str | None = None
-    #: document id -> {"content_hash": ..., "chunk_set": ...}
-    documents: dict[str, dict[str, str]] = field(default_factory=dict)
+    #: document id -> {"content_hash", "chunk_set", "category", "reason", ...}
+    documents: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: str | Path) -> Manifest:

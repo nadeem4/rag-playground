@@ -114,6 +114,31 @@ def test_sort_of_a_url_document_uses_its_link_as_path(client):
     assert got == {"category": "scans", "reason": "Rule 2: path matches https://**"}
 
 
+def link_document(client, link):
+    sha = upload(client, "page.pdf", build_pdf([["A linked page."]]))["sha"]
+    store = client.app.state.documents
+    with store.lock:
+        store.write(sha, "page.pdf", 1, "application/pdf", link)
+    return sha
+
+
+def test_sort_and_run_agree_about_a_url_document(client):
+    sha = link_document(client, "https://example.com/papers/page.pdf")
+    previewed = sort(client, sha).json()["documents"][sha]
+    state, _ = run(client, sha, through="parse")
+    assert previewed == state["result"]["categories"]["page.pdf"]
+    assert previewed["reason"] == "Rule 2: path matches https://**"
+
+
+def test_sort_and_run_agree_on_the_type_of_a_link_without_a_suffix(client):
+    config = {**CONFIG, "route": [{"when": {"use": "file_type", "types": ["pdf"]}, "category": "scans"}, {"category": "reports"}]}
+    sha = link_document(client, "https://example.com/download")
+    previewed = client.post("/pipelines/sort", json={"config": config, "documents": [sha]}).json()["documents"][sha]
+    state, _ = finish(client, client.post("/runs", json={"config": config, "documents": [sha], "through": "parse"}))
+    assert previewed == state["result"]["categories"]["page.pdf"]
+    assert previewed["category"] == "scans"
+
+
 def test_sort_respects_the_policy(tmp_path):
     class Refuse(Policy):
         def check_run(self, config, request):

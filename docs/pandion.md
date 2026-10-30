@@ -417,7 +417,7 @@ A file without `categories` still works. Pandion reads its `index.parse`, `clean
 artifact ids, recipe hash and graph do not change.
 
 Each document goes to the category the route chooses (see "Route documents to
-categories" below), unless you choose its category by hand: `p.index.assign(categories={"a.pdf": "reports"})`, or
+categories" below), unless you choose its category by hand: `p.index.assign(categories={"a.pdf": "reports"})` (`links=` also tells it which link a stored document came from, for the `path` check), or
 `p.index.run(paths, categories={...})` for one call. An unknown category name is a
 `ValueError` that lists the real ones. `p.index.category_of("a.pdf")` says which category
 a document has, and `report.documents["a.pdf"].category` says which one it went through.
@@ -637,7 +637,7 @@ manifest. A file's id is its file name, or its path inside the folder; a link's 
 route's `metadata` check reads. The index is built again, but every other document is a
 cache hit. Adding an id that is already indexed raises a `ValueError` that points to
 `p.index.move`. `add`, `move`, `sort` and `p.documents()` work with the upload source
-only, like `sync`. `sort` reads a file where it is and writes nothing. A link is fetched and kept in `sources/`. `sort` also takes a dict of `{document id: file}`. Then it gives the ids itself and fetches nothing, and an id with a `/`, such as a link, is the path that the route's `path` check reads.
+only, like `sync`. `sort` reads a file where it is and writes nothing. A link is fetched and kept in `sources/`. `sort` also takes a dict of `{document id: file}`. Then it gives the ids itself and fetches nothing, and the address that `assign(links={document id: link})` gave for an id is the path that the route's `path` check reads. A run reads the same address.
 
 `p.documents()` lists what the manifest holds, sorted by id, as `DocumentEntry` values with
 `id`, `filename`, `category`, `reason`, `metadata` and `content_hash`. A document saved

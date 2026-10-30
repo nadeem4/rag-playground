@@ -34,7 +34,7 @@ def test_categories_config_validates_and_round_trips(client):
     body = validate(client, CATEGORIES).json()
     assert body["ok"] is True
     assert body["config"] == CATEGORIES
-    assert "categories" in body["yaml"] and "index" not in body["config"]["index"].get("parse", {})
+    assert "categories" in body["yaml"] and "parse" not in body["config"]["index"]
 
 
 def test_unknown_check_is_a_422_with_its_place(client):

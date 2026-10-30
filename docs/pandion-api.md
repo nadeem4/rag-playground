@@ -80,7 +80,7 @@ with a 400, because a stored file with that suffix would look half-written.
 | `POST /documents/{id}/questions/generate` | `{"model", "count"?, "model_name"?, "base_url"?}`: a model writes up to `count` test questions (default 15) for the document, read as the upload check reads it, one call a part (`pandion.evaluation.write_questions`). A run: 202 `{"run_id"}`. See [Questions written for you](#questions-written-for-you). |
 | `POST /golds/find` | `{"golds": [...], "texts": [...]}`: which of `texts`, pieces in the order a reader meets them, first holds any gold passage, by the eval step's own rule (`pandion.evaluation.find_gold`): `{"found": {"index", "gold", "match"}}`, or `{"found": null}`. At most 20 golds of up to 10,000 characters each, and 100 pieces of up to 1,000,000 characters together (a 422 past them). A single piece has no cap of its own, so a long one is looked through whole. These caps keep one call under about half a second of work, so the route needs no rate limit. Nothing runs or is kept. |
 | `POST /evaluations/against` | `{"report", "baseline"}`, each an evaluation's result or the part of it a comparison reads (`top_k`, the totals, the fingerprint, the documents, `nondeterministic`, and each question's `id`, `question`, `found` and `error`): the run compared with the baseline as `report.against(baseline)` compares them (`pandion.evaluation.regression`), with `best`, `pandion.evaluation.best` of `[baseline, report]`. Each text is held to the caps the other routes use (a question at most 2,000 characters, an `error` at most 10,000 so a long failure line still compares, each gold passage at most 10,000, all of a run's gold passages together at most 1 MB, an `id`, the fingerprint, each document sha and each `nondeterministic` step at most 500, at most 500 documents and 50 steps): a 422 past them. Nothing runs. |
-| `POST /pipelines/sort` | `{"config", "documents": [id, ...], "categories"?, "metadata"?}` gives `{"documents": {id: {"category", "reason"}}}`: the category each document would go to now and why. Nothing runs and no step file is written. The pins and labels count as in a run, and the same site rules apply as for `POST /runs`. A URL document is read by the link it was fetched from, so a `path` rule can match it. A pipeline whose source is not `upload` is a 422. |
+| `POST /pipelines/sort` | `{"config", "documents": [id, ...], "categories"?, "metadata"?}` gives `{"documents": {id: {"category", "reason"}}}`: the category each document would go to now and why. Nothing runs and no step file is written. The pins and labels count as in a run, and the same site rules apply as for `POST /runs`. A URL document is named and read as in a run, with the link it was fetched from as its `path`. A pipeline whose source is not `upload` is a 422. |
 | `POST /runs` | `{"config", "documents": [id, ...], "through"?, "force"?}`: index the documents, or stop each after one step (`parse`, `clean`, `clean.N`, `chunk`; `index` is the whole run). 202 `{"run_id"}`. A pipeline with categories sends each document through its category's steps, and `through` can name any step that some category has. The result says which category each document went to and why (see [Categories](#categories)). A PDF or an image behind a Word, PowerPoint, HTML, Markdown or text file's name is 415 before anything runs ("this file is named .md but holds a PDF, so it cannot be indexed"). |
 | `GET /runs/{run_id}` | the run's status, its whole event log, and once it ended its `result` |
 | `GET /runs/{run_id}/events` | the events as server-sent events; reconnect with `Last-Event-ID` or `?last_event_id=N` |
@@ -266,7 +266,8 @@ optional maps, each keyed by the document's id (its sha), as `documents` is:
 - `categories`: `{sha: category}` sends that document to that category and skips the
   route. Its reason is `Chosen when added`.
 - `metadata`: `{sha: {key: value}}` gives the document labels that the route's `metadata`
-  check reads.
+  check reads. A document may have 50 labels. A key may be 2,000 characters and a value
+  10,000.
 
 A sha that is not one of the request's `documents` is a 422, and so is a category the
 pipeline does not have; the sentence lists the categories it does have. The same pins
@@ -275,9 +276,9 @@ pin reads the same index as the run that used it. A comparison gives the pins to
 variant.
 
 `POST /pipelines/sort` shows the result of the route before you run anything. For a
-document that came from a link, the link is the `path` that a `path` rule sees. A run
-still names that document by its file name, so a `path` rule may match in the preview and
-not in the run.
+document that came from a link, the link is the `path` that a `path` rule sees, in the
+preview and in a run alike. Both name the document by its file name and read its type
+from the stored file, not from the link.
 
 A document in a run is named by the filename it was uploaded under, so the same bytes
 under the same name give the same result ids however often they are uploaded. Two

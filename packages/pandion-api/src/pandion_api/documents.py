@@ -134,13 +134,6 @@ class Document:
         )
 
 
-def route_id(store: DocumentStore, sha: str, name: str) -> str:
-    """The id a route's checks see a document by: the link a URL document was
-    fetched from (so a `path` rule can read it), else its name."""
-    document = store.get(sha)
-    return document.origin_url if document is not None and document.origin_url else name
-
-
 class DocumentStore:
     lock = SIDECAR_LOCK
 

@@ -65,7 +65,7 @@ async def create_run(body: RunIn, request: Request) -> dict[str, str]:
     p = prepare(body.config, request)
     check_through(p, body.through)
     documents = documents_of(body.documents, request)
-    assign_to(p, body, list(documents))
+    assign_to(p, body, list(documents), request)
     refuse_disguised(documents)
 
     def work(on_event, cancel, credentials):

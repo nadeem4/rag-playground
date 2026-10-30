@@ -75,7 +75,7 @@ async def ask(body: AskIn, request: Request) -> dict[str, str]:
         if sha not in body.documents:
             raise problems(f"where: document {sha} is not one of the documents sent with the question.")
     documents = documents_of(body.documents, request)
-    assign_to(p, body, list(documents))
+    assign_to(p, body, list(documents), request)
 
     def work(on_event, cancel, credentials):
         options = {

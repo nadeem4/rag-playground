@@ -7,7 +7,6 @@ from typing import Any
 from fastapi import APIRouter, Request
 from pydantic import Field
 
-from pandion_api.documents import route_id
 from pandion_api.jobs import SortedIn, assign_to, documents_of
 from pandion_api.pipelines import prepare, problems
 
@@ -23,19 +22,17 @@ class SortIn(SortedIn):
 def sort(body: SortIn, request: Request) -> dict[str, Any]:
     """The category each document would go to and the reason, by sha. Nothing
     runs. A pin (`categories`) and labels (`metadata`) count as in a run, and a
-    URL document is read by the link it was fetched from."""
+    URL document is named and read as in a run, with its link as the path."""
     p = prepare(body.config, request)
     documents = documents_of(body.documents, request)
-    store = request.app.state.documents
-    ids = {sha: route_id(store, sha, name) for sha, name in zip(body.documents, documents)}
-    assign_to(p, body, list(ids.values()))
+    assign_to(p, body, list(documents), request)
     try:
-        sorted_ = p.index.sort({ids[sha]: documents[name] for sha, name in zip(body.documents, documents)})
+        sorted_ = p.index.sort(documents)
     except ValueError as exc:
         raise problems(str(exc)) from None
     return {
         "documents": {
-            sha: {"category": sorted_[ids[sha]].category, "reason": sorted_[ids[sha]].reason}
-            for sha in body.documents
+            sha: {"category": sorted_[name].category, "reason": sorted_[name].reason}
+            for sha, name in zip(body.documents, documents)
         }
     }

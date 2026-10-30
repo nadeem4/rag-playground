@@ -758,8 +758,9 @@ COMPARE_STAGES: dict[str, str] = {
 
 
 def with_stage(data: dict[str, Any], stage: str, block: Any) -> dict[str, Any]:
-    """`data` (a pipeline file) with `stage` set to `block`. In a file with
-    categories, parse, clean and chunk are set in every category."""
+    """`data` (a pipeline file) with `stage` set to `block`. It changes `data`
+    in place and returns it. In a file with categories, parse, clean and chunk
+    are set in every category."""
     if stage in ("parse", "clean", "chunk") and "categories" in data:
         for category in data["categories"].values():
             category[stage] = copy.deepcopy(block)
@@ -1013,7 +1014,7 @@ def compare(
         data = with_stage(copy.deepcopy(base), stage, block)
         try:
             variant = Pipeline._of(from_dict(data, base=p.config.path))
-            variant.index.assign(categories=p.index._pins, metadata=p.index._labels)
+            variant.index.assign(categories=p.index._pins, metadata=p.index._labels, links=p.index._links)
             pipelines.append(variant)
         except ConfigError as exc:
             raise ConfigError(f"variant {n}: {exc}", step=exc.step, use=exc.use, settings=exc.settings) from None

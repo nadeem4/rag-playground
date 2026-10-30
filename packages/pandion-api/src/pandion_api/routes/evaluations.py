@@ -118,7 +118,7 @@ async def create_evaluation(body: EvaluationIn, request: Request) -> dict[str, s
     if p.retrieval is None:
         raise problems(NO_SEARCH)
     documents = documents_of(body.documents, request)
-    assign_to(p, body, list(documents))
+    assign_to(p, body, list(documents), request)
     if body.questions is not None:
         questions = await run_in_threadpool(_checked, body.questions)
     else:
@@ -211,8 +211,9 @@ async def create_comparison(body: ComparisonIn, request: Request) -> dict[str, s
     if body.question is not None and body.answer and any(v.query is None for v in prepared):
         raise problems(NO_ANSWER)
     documents = documents_of(body.documents, request)
-    for each in (p, *prepared):
-        assign_to(each, body, list(documents))
+    # Pandion gives its own variants the pins; the one-question path runs these directly.
+    for each in (p, *prepared) if body.question is not None else (p,):
+        assign_to(each, body, list(documents), request)
     questions = await run_in_threadpool(_checked, body.questions) if body.questions is not None else None
     if questions is not None:
         named_documents(questions, documents, body.documents)

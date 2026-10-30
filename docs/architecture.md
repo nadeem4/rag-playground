@@ -70,8 +70,8 @@ the same settings give the same graph and the same artifact ids, and `to_yaml()`
 any of them back as a file. `pandion.parse`, `clean`, `chunk` and `rewrite` are modules
 that hold their stage's classes and still run one stage when called.
 `index.sync("docs/")` keeps that index in step with a folder: it records each document's
-content hash and pieces in `manifest.json` under the config's `path` (`pandion/manifest.py`),
-builds the index again from cached steps, reports what was added, changed, removed and
+content hash, pieces, category, reason and labels in `manifest.json` under the config's `path` (`pandion/manifest.py`),
+builds the index again from cached steps (`add` and `move` do the same for one document), reports what was added, changed, removed and
 unchanged, and deletes the previous index from the store. The app does not use sync.
 `p.retrieve(question, k=5)` searches that index with the file's `retrieve` section
 (rewrite, search, rerank) in one graph with the index steps, so the index is a cache hit,

@@ -9,7 +9,7 @@ from pandion import check_where
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, model_validator
 
 from pandion_api import reports
-from pandion_api.jobs import documents_of, start
+from pandion_api.jobs import SortedIn, assign_to, documents_of, start
 from pandion_api.pipelines import prepare, problems
 
 router = APIRouter()
@@ -48,7 +48,7 @@ class WhereIn(BaseModel):
         return self
 
 
-class AskIn(BaseModel):
+class AskIn(SortedIn):
     config: Any
     documents: list[str] = Field(min_length=1)
     question: str = Field(min_length=1, max_length=2000)
@@ -75,6 +75,7 @@ async def ask(body: AskIn, request: Request) -> dict[str, str]:
         if sha not in body.documents:
             raise problems(f"where: document {sha} is not one of the documents sent with the question.")
     documents = documents_of(body.documents, request)
+    assign_to(p, body, list(documents))
 
     def work(on_event, cancel, credentials):
         options = {

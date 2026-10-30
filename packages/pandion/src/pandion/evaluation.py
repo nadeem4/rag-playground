@@ -1012,7 +1012,9 @@ def compare(
             block = [block]
         data = with_stage(copy.deepcopy(base), stage, block)
         try:
-            pipelines.append(Pipeline._of(from_dict(data, base=p.config.path)))
+            variant = Pipeline._of(from_dict(data, base=p.config.path))
+            variant.index.assign(categories=p.index._pins, metadata=p.index._labels)
+            pipelines.append(variant)
         except ConfigError as exc:
             raise ConfigError(f"variant {n}: {exc}", step=exc.step, use=exc.use, settings=exc.settings) from None
     if through is not None:

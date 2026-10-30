@@ -417,3 +417,11 @@ def test_compare_varies_the_stage_in_every_category(tmp_path, docs):
     for r in results:
         assert {c.chunk[1]["chunk_size"] for c in r.pipeline.config.index.categories.values()} == {r.variant["chunk_size"]}
     assert [len(r.outputs["sample.pdf"].output.chunks) for r in results] == [5, 10]
+
+
+def test_compare_keeps_the_categories_chosen_by_hand(tmp_path, docs):
+    p = Pipeline.from_dict({**CATEGORIES, "path": str(tmp_path / "index")})
+    p.index.assign(categories={"sample.pdf": "a"})
+    results = pandion.compare(p, "chunk", [V70, V30], docs)
+    assert [r.index.documents["sample.pdf"].category for r in results] == ["a", "a"]
+    assert results[0].index.documents["sample.pdf"].reason == "Chosen when added"

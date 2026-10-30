@@ -956,19 +956,33 @@ class IndexPipeline:
         return self._commit(stored, before, known, credentials=credentials, on_event=on_event, cancel=cancel)
 
     def sort(
-        self, file: str | Path | list[str | Path], *, metadata: dict[str, dict[str, str]] | None = None
+        self,
+        file: str | Path | list[str | Path] | dict[str, str | Path],
+        *,
+        metadata: dict[str, dict[str, str]] | None = None,
     ) -> dict[str, Sorting]:
         """What category each file would get now, and why, by document id.
         Nothing runs and nothing is written for a file; a link is fetched and
-        kept in `sources/`. `metadata` gives labels by document id. Works with
-        the upload source only."""
+        kept in `sources/`. `metadata` gives labels by document id. A dict
+        gives the ids itself, `{document id: file}`: nothing is fetched, and an
+        id with a `/` (a link, say) is the path the route's `path` check reads.
+        Works with the upload source only."""
         if not self._uploads():
             raise ValueError("sort works with local files (the upload source).")
-        items = file if isinstance(file, list) else [file]
+        given = file if isinstance(file, dict) else {}
+        items = [] if isinstance(file, dict) else file if isinstance(file, list) else [file]
         labels = {**self._labels, **(metadata or {})}
         needs_info = any(rule.when for rule in self.config.index.route)
         files = [i for i in items if not is_url(i)]
         infos: dict[str, DocumentInfo | None] = {}
+        for doc_id, path in given.items():
+            infos[doc_id] = (
+                document_info(
+                    Path(path), filename=PurePosixPath(doc_id).name, doc_id=doc_id, metadata=labels.get(doc_id)
+                )
+                if needs_info
+                else None
+            )
         for doc_id, path in _files(files) if files else []:
             infos[doc_id] = (
                 document_info(path, filename=path.name, doc_id=doc_id, metadata=labels.get(doc_id))

@@ -12,7 +12,7 @@ import { documentBusy, loadSampleDocument, useDocument } from "@/state/document"
  * The first-visit card on Build (plan I-15): no document yet. Load one of the
  * bundled samples (`GET /api/samples`, then `POST /api/sources/sample`), or
  * upload a document; either becomes the pipeline's document. This browser's
- * earlier uploads are in the Pick a document menu. Nothing runs until the
+ * earlier uploads are in the Pick a file or link menu. Nothing runs until the
  * user presses Run. A hosted demo states its limits in a note.
  */
 
@@ -21,9 +21,11 @@ const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eig
 const count = (n: number) => WORDS[n] ?? String(n)
 export function FirstRun() {
   const { samples, error: samplesError } = useSamples()
-  const { upload, busy: uploading, error: uploadError, accept } = useUpload()
+  const { upload, addLink, busy: uploading, error: uploadError, accept, linkLine } = useUpload()
+  const [link, setLink] = useState("")
+  const [sending, setSending] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
-  // Shared with the Pick a document menu: while either uploads or loads a sample, the other waits.
+  // Shared with the Pick a file or link menu: while either uploads or loads a sample, the other waits.
   const { sampleLoading } = useDocument()
   const waiting = uploading !== null || sampleLoading !== null
   const [busy, setBusy] = useState<string | null>(null)
@@ -54,7 +56,7 @@ export function FirstRun() {
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold">Document</h3>
         <p className="m-0 flex flex-wrap items-baseline gap-x-2 text-sm text-fg-muted">
-          <span>Load a sample or upload a document. Your earlier uploads are in the list.</span>
+          <span>A PDF, Word, PowerPoint, Markdown, text or image file, or a link to a web page. Your earlier ones are in the list.</span>
           <DocumentControl />
         </p>
       </div>
@@ -90,17 +92,47 @@ export function FirstRun() {
           accept={accept}
           className="sr-only"
           tabIndex={-1}
-          aria-label="Upload a document to start"
+          aria-label="Upload a file to start"
           onChange={(e) => {
             const file = e.target.files?.[0]
             e.target.value = ""
             void upload(file)
           }}
         />
-        <Button variant="outline" size="sm" className="self-start" busy={uploading !== null} disabled={waiting} onClick={() => fileRef.current?.click()}>
+        <Button variant="outline" size="sm" className="self-start" busy={uploading !== null && !sending} disabled={waiting} onClick={() => fileRef.current?.click()}>
           <Upload aria-hidden strokeWidth={1.75} />
-          {uploading ?? "Upload a document"}
+          {(sending ? null : uploading) ?? "Upload a file"}
         </Button>
+        <label htmlFor="first-run-link" className="m-0 text-xs text-fg-muted">
+          Or paste a link to a web page or PDF
+        </label>
+        <form
+          noValidate
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (waiting || !link.trim()) return
+            setSending(true)
+            void addLink(link)
+              .then((ok) => ok && setLink(""))
+              .finally(() => setSending(false))
+          }}
+        >
+          <input
+            id="first-run-link"
+            type="url"
+            value={link}
+            placeholder="https://example.com/guide.html"
+            readOnly={waiting}
+            aria-disabled={waiting || undefined}
+            className="min-h-[36px] min-w-0 flex-1 rounded-control border border-field-border bg-surface px-2 text-sm text-fg outline-none placeholder:text-fg-muted focus-visible:outline-2 focus-visible:outline-(--focus-ring) aria-disabled:opacity-50"
+            onChange={(e) => setLink(e.target.value)}
+          />
+          <Button type="submit" size="sm" aria-label="Add link" busy={sending && uploading !== null} disabled={waiting || !link.trim()}>
+            {(sending ? uploading : null) ?? "Add"}
+          </Button>
+        </form>
+        {demo ? <p className="m-0 text-xs text-fg-muted">{linkLine}</p> : null}
         {uploadError ? (
           <p role="alert" className="text-xs break-words text-danger">
             {uploadError}

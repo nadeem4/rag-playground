@@ -1324,7 +1324,7 @@ describe("the document on the page", () => {
     const note = await screen.findByTestId("document-note")
     expect(note.textContent).toContain("Pick a document above to run these recipes.")
     expect(screen.queryByText("No pipeline to compare")).toBeNull()
-    expect(within(screen.getByTestId("document-line")).getByTestId("document-trigger").textContent).toBe("Pick a document")
+    expect(within(screen.getByTestId("document-line")).getByTestId("document-trigger").textContent).toBe("Pick a file or link")
     expect((screen.getByRole("button", { name: "Run 3 recipes" }) as HTMLButtonElement).disabled).toBe(true)
   })
 

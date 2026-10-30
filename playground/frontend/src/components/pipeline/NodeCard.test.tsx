@@ -309,7 +309,7 @@ describe("click to close, and scroll into view", () => {
       expect(within(card).getAllByTestId("document-item")).toHaveLength(2)
       expect(within(card).getByText(/The 2 documents this pipeline reads/)).toBeTruthy()
       expect(within(card).getAllByRole("button", { name: /^Remove .* from this pipeline$/ })).toHaveLength(2)
-      expect(within(card).getByTestId("document-trigger").getAttribute("aria-label")).toBe("Add a document. This pipeline reads 2 documents.")
+      expect(within(card).getByTestId("document-trigger").getAttribute("aria-label")).toBe("Add a file or link. This pipeline reads 2 documents.")
     })
 
     it("lists the pipeline's document with the full element and offers Add a document, with nothing to edit when open", () => {
@@ -318,7 +318,7 @@ describe("click to close, and scroll into view", () => {
       expect(items).toHaveLength(1)
       expect(within(items[0]).getByText("report.pdf")).toBeTruthy()
       expect(within(items[0]).getByRole("button", { name: "Preview Report" })).toBeTruthy()
-      expect(within(card).getByTestId("document-trigger").textContent).toBe("Add a document")
+      expect(within(card).getByTestId("document-trigger").textContent).toBe("Add a file or link")
       // One document stays: there is nothing to remove it for.
       expect(within(card).queryByRole("button", { name: /^Remove .* from this pipeline$/ })).toBeNull()
       expect(within(card).queryByRole("textbox")).toBeNull()
@@ -329,7 +329,7 @@ describe("click to close, and scroll into view", () => {
       const card = renderCard({ node: source, title: "Document", transforms: transformsFor(R, "source") })
       expect(within(card).queryByTestId("document-item")).toBeNull()
       expect(card.textContent).toContain("None yet.")
-      expect(within(card).getByRole("button", { name: "Pick a document" })).toBeTruthy()
+      expect(within(card).getByRole("button", { name: "Pick a file or link" })).toBeTruthy()
     })
 
     it("keeps a missing file's name, marks it removed from the server, and offers no Preview", () => {

@@ -42,6 +42,9 @@ let demo = false
 let appCalls = 0
 let posted: (string | null)[] = []
 let uploadRefusal = ""
+let linkPosts: string[] = []
+let linkStatus = 200
+let holdLink: Promise<void> | null = null
 const registry = liveRegistry as unknown as Registry
 
 beforeEach(() => {
@@ -52,6 +55,9 @@ beforeEach(() => {
   demo = false
   appCalls = 0
   posted = []
+  linkPosts = []
+  linkStatus = 200
+  holdLink = null
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -65,6 +71,12 @@ beforeEach(() => {
         )
       }
       if (url === "/api/v2/strategies") return ok({ stages: liveRegistry })
+      if (url === "/api/v2/documents/url") {
+        linkPosts.push(JSON.parse(String(init?.body)).url)
+        if (holdLink) await holdLink
+        if (linkStatus !== 200) return new Response(JSON.stringify({ detail: "That address is not on the public internet, so it was not fetched." }), { status: linkStatus })
+        return ok(SAMPLE)
+      }
       if (url === "/api/v2/documents" && init?.method === "POST") return new Response(JSON.stringify({ detail: uploadRefusal }), { status: 413 })
       if (url === "/api/v2/documents") return ok([SAMPLE])
       if (url === "/api/samples") return ok(SAMPLES)
@@ -82,7 +94,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-const uploadButton = () => screen.queryByRole("button", { name: "Upload a document" })
+const uploadButton = () => screen.queryByRole("button", { name: "Upload a file" })
 const NOTE =
   "This is a hosted demo. A file you upload is private to this browser, is not shared with anyone, and is deleted after a day. A PDF up to 10 MB and 20 pages, a Word, PowerPoint, HTML, Markdown or text file up to 2 MB, and an image up to 5 MB, three at a time. Clearing cookies loses access to your uploads. For anything larger, run it locally."
 const IN_A_FRAME = " Uploads need cookies. If your browser blocks them here, open the demo in its own tab."
@@ -111,19 +123,76 @@ describe("FirstRun", () => {
     expect(posted).toEqual(["scanned-notes"])
   })
 
-  it("offers your earlier uploads through Pick a document, and has no file picker of its own", async () => {
+  it("offers your earlier uploads through Pick a file or link, and has no file picker of its own", async () => {
     render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    expect(screen.getByText("Load a sample or upload a document. Your earlier uploads are in the list.")).toBeTruthy()
-    expect(screen.getByTestId("document-trigger").textContent).toBe("Pick a document")
+    expect(screen.getByText("A PDF, Word, PowerPoint, Markdown, text or image file, or a link to a web page. Your earlier ones are in the list.")).toBeTruthy()
+    expect(screen.getByTestId("document-trigger").textContent).toBe("Pick a file or link")
     expect(screen.queryByRole("combobox")).toBeNull()
     expect(uploadButton()).not.toBeNull()
   })
 
-  it("Upload a document refuses a file no parser reads, and takes every one a parser does", async () => {
+  it("takes a link on the card: submitting a URL adds it and clears the box; an empty box posts nothing", async () => {
     render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    const input = screen.getByLabelText("Upload a document to start")
+    const box = screen.getByLabelText("Or paste a link to a web page or PDF") as HTMLInputElement
+    const add = screen.getByRole("button", { name: "Add link" }) as HTMLButtonElement
+    expect(add.disabled).toBe(true)
+    fireEvent.change(box, { target: { value: "   " } })
+    fireEvent.submit(box.closest("form")!)
+    expect(linkPosts).toEqual([])
+    expect(screen.queryByRole("alert")).toBeNull()
+    fireEvent.change(box, { target: { value: "https://example.com/guide.html" } })
+    fireEvent.click(add)
+    await waitFor(() => expect(linkPosts).toEqual(["https://example.com/guide.html"]))
+    await waitFor(() => expect(documentOf(readStoredGraph(registry))?.sha).toBe(SAMPLE.sha))
+    await waitFor(() => expect(box.value).toBe(""))
+  })
+
+  it("while a link is fetched, the box waits, Add shows the fetch, Upload keeps its words, and a second submit posts nothing", async () => {
+    let release = () => {}
+    holdLink = new Promise<void>((r) => (release = r))
+    render(<FirstRun />)
+    await screen.findAllByRole("listitem")
+    const box = screen.getByLabelText("Or paste a link to a web page or PDF") as HTMLInputElement
+    fireEvent.change(box, { target: { value: "https://example.com/guide.html" } })
+    const form = box.closest("form")!
+    fireEvent.submit(form)
+    await waitFor(() => expect(box.readOnly).toBe(true))
+    fireEvent.submit(form)
+    expect(box.getAttribute("aria-disabled")).toBe("true")
+    const add = screen.getByRole("button", { name: "Add link" }) as HTMLButtonElement
+    expect(add.disabled).toBe(true)
+    expect(add.textContent).toContain("Fetching example.com")
+    expect((uploadButton() as HTMLButtonElement).textContent).toBe("Upload a file")
+    expect((uploadButton() as HTMLButtonElement).disabled).toBe(true)
+    expect(linkPosts).toHaveLength(1)
+    release()
+    await waitFor(() => expect(box.readOnly).toBe(false))
+  })
+
+  it("shows the server's sentence when a link is refused", async () => {
+    linkStatus = 400
+    render(<FirstRun />)
+    await screen.findAllByRole("listitem")
+    fireEvent.change(screen.getByLabelText("Or paste a link to a web page or PDF"), { target: { value: "https://localhost/admin" } })
+    fireEvent.click(screen.getByRole("button", { name: "Add link" }))
+    expect((await screen.findByRole("alert")).textContent).toBe("That address is not on the public internet, so it was not fetched.")
+  })
+
+  it("shows a refusal under the link box when the text is not a link", async () => {
+    render(<FirstRun />)
+    await screen.findAllByRole("listitem")
+    fireEvent.change(screen.getByLabelText("Or paste a link to a web page or PDF"), { target: { value: "not a link" } })
+    fireEvent.click(screen.getByRole("button", { name: "Add link" }))
+    expect((await screen.findByRole("alert")).textContent).toBe("That is not a link. Paste one that starts with https://")
+    expect(linkPosts).toEqual([])
+  })
+
+  it("Upload a file refuses a file no parser reads, and takes every one a parser does", async () => {
+    render(<FirstRun />)
+    await screen.findAllByRole("listitem")
+    const input = screen.getByLabelText("Upload a file to start")
     await waitFor(() => expect(input.getAttribute("accept")).toBe(".pdf,.docx,.pptx,.html,.htm,.md,.txt,.png,.jpg,.jpeg"))
     fireEvent.change(input, { target: { files: [new File(["x"], "sheet.xlsx")] } })
     expect((await screen.findByRole("alert")).textContent).toBe(
@@ -135,7 +204,7 @@ describe("FirstRun", () => {
     uploadRefusal = "This file is 14.2 MB. The hosted demo takes files up to 10 MB. Or split out the pages you need and upload those."
     render(<FirstRun />)
     await screen.findAllByRole("listitem")
-    fireEvent.change(screen.getByLabelText("Upload a document to start"), { target: { files: [new File(["%PDF"], "big.pdf", { type: "application/pdf" })] } })
+    fireEvent.change(screen.getByLabelText("Upload a file to start"), { target: { files: [new File(["%PDF"], "big.pdf", { type: "application/pdf" })] } })
     expect((await screen.findByRole("alert")).textContent).toBe(`Upload of big.pdf failed: ${uploadRefusal}`)
   })
 

@@ -55,7 +55,7 @@ export interface Upload {
 }
 
 /**
- * Upload a document (`POST /api/v2/documents`) or add one from a link
+ * Upload a file (`POST /api/v2/documents`) or add one from a link
  * (`POST /api/v2/documents/url`), shared by the Document control's menu,
  * Build's first-visit card and Home. Three checks: a format some parser reads,
  * the demo's size limit for that kind of file, and the server's own sentence

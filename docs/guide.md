@@ -37,8 +37,8 @@ picture, and a document from a link takes the link's host, such as en.wikipedia.
 title.
 
 - On **Build** the documents belong to the pipeline, so they are in its first step, the
-  **Document** card. Its **Add a document** link opens a menu with the bundled samples, your
-  uploads, **Upload a document** and **Or add a link**. What you pick joins the pipeline's
+  **Document** card. Its **Add a file or link** link opens a menu with the bundled samples, your
+  uploads, **Upload a file** and **Or paste a link to a web page or PDF**. What you pick joins the pipeline's
   documents. With two or more, each has a **Remove** button; a pipeline keeps at least one.
 - On **Evaluate** they are listed under **Documents**, with **Change**. With two or more,
   each shows as a file tag (its colour and its name) and they change only on Build.
@@ -57,13 +57,13 @@ Parse step once the pipeline has run.
 
 ### Kinds of document, and links
 
-**Upload a document** takes every kind of file a parser on the server reads. With the
+**Upload a file** takes every kind of file a parser on the server reads. With the
 parsers here that is PDF, Word, PowerPoint, HTML, Markdown, text, PNG and JPG. The file
 picker offers only those, and the menu names them under the upload. On the demo the same
 line gives the limits: a PDF up to 10 MB and 20 pages, other files up to 2 MB, and images up
 to 5 MB.
 
-**Or add a link** takes the address of a web page or a PDF. Paste it and press **Add**. The
+**Or paste a link to a web page or PDF** takes the address of a web page or a PDF. Paste it and press **Add**. The
 server fetches the page once and keeps it like an upload: it counts as one of your uploads,
 expires with them on the demo, and is never fetched again for a question. On the demo only
 public https addresses work. When a link is refused, the menu shows the server's own
@@ -116,7 +116,7 @@ Ask waits until there is a question.
 When a saved upload has expired, or was uploaded in another browser, the document keeps its
 name with the tag **Removed from the server**, and its Preview is off until you upload it
 again. Build, Compare and Evaluate then say so in one
-note with a **Pick a document** button, and their run buttons wait and say "Needs a
+note with a **Pick a file or link** button, and their run buttons wait and say "Needs a
 document." A sample saved with an older copy of its PDF is not missing: when its filename
 is exactly a current sample's, and no upload in this browser has that filename, the page
 switches to the sample's current copy and says so once. In a pipeline with several
@@ -163,7 +163,7 @@ pipeline from the Starter's settings on the documents in use.
 
 The column on the left of Build is the index pipeline: Document, Parse, Clean, Chunk and
 Index, one card each with its own settings. The Document card lists the pipeline's
-documents, each with **Preview**. Its **Add a document** link adds one more: every step
+documents, each with **Preview**. Its **Add a file or link** link adds one more: every step
 runs on each document, and the index and Ask cover them all. With two or more documents,
 each has **Remove**, and a **Showing the steps for** picker above the column chooses which
 document's results the cards show. To replace the only document, add the new one, then
@@ -172,7 +172,7 @@ tells them apart by their names: with several documents, adding one whose name i
 refused, and you remove the old one first or upload the new one under another name. With
 only one document, a new file of the same name, such as an edited report.pdf uploaded
 again, replaces it. On a first visit with no document, the first-visit card offers the
-samples, **Upload a document**, and **Pick a document** for your earlier uploads.
+samples, **Upload a file**, a box to paste a link to a web page or PDF, and **Pick a file or link** for your earlier uploads.
 
 - **Build the index** runs the steps. Each card also has its own **Run**. Each card runs
   the pipeline only as far as itself (`through` in `POST /api/v2/runs`); what is already

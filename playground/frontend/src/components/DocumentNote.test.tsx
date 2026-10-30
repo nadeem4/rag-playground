@@ -41,11 +41,11 @@ afterEach(() => {
 const stored = (sha: string, filename: string) => storeGraph(sampleGraph(registry, { sha, filename }))
 
 describe("DocumentNote", () => {
-  it("says the missing file, what it blocks, and offers Pick a document, as a stale-tone status", async () => {
+  it("says the missing file, what it blocks, and offers Pick a file or link, as a stale-tone status", async () => {
     stored("ef".repeat(32), "NK_Resume.pdf")
     render(<DocumentNote action="build the index" />)
     const note = await screen.findByTestId("document-note")
-    expect(note.textContent).toBe("NK_Resume.pdf is missing. Pick a document above to build the index.Pick a document")
+    expect(note.textContent).toBe("NK_Resume.pdf is missing. Pick a document above to build the index.Pick a file or link")
     expect(note.getAttribute("role")).toBe("status")
     for (const c of ["bg-stale-wash", "text-stale"]) expect(note.className).toContain(c)
   })
@@ -56,7 +56,7 @@ describe("DocumentNote", () => {
     render(<DocumentNote action="build the index" />)
     await waitFor(() =>
       expect(screen.getByTestId("document-note").textContent).toBe(
-        "NK_Resume.pdf is missing. Uploads on the demo expire. Pick a document above to build the index.Pick a document",
+        "NK_Resume.pdf is missing. Uploads on the demo expire. Pick a document above to build the index.Pick a file or link",
       ),
     )
   })
@@ -65,7 +65,7 @@ describe("DocumentNote", () => {
     stored("ef".repeat(32), "NK_Resume.pdf")
     render(<DocumentNote action="build the index" where="under Documents" />)
     const note = await screen.findByTestId("document-note")
-    expect(note.textContent).toBe("NK_Resume.pdf is missing. Pick a document under Documents to build the index.Pick a document")
+    expect(note.textContent).toBe("NK_Resume.pdf is missing. Pick a document under Documents to build the index.Pick a file or link")
   })
 
   it("judges a page's own document when given one, not the pipeline on Build", async () => {
@@ -77,8 +77,8 @@ describe("DocumentNote", () => {
   it("asks for a document when there is none", async () => {
     render(<DocumentNote action="run the evaluation" />)
     const note = await screen.findByTestId("document-note")
-    expect(note.textContent).toBe("Pick a document above to run the evaluation.Pick a document")
-    expect(screen.getByRole("button", { name: "Pick a document" })).toBeTruthy()
+    expect(note.textContent).toBe("Pick a document above to run the evaluation.Pick a file or link")
+    expect(screen.getByRole("button", { name: "Pick a file or link" })).toBeTruthy()
   })
 
   it("says the document changed, with no button", async () => {

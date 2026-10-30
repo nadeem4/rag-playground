@@ -123,7 +123,7 @@ def test_extra_is_not_part_of_a_result_id():
 @pytest.mark.parametrize(
     "key,change",
     [
-        ("index.parse", lambda c: setattr(c.index, "parse", ("nope", {}))),
+        ("index.parse", lambda c: setattr(c.index.default, "parse", ("nope", {}))),
         ("index.store", lambda c: setattr(c.index, "store_use", "nope")),
         ("retrieve.search", lambda c: setattr(c.retrieve, "search", ("nope", {}))),
     ],

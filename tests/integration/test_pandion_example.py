@@ -48,7 +48,7 @@ def test_example_pipeline_file_is_a_valid_pipeline():
     from pandion import Pipeline
 
     config = Pipeline.from_file(EXAMPLE / "pipeline.yaml").config
-    assert config.index.parse[0] == "pdfium"
+    assert config.index.default.parse[0] == "pdfium"
     assert config.index.store["embedder"] == "qwen3-embedding-0.6b"
 
 

@@ -61,7 +61,7 @@ def test_without_plugins_the_name_is_unknown(tmp_path):
 def test_plugins_are_imported_before_the_steps_are_checked(tmp_path, plugin_module):
     config = from_dict({"plugins": [plugin_module], **BASE}, base=tmp_path)
     assert config.plugins == [plugin_module]
-    assert config.index.parse[0] == "loaded_from_plugins"
+    assert config.index.default.parse[0] == "loaded_from_plugins"
     assert to_dict(config)["plugins"] == [plugin_module]
 
 
@@ -174,7 +174,7 @@ def test_load_imports_a_plugin_from_the_files_folder(beside_the_file, monkeypatc
     monkeypatch.chdir(elsewhere)
     path_before = list(sys.path)
     config = load(folder / "pipeline.yaml")
-    assert config.index.parse[0] == "beside_the_file"
+    assert config.index.default.parse[0] == "beside_the_file"
     assert sys.path == path_before
     assert "mymod_beside_file" in sys.modules
 
@@ -186,7 +186,7 @@ def test_from_dict_imports_a_plugin_from_base(beside_the_file, monkeypatch):
     monkeypatch.chdir(elsewhere)
     data = yaml.safe_load((folder / "pipeline.yaml").read_text(encoding="utf-8"))
     path_before = list(sys.path)
-    assert from_dict(data, base=folder).index.parse[0] == "beside_the_file"
+    assert from_dict(data, base=folder).index.default.parse[0] == "beside_the_file"
     assert sys.path == path_before
 
 

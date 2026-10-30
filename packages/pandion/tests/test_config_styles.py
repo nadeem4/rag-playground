@@ -148,8 +148,8 @@ def test_styles_may_be_mixed(tmp_path):
         answer="search",
     )
 
-    assert mixed.config.index.parse == ("pdfium", {})
-    assert mixed.config.index.clean == [("dedupe_blocks", {}), ("drop_matching", {"pattern": "Draft"})]
+    assert mixed.config.index.default.parse == ("pdfium", {})
+    assert mixed.config.index.default.clean == [("dedupe_blocks", {}), ("drop_matching", {"pattern": "Draft"})]
     assert mixed.config.retrieve.rerank == [("mmr", {"top_k": 2})]
     assert mixed.config.answer == ("search", {})
 

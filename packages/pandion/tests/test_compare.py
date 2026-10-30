@@ -47,7 +47,7 @@ def test_two_chunk_sizes_evaluated(tmp_path, docs):
     assert [r.variant for r in results] == [V70, V30]
     assert [r.report.found for r in results] == [1, 0]
     assert results[1].report.questions[0].lost_at == "chunk"
-    assert results[1].pipeline.config.index.chunk == ("recursive_character", {"chunk_size": 30, "chunk_overlap": 0})
+    assert results[1].pipeline.config.index.default.chunk == ("recursive_character", {"chunk_size": 30, "chunk_overlap": 0})
 
 
 def test_the_steps_above_the_varied_one_are_shared(tmp_path, docs):
@@ -215,7 +215,7 @@ def test_comparisons_slice_to_a_plain_list():
 
 def test_a_bare_name_for_clean_or_rerank_is_taken_as_a_list_of_one(tmp_path, docs):
     results = pandion.compare(pipeline(tmp_path), "clean", ["dedupe_blocks"], docs)
-    assert results[0].pipeline.config.index.clean == [("dedupe_blocks", {})]
+    assert results[0].pipeline.config.index.default.clean == [("dedupe_blocks", {})]
     assert results[0].index.ok
     results = pandion.compare(pipeline(tmp_path), "rerank", ["mmr"], docs, [FOUND])
     assert results[0].pipeline.config.retrieve.rerank == [("mmr", {})]

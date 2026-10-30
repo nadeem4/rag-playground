@@ -292,9 +292,9 @@ def extras_for(config: PipelineConfig) -> list[str]:
     index = config.index
     steps = [
         ("index.source", Stage.SOURCE, index.source),
-        ("index.parse", Stage.PARSE, index.parse),
-        *(("index.clean", Stage.CLEAN, step) for step in index.clean),
-        ("index.chunk", Stage.CHUNK, index.chunk),
+        ("index.parse", Stage.PARSE, index.default.parse),
+        *(("index.clean", Stage.CLEAN, step) for step in index.default.clean),
+        ("index.chunk", Stage.CHUNK, index.default.chunk),
         *((("index.enrich", Stage.ENRICH, index.enrich),) if index.enrich else ()),
         ("index.store", Stage.INDEX, (index.store_use, index.store)),
     ]
@@ -582,7 +582,7 @@ class IndexPipeline:
         """The step each document stops after, or None for the whole run."""
         if through is None or through == "index":
             return None
-        cleans = [f"clean.{n}" for n in range(1, len(self.config.index.clean) + 1)]
+        cleans = [f"clean.{n}" for n in range(1, len(self.config.index.default.clean) + 1)]
         if through == "clean":
             return cleans[-1] if cleans else "parse"
         if through in ("parse", "chunk", *cleans):
@@ -836,7 +836,7 @@ class IndexPipeline:
         # A file the parser cannot read fails here, before any step runs.
         if self._uploads():
             for doc_id in sorted(documents):
-                check_readable(index.parse[0], documents[doc_id].filename)
+                check_readable(index.default.parse[0], documents[doc_id].filename)
 
         chunk_nodes = []
         for doc_id in sorted(documents):
@@ -846,14 +846,14 @@ class IndexPipeline:
             else:
                 use, settings = index.source
                 last = add(doc_id, "source", Stage.SOURCE, use, {**settings, "location": documents[doc_id]})
-            parse = add(doc_id, "parse", Stage.PARSE, *index.parse)
+            parse = add(doc_id, "parse", Stage.PARSE, *index.default.parse)
             edges.append(Edge(last, parse, "file"))
             last = parse
-            for n, step in enumerate(index.clean, start=1):
+            for n, step in enumerate(index.default.clean, start=1):
                 clean = add(doc_id, f"clean.{n}", Stage.CLEAN, *step)
                 edges.append(Edge(last, clean, "doc"))
                 last = clean
-            chunk = add(doc_id, "chunk", Stage.CHUNK, *index.chunk)
+            chunk = add(doc_id, "chunk", Stage.CHUNK, *index.default.chunk)
             edges.append(Edge(last, chunk, "doc"))
             if index.enrich is not None:
                 enrich = add(doc_id, "enrich", Stage.ENRICH, *index.enrich)

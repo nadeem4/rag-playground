@@ -173,6 +173,9 @@ def test_old_file_manifest_is_unchanged_for_old_pipelines(tmp_path, docs):
     assert entry["category"] == "default"
     assert entry["content_hash"] == hashlib.sha256((docs / "b.pdf").read_bytes()).hexdigest()
     assert entry["chunk_set"] == report.documents["b.pdf"].stages["chunk"].artifact_id
+    # The values main produced for this file and recipe, before categories existed.
+    assert entry["chunk_set"] == "83b575deebfa26d6f0096d07664ddddbfd82435a486008b67938801a37aea942"
+    assert manifest(tmp_path)["index_recipe"] == "92b08ceb1522957516cdec7457313cb0550ecf7e7cf54c33a611c0a3c77ec71d"
     assert set(entry) == {"content_hash", "chunk_set", "category", "reason"}
 
 
@@ -188,3 +191,27 @@ def test_a_new_process_searches_with_the_recorded_categories(tmp_path, docs):
     assert sizes == {"b.pdf::chunk": 50, "legal/a.pdf::chunk": 70}
     found = second.retrieval.retrieve("capital of France", k=3)
     assert found.index.artifact_id == synced.index.artifact_id
+
+
+def test_sync_keeps_the_saved_labels_of_a_document_already_in_the_manifest(tmp_path, docs):
+    make(config(tmp_path)).index.sync(docs, metadata={"b.pdf": {"team": "ops"}})
+    make(config(tmp_path)).index.sync(docs, metadata={"b.pdf": {"team": "sales"}})
+    assert manifest(tmp_path)["documents"]["b.pdf"]["metadata"] == {"team": "ops"}
+
+
+def test_sync_refuses_categories_for_a_document_already_in_the_manifest(tmp_path, docs):
+    p = make(config(tmp_path))
+    p.index.sync(docs)
+    before = manifest(tmp_path)
+    with pytest.raises(ValueError, match="already in the index.*p.index.move"):
+        p.index.sync(docs, categories={"b.pdf": "reports"})
+    assert manifest(tmp_path) == before
+
+
+def test_sync_that_drops_every_document_of_a_removed_category_is_refused(tmp_path, docs):
+    make(config(tmp_path)).index.sync(docs)
+    data = config(tmp_path)
+    del data["categories"]["reports"]
+    data["route"] = [{"category": "text"}]
+    with pytest.raises(ValueError, match="no longer has"):
+        make(data).index.sync(docs / "b.pdf")

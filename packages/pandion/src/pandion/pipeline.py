@@ -778,11 +778,14 @@ class IndexPipeline:
         keys, for a step such as llm_context) work as in `run`.
 
         A document already in the manifest keeps its category, reason and
-        labels, even when its bytes changed: the checks do not run again. A
-        new one goes where `categories` (a document id to a name) says, else
-        where the route sends it; `metadata` gives its labels by document id.
-        A manifest document in a category the pipeline no longer has raises
-        ValueError before anything runs.
+        labels, even when its bytes changed: the checks do not run again, and
+        `categories` or `metadata` naming it is not applied (`categories` for
+        it raises ValueError that points to `p.index.move`). A new one goes
+        where `categories` (a document id to a name) says, else where the route
+        sends it; `metadata` gives its labels by document id. A manifest
+        document in a category the pipeline no longer has raises ValueError
+        before anything runs, even if the paths drop that document: move it
+        first, or sync without the removal first.
         """
         if not self._uploads():
             raise ValueError(
@@ -791,10 +794,16 @@ class IndexPipeline:
         before = Manifest.load(self.config.path / MANIFEST)
         self._check_recorded(before)
         self._check_names(categories)
+        held = [d for d in categories or {} if d in before.documents]
+        if held:
+            raise ValueError(
+                f"{', '.join(held)} already in the index. Use p.index.move to change a category."
+            )
         documents = self._documents(paths)
         known = self._recorded(before)
-        known.update({d: Sorting(c, "Chosen when added") for d, c in (categories or {}).items() if d not in known})
-        return self._commit(documents, before, known, metadata, credentials=credentials)
+        known.update({d: Sorting(c, "Chosen when added") for d, c in (categories or {}).items()})
+        new = {d: m for d, m in (metadata or {}).items() if d not in before.documents}
+        return self._commit(documents, before, known, new, credentials=credentials)
 
     def _check_recorded(self, manifest: Manifest, moving: str | None = None) -> None:
         """Refuse a manifest document whose category the pipeline no longer
@@ -905,10 +914,10 @@ class IndexPipeline:
         before, stored = self._stored()
         self._check_recorded(before)
         self._check_names({"": category} if category else None)
-        found = self._documents(file)
-        for doc_id in found:
+        for doc_id in self._ids(file):
             if doc_id in stored:
                 raise ValueError(f"`{doc_id}` is already in the index. Use p.index.move to change its category.")
+        found = self._documents(file)
         known = self._recorded(before)
         if category:
             known.update({d: Sorting(category, "Chosen when added") for d in found})
@@ -945,10 +954,29 @@ class IndexPipeline:
     def sort(
         self, file: str | Path | list[str | Path], *, metadata: dict[str, dict[str, str]] | None = None
     ) -> dict[str, Sorting]:
-        """What category each file would get now, and why, by document id. No
-        step runs and no manifest is written (the file is kept in `sources/`
-        like any added file). `metadata` gives labels by document id."""
-        return self._sort(self._documents(file), labels=metadata)
+        """What category each file would get now, and why, by document id.
+        Nothing runs and nothing is written for a file; a link is fetched and
+        kept in `sources/`. `metadata` gives labels by document id. Works with
+        the upload source only."""
+        if not self._uploads():
+            raise ValueError("sort works with local files (the upload source).")
+        items = file if isinstance(file, list) else [file]
+        labels = {**self._labels, **(metadata or {})}
+        needs_info = any(rule.when for rule in self.config.index.route)
+        files = [i for i in items if not is_url(i)]
+        infos: dict[str, DocumentInfo | None] = {}
+        for doc_id, path in _files(files) if files else []:
+            infos[doc_id] = (
+                document_info(path, filename=path.name, doc_id=doc_id, metadata=labels.get(doc_id))
+                if needs_info
+                else None
+            )
+        for url in (i for i in items if is_url(i)):
+            infos[url] = self._info(url, self._fetch(url), labels.get(url)) if needs_info else None
+        return {
+            doc_id: sort_document(self.config.index.route, info, pinned=self._pins.get(doc_id))
+            for doc_id, info in sorted(infos.items())
+        }
 
     def listed(self) -> list[DocumentEntry]:
         """The documents in the manifest, sorted by id."""
@@ -980,6 +1008,14 @@ class IndexPipeline:
     def _uploads(self) -> bool:
         """The documents are local files (the upload source)."""
         return self.config.index.source[0] == "upload"
+
+    def _ids(self, paths: Documents) -> list[str]:
+        """The document ids `_documents` would give, without storing anything."""
+        if isinstance(paths, dict):
+            return [str(d) for d in paths]
+        items = paths if isinstance(paths, list) else [paths]
+        files = [i for i in items if not is_url(i)]
+        return [d for d, _ in (_files(files) if files else [])] + [str(i) for i in items if is_url(i)]
 
     def _documents(self, paths: Documents) -> dict[str, SourceFile | str]:
         """By document id: with upload, every file at `paths`, kept in
@@ -1149,8 +1185,10 @@ class IndexPipeline:
                 "p.index.run or p.index.sync."
             )
         # Build each document with the category the sync recorded.
-        recorded = {d: s.category for d, s in self._recorded(manifest).items()}
-        self._categories = {**(self._categories or {}), **recorded}
+        self._check_recorded(manifest)
+        recorded = self._recorded(manifest)
+        self._categories = {**(self._categories or {}), **{d: s.category for d, s in recorded.items()}}
+        self._sortings.update(recorded)
         return stored
 
     def graph(

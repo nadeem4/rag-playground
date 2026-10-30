@@ -630,13 +630,13 @@ p.index.add("https://example.com/guide", category="reports")
 print(p.index.sort("draft.pdf"))   # what category it would get, and why; runs nothing
 ```
 
-`add` takes one file or link and adds it to the documents in the manifest. Its id is the
-file name, or the link. It goes to `category` if you give one (the reason is then
+`add` takes one file, one link, or a folder of files, and adds them to the documents in the
+manifest. A file's id is its file name, or its path inside the folder; a link's id is the link. It goes to `category` if you give one (the reason is then
 `Chosen when added`), and otherwise where the route sends it. `metadata` is the labels the
 route's `metadata` check reads. The index is built again, but every other document is a
 cache hit. Adding an id that is already indexed raises a `ValueError` that points to
 `p.index.move`. `add`, `move`, `sort` and `p.documents()` work with the upload source
-only, like `sync`.
+only, like `sync`. `sort` reads the file where it is and writes nothing.
 
 `p.documents()` lists what the manifest holds, sorted by id, as `DocumentEntry` values with
 `id`, `filename`, `category`, `reason`, `metadata` and `content_hash`. A document saved
@@ -675,7 +675,9 @@ index settings and the id of the index. `sync` takes `metadata` (labels by docum
 and `categories` (a document id to a category name) for the new files it finds.
 
 A document keeps its category, reason and labels until you move it. Its checks do not run
-again, even when its bytes change.
+again, even when its bytes change. `metadata` is used only for new documents, and
+`categories` naming a document that is already in the manifest raises a `ValueError` that
+points to `p.index.move`.
 
 Each sync compares the folder with the manifest:
 
@@ -696,7 +698,8 @@ Three rules say what a change re-runs:
 - Moving a document re-runs only that document.
 
 Removing a category that documents are in is refused before anything runs, with their
-names: `Move them to another category first, or put the category back.` A route that names
+names: `Move them to another category first, or put the category back.` This holds even when your
+paths leave those documents out, so move them, or sync without removing the category first. A route that names
 a category the pipeline does not have is refused when the file is loaded.
 
 A search in a new process builds each document with the category the manifest recorded,

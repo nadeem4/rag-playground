@@ -134,6 +134,46 @@ def test_sort_runs_nothing_and_writes_nothing(tmp_path, pdfs):
     assert (got["a.pdf"].category, got["a.pdf"].reason) == ("reports", "Rule 1: metadata cms_type equals invoice")
     assert not (tmp_path / "index" / MANIFEST).exists()
     assert not (tmp_path / "index" / "artifacts").exists()
+    assert not (tmp_path / "index" / "sources").exists()
+
+
+def test_sort_refuses_a_source_that_is_not_upload(tmp_path, meta_source):
+    data = config(tmp_path)
+    data["index"]["source"] = {"use": "test_meta_source"}
+    with pytest.raises(ValueError, match="upload source"):
+        Pipeline.from_dict(data).index.sort("hello")
+    assert not (tmp_path / "index" / "artifacts").exists()
+
+
+def test_a_new_process_traces_with_the_recorded_categories(tmp_path, pdfs):
+    first = make(tmp_path)
+    added = first.index.add(pdfs[0], metadata={"cms_type": "invoice"})
+    assert first.documents()[0].category == "reports"
+    second = make(tmp_path)
+    again = second.index._index(second.index.indexed(), remember=False)
+    assert again.documents["a.pdf"].category == "reports"
+    assert again.index.artifact_id == added.index.artifact_id
+
+
+def test_a_new_process_with_a_removed_category_gets_a_plain_error(tmp_path, pdfs):
+    make(tmp_path).index.add(pdfs[0], metadata={"cms_type": "invoice"})
+    data = config(tmp_path)
+    del data["categories"]["reports"]
+    data["route"] = [{"category": "text"}]
+    with pytest.raises(ValueError, match="no longer has"):
+        Pipeline.from_dict(data).index.indexed()
+
+
+def test_add_checks_the_id_before_storing_the_file(tmp_path, pdfs):
+    p = make(tmp_path)
+    p.index.add(pdfs[0])
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "a.pdf").write_bytes(build_pdf([["A different a.pdf."]]))
+    before = sorted(x.name for x in (tmp_path / "index" / "sources").rglob("*"))
+    with pytest.raises(ValueError, match="already in the index"):
+        p.index.add(other / "a.pdf")
+    assert sorted(x.name for x in (tmp_path / "index" / "sources").rglob("*")) == before
 
 
 class MetaSettings(BaseModel):

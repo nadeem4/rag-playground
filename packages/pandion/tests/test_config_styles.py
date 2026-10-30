@@ -232,7 +232,7 @@ def test_a_class_in_the_wrong_slot_is_refused(tmp_path):
 
 
 def test_a_missing_stage_is_named(tmp_path):
-    with pytest.raises(TypeError, match="chunk"):
+    with pytest.raises(ConfigError, match="no chunk step"):
         IndexPipeline(path=tmp_path, parse="pdfium", embed="fake-deterministic", store="lancedb")
 
 

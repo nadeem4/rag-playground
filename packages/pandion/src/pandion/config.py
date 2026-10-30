@@ -329,6 +329,8 @@ def build(
     retrieve: dict[str, Any] | None = None,
     answer: Any = None,
     plugins: list[str] | None = None,
+    categories: dict[str, Any] | None = None,
+    route: list[Any] | None = None,
 ) -> PipelineConfig:
     """Check a pipeline written in code; relative paths are read from the
     current folder.
@@ -345,11 +347,32 @@ def build(
     data["index"] = {k: _block(v) for k, v in index.items() if v is not None}
     if isinstance(data["index"].get("clean"), dict):
         data["index"]["clean"] = [data["index"]["clean"]]
+    if categories is not None:
+        data["categories"] = {key: _category_block(value) for key, value in categories.items()}
+    if route is not None:
+        data["route"] = [_route_block(rule) for rule in route]
     if retrieve is not None and any(v is not None for v in retrieve.values()):
         data["retrieve"] = {k: _block(v) for k, v in retrieve.items() if v is not None}
     if answer is not None:
         data["answer"] = _block(answer)
     return from_dict(data, base=Path("."))
+
+
+def _category_block(value: Any) -> Any:
+    """One category written in code, as the file's block for it."""
+    if not isinstance(value, dict):
+        return value
+    block = {k: _block(v) for k, v in value.items() if k in ("parse", "clean", "chunk")}
+    if isinstance(block.get("clean"), dict):
+        block["clean"] = [block["clean"]]
+    return {**value, **block}
+
+
+def _route_block(rule: Any) -> Any:
+    """One route rule written in code, as the file's block for it."""
+    if isinstance(rule, dict) and rule.get("when") is not None:
+        return {**rule, "when": _block(rule["when"])}
+    return rule
 
 
 def _block(value: Any) -> Any:

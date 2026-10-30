@@ -379,6 +379,51 @@ one step when it runs, because the index embeds the pieces as it writes them. Th
 and its `use` becomes that setting, and if it does not, the store embeds by itself and
 `embed` must be left out.
 
+### Categories and routes
+
+Some documents need different steps: a scanned PDF needs OCR, a report with tables needs
+table parsing. Name each kind of document a category, and say which documents go where
+with a route. A file with `categories` and `route` replaces `index.parse`, `index.clean`
+and `index.chunk`, which move under each category:
+
+```yaml
+categories:
+  reports:
+    name: Reports with tables      # optional, shown to people
+    parse: {use: docling, table_mode: accurate}
+    chunk: {use: layout_blocks, max_tokens: 400}
+  text:
+    parse: {use: pdfium}
+    clean: [{use: dedupe_blocks}]
+    chunk: {use: recursive_character, chunk_size: 400}
+
+route:                  # first rule that matches wins; the last has no `when`
+  - when: {use: file_type, types: [pdf]}
+    category: reports
+  - category: text
+
+index:                  # shared by every category
+  embed: {use: qwen3-embedding-0.6b}
+  store: {use: lancedb}
+```
+
+Every category shares one `embed` and one `store`, so `embed`, `store`, `source` and
+`enrich` stay under `index`. A file with both `categories` and `index.parse` is refused,
+and so is a route whose last rule has a `when`.
+
+A file without `categories` still works. Pandion reads its `index.parse`, `clean` and
+`chunk` as one category named `default`, and writes it back the same way, so its
+artifact ids, recipe hash and graph do not change.
+
+In this version a rule with a `when` is kept but never matches, because the checks are
+not built yet. A document goes to the first rule without a `when`, unless you choose its
+category: `p.index.assign(categories={"a.pdf": "reports"})`, or
+`p.index.run(paths, categories={...})` for one call. An unknown category name is a
+`ValueError` that lists the real ones. `p.index.category_of("a.pdf")` says which category
+a document has, and `report.documents["a.pdf"].category` says which one it went through.
+In code, `Pipeline(path=..., categories={...}, route=[...], embed=..., store=...)` takes
+the same blocks in place of `parse`, `clean` and `chunk`.
+
 ### Context before embedding
 
 A piece cut out of a document often does not say what it is about. There are two ways to
@@ -448,7 +493,8 @@ The report holds:
 
 - `report.documents`, a dict from document name to a `DocumentReport`. Its `.stages`
   has one `StageResult` for each step, under the names `source`, `parse`, `clean.1`
-  (then `clean.2` and so on), and `chunk`.
+  (then `clean.2` and so on), and `chunk`. Its `.category` is the category the document
+  went through (`default` for a file without categories).
 - `report.index`, the `StageResult` of the index. Its `.output` is the index folder.
 - `report.ok`, which is false if any step failed or was skipped.
 
@@ -1270,8 +1316,10 @@ report = p.index.run(
 An app that keeps uploads under names of its own passes a mapping of document id to file,
 so results keep the names people gave their files.
 
-- `through` names the step to stop after: `parse`, `clean` (the last cleaner, or parse
-  when there are none), `clean.1`, `clean.2` ..., or `chunk`. `index` is the whole run.
+- `through` names the step to stop after: `parse`, `clean` (the last cleaner of the
+  document's category, or parse when it has none), `clean.1`, `clean.2` ..., or `chunk`.
+  A cleaner the document's category lacks stops it at its last cleaner. A step no
+  category has is a `ValueError`. `index` is the whole run.
   The steps above it come from the cache when they ran before.
 - `on_event` is called with each event as a plain dict, ready for JSON: `run_started`,
   `node_started`, `node_finished` (with `cache_hit`, the result's `artifact_id` and

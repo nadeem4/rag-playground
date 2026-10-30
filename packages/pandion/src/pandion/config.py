@@ -695,7 +695,7 @@ def _route(data: Any, categories: dict[str, CategoryConfig]) -> list[RouteRule]:
 
 def _check(step: Any, where: str) -> tuple[str, dict[str, Any]]:
     """One check of a route rule: a known check, with settings its model accepts."""
-    use, settings = _use(step, where)
+    use, settings = _use(step, where, "check")
     discover()
     check = CHECKS.get(use)
     if check is None:
@@ -711,9 +711,17 @@ def _check(step: Any, where: str) -> tuple[str, dict[str, Any]]:
     try:
         check.config_model(**settings)
     except ValidationError as exc:
-        raise ConfigError(
-            f"{where} ({use}): {_problems(exc)}.", step=where, use=use, settings=_settings(exc)
-        ) from None
+        fields = _settings(exc)
+        if not fields and len(exc.errors()) == 1:
+            # One sentence about the whole check: say it plainly, and name the
+            # settings it is about so a form can mark them.
+            message = exc.errors()[0]["msg"].removeprefix("Value error, ")
+            names = [f for f in check.config_model.model_fields if f in message]
+            raise ConfigError(
+                f"{where} ({use}): {message.rstrip('.')}.", step=where, use=use,
+                settings=[{"field": f, "message": message.rstrip(".") + "."} for f in names],
+            ) from None
+        raise ConfigError(f"{where} ({use}): {_problems(exc)}.", step=where, use=use, settings=fields) from None
     return use, settings
 
 
@@ -837,10 +845,10 @@ def _store(embed: Any, store: Any) -> tuple[str, dict[str, Any]]:
     return kind, settings
 
 
-def _use(step: Any, where: str) -> tuple[str, dict[str, Any]]:
+def _use(step: Any, where: str, noun: str = "strategy") -> tuple[str, dict[str, Any]]:
     use = step.get("use") if isinstance(step, dict) else None
     if not isinstance(use, str) or not use:
-        raise ConfigError(f"{where} must say which strategy to use, as use: <name>.", step=place(where))
+        raise ConfigError(f"{where} must say which {noun} to use, as use: <name>.", step=place(where))
     _named(step, where)
     settings = dict(step)
     return settings.pop("use"), settings

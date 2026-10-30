@@ -55,6 +55,8 @@ def explain(stage: str, use: str, settings: dict[str, Any] | None = None) -> dic
     ConfigError.
     """
     discover()
+    if stage == "route":
+        raise ValueError("Route checks have no explain: they answer yes or no from a file's facts.")
     try:
         kind = Stage(stage)
     except ValueError:

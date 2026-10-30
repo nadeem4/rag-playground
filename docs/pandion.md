@@ -470,6 +470,11 @@ route:
   - category: text
 ```
 
+A pipeline run passes no metadata yet, so `metadata` is always false there. Metadata
+comes with adding or moving documents, in a later version. A source other than `upload`
+has no file to read, so for its documents `text_layer`, `contains` and `properties` are
+always false; `file_type`, `name` and `path` still work from the location.
+
 Text matching ignores case. A missing key, a missing property, or a check that does not
 apply to the file's type (`text_layer` on a Word file) is false, never an error. A check
 that raises an error is false too, and the error goes in the reason. In `name` and `path`
@@ -1357,7 +1362,9 @@ summary and its settings as a JSON schema with defaults. `pandion.defaults()` na
 strategy a new pipeline starts with for each required part. `pandion.explain(stage, use,
 settings)` says in plain words what one strategy will do with those settings, and warns
 when they make no sense, without running anything. `catalog()` returns a copy each time,
-so changing it changes nothing in Pandion.
+so changing it changes nothing in Pandion. It also has a `route` entry, which lists the
+route checks in the same shape. A check is not a strategy, so `explain` refuses
+`"route"` with a `ValueError`.
 
 ```python
 import pandion
@@ -1843,7 +1850,8 @@ pandion questions report.pdf --model claude-haiku-4-5 --count 15 --out questions
 `pandion: The pipeline file has no index section.`
 
 **`pandion strategies [--stage STAGE] [--json]`** lists every strategy by stage, each with
-its summary. `--stage chunk` shows one stage. `--json` prints only the names, as JSON.
+its summary, and a `route` group for the route checks. `--stage chunk` shows one stage.
+`--json` prints only the names, as JSON.
 
 **`pandion index FILE DOC... [--sync] [--through STEP]`** indexes files and folders. With
 local files (the `upload` source, the default) it runs `p.index.sync`, so it remembers the
@@ -2030,7 +2038,8 @@ The ports each stage reads:
 
 The embedder is not a stage, so it is not in the table: `embed.py` (`letter_counts`) is its
 example, under [Your own embedder](#your-own-embedder). These are every stage
-`pandion.catalog()` lists, so the example covers each one.
+`pandion.catalog()` lists, so the example covers each one. The `route` group of the
+catalog holds checks, not stages, and `route.py` (`is_invoice`) is the example of one.
 
 `Stage.ENRICH` and `Stage.QUERY_TRANSFORM` are reserved: no strategy uses them yet, and they are kept so result ids stay stable.
 

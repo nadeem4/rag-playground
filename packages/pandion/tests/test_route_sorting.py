@@ -180,3 +180,54 @@ def test_routes_with_when_round_trip_through_to_dict():
     back = to_dict(from_dict(copy.deepcopy(data), base=Path(".")))
     assert back["route"][0]["when"] == [PDF, NO_TEXT]
     assert back["route"][1]["when"] == {"use": "path", "pattern": "legal/**"}
+
+
+def test_no_rule_with_when_never_reads_the_files(tmp_path, _forget_parser, monkeypatch):
+    import pandion.pipeline as pipeline
+
+    def refuse(*a, **k):
+        raise AssertionError("document_info was called")
+
+    monkeypatch.setattr(pipeline, "document_info", refuse)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "a.html").write_text("<html></html>", encoding="utf-8")
+    p = make_pipeline(tmp_path, route=[{"category": "other"}])
+    report = p.index.run(docs, through="parse")
+    assert report.documents["a.html"].category == "other"
+
+
+def test_a_failing_because_does_not_stop_the_run():
+    def bad(settings):
+        raise RuntimeError("no phrase")
+
+    @route_check("odd_because", because=bad)
+    def odd(info, settings):
+        return True
+
+    try:
+        got = sort_document([rule("a", {"use": "odd_because"}), rule("z")], info())
+    finally:
+        CHECKS.pop("odd_because")
+    assert got == Sorting("a", "Rule 1: odd_because true")
+
+
+def test_whole_check_error_is_a_plain_sentence_with_fields():
+    with pytest.raises(ConfigError) as e:
+        from_dict(with_route({"use": "metadata", "key": "k"}), base=Path("."))
+    assert str(e.value) == "route.1.when.1 (metadata): Give exactly one of equals, contains, pattern."
+    assert [s["field"] for s in e.value.settings] == ["equals", "contains", "pattern"]
+    assert all("exactly one" in s["message"] for s in e.value.settings)
+
+
+def test_when_item_without_use_says_check():
+    with pytest.raises(ConfigError, match="which check to use") as e:
+        from_dict(with_route({"types": ["pdf"]}), base=Path("."))
+    assert e.value.step == "route.1.when.1"
+
+
+def test_explain_refuses_the_route_stage():
+    import pandion
+
+    with pytest.raises(ValueError, match="checks.*no explain"):
+        pandion.explain("route", "file_type", {"types": ["pdf"]})

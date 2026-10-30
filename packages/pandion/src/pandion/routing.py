@@ -77,6 +77,15 @@ def check_catalog() -> dict[str, dict[str, Any]]:
     }
 
 
+def _phrase(use: str, settings: dict[str, Any]) -> str:
+    """The reason phrase of a check that was true; a phrase that fails to build
+    never stops a run."""
+    try:
+        return CHECKS[use].because(CHECKS[use].config_model(**settings))
+    except Exception:
+        return f"{use} true"
+
+
 def run_check(use: str, settings: dict[str, Any], info: DocumentInfo) -> tuple[bool, str | None]:
     """(result, error). A check that raises is false, and the error says why."""
     try:
@@ -111,7 +120,7 @@ def sort_document(route: list[RouteRule], info: DocumentInfo | None, *, pinned: 
             if error:
                 errors.append(f"{use} failed: {error}")
             if result:
-                phrases.append(CHECKS[use].because(CHECKS[use].config_model(**settings)))
+                phrases.append(_phrase(use, settings))
             else:
                 matched = False
         if matched:

@@ -591,12 +591,14 @@ class IndexPipeline:
         file's cheap facts, or (`reuse`) keep what the last run decided."""
         pins = {**self._pins, **(chosen or {})}
         out = {}
+        # Checks are the only reason to read a file; a route without any does not.
+        needs_info = any(rule.when for rule in self.config.index.route)
         for doc_id, doc in documents.items():
             pinned = pins.get(doc_id)
             if reuse and pinned is None and doc_id in self._sortings:
                 out[doc_id] = self._sortings[doc_id]
                 continue
-            info = None if pinned else self._info(doc_id, doc)
+            info = self._info(doc_id, doc) if pinned is None and needs_info else None
             out[doc_id] = sort_document(self.config.index.route, info, pinned=pinned)
         return out
 

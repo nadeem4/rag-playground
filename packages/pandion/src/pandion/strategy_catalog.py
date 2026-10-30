@@ -1,7 +1,8 @@
 """Every strategy Pandion knows, the default for each part, and what one will do.
 
 `catalog()` is what an app needs to draw a settings form: for each stage, each
-strategy's summary, inputs and settings as a JSON schema with defaults.
+strategy's summary, inputs and settings as a JSON schema with defaults. The
+`route` stage lists the checks a route's `when` can use.
 `defaults()` names the strategy a new pipeline starts with for each required
 part, keyed as in the pipeline file. `explain()` says in plain words what one
 strategy will do with given settings, without running anything.
@@ -16,6 +17,7 @@ from pandion.config import ConfigError
 from pandion.plugins import discover
 from pandion.ports import Stage
 from pandion.registry import UnknownTransformError, registry
+from pandion.routing import check_catalog
 from pandion.stages import _strategy
 
 #: The strategy each required part of a new pipeline starts with: Docling reads
@@ -37,7 +39,7 @@ def catalog() -> dict[str, dict[str, dict[str, Any]]]:
     It is a copy: changing it changes nothing in Pandion.
     """
     discover()
-    return copy.deepcopy(registry.export_schema())
+    return copy.deepcopy({**registry.export_schema(), "route": check_catalog()})
 
 
 def defaults() -> dict[str, str]:

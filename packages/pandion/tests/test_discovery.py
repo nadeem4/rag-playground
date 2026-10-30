@@ -15,6 +15,7 @@ from pathlib import Path
 
 from pandion.ports import STAGE_OUTPUT
 from pandion.registry import registry
+from pandion.routing import CHECKS
 from pandion.plugins import PLUGIN_MODULES, discover
 
 PLUGINS = Path(__file__).resolve().parents[1] / "src" / "pandion" / "plugins"
@@ -42,7 +43,7 @@ def test_every_listed_module_registers_a_transform():
     assert discover() == PLUGIN_MODULES
     registered = {
         cls.__module__ for stage in STAGE_OUTPUT for cls in registry.all_for(stage).values()
-    }
+    } | {check.fn.__module__ for check in CHECKS.values()}
     assert set(PLUGIN_MODULES) <= registered
 
 

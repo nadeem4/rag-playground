@@ -4,8 +4,9 @@
 page count and whether a PDF has a text layer, the first page's text, and the
 properties stored inside the file (a PDF's Title and Author, a Word file's core
 properties, an HTML page's title and meta tags, a photo's EXIF). A route looks
-at these to choose a category. Reading never fails: a fact that cannot be read
-(a corrupt or encrypted file, a missing library) is left empty.
+at these to choose a category. Reading the file's contents never fails: a fact
+that cannot be read (a corrupt or encrypted file, a missing library) is left
+empty. A file that does not exist is an error, from reading its size.
 """
 
 from __future__ import annotations
@@ -90,11 +91,14 @@ def _pdf(file: Path) -> _Facts:
         )
         facts.text_layer = False
         for n in range(min(3, len(doc))):
-            page = doc[n]
             try:
-                text = page.get_textpage().get_text_range()
-            finally:
-                page.close()
+                page = doc[n]
+                try:
+                    text = page.get_textpage().get_text_range()
+                finally:
+                    page.close()
+            except Exception:
+                continue  # one bad page keeps the other facts
             if n == 0:
                 facts.first_page_text = text
             if text.strip():
@@ -124,14 +128,15 @@ class _Head(HTMLParser):
         super().__init__()
         self.props: dict[str, str] = {}
         self._title = False
+        self._seen_title = False
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
-        if tag == "title":
-            self._title = True
+        if tag == "title" and not self._seen_title:
+            self._title = self._seen_title = True
         elif tag == "meta":
             name, content = a.get("name") or a.get("property"), a.get("content")
-            if name and content:
+            if name and content and name.lower() not in {k.lower() for k in self.props}:
                 self.props[name] = content
 
     def handle_endtag(self, tag):
@@ -140,7 +145,15 @@ class _Head(HTMLParser):
 
     def handle_data(self, data):
         if self._title and data.strip():
+            for k in [k for k in self.props if k.lower() == "title" and k != "Title"]:
+                del self.props[k]  # <title> wins over <meta name="title">
             self.props["Title"] = (self.props.get("Title", "") + data).strip()
+
+
+def _text(file: Path) -> _Facts:
+    with file.open("rb") as f:
+        head = f.read(FIRST_PAGE_CHARS * 4)
+    return _Facts(first_page_text=head.decode("utf-8", errors="ignore")[:FIRST_PAGE_CHARS])
 
 
 def _html(file: Path) -> _Facts:
@@ -158,8 +171,9 @@ def _image(file: Path) -> _Facts:
         return _Facts()
     with Image.open(file) as img:
         exif = img.getexif()
-        props = {ExifTags.TAGS.get(tag, str(tag)): str(value).strip("\x00 ") for tag, value in exif.items()}
+        props = {ExifTags.TAGS.get(tag, str(tag)): str(value).strip("\x00 ") for tag, value in exif.items()
+                 if not isinstance(value, bytes)}
     return _Facts(properties={k: v for k, v in props.items() if v})
 
 
-_READERS = {"pdf": _pdf, "docx": _office, "pptx": _office, "html": _html, "jpg": _image, "png": _image}
+_READERS = {"pdf": _pdf, "docx": _office, "pptx": _office, "html": _html, "md": _text, "txt": _text, "jpg": _image, "png": _image}

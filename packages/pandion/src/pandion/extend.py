@@ -26,7 +26,7 @@ the guard refuses it.
 from typing import Any
 
 from pandion.artifacts import ArtifactType
-from pandion.docinfo import DocumentInfo
+from pandion.docinfo import DocumentInfo, document_info
 from pandion.embeddings import Embedder, get_embedder, register_embedder
 from pandion.endpoints import EndpointRefused, guard_endpoint
 from pandion.fetch import FetchRefused, fetch_url
@@ -41,7 +41,7 @@ from pandion.transform import Explanation, Transform
 __all__ = [
     "FORMATS", "ArtifactType", "Chunk", "ChunkSet", "DocumentInfo", "Element", "Embedder", "EndpointRefused",
     "Explanation", "FetchRefused", "Hit", "Output", "ParsedDoc", "PortSpec", "Query", "RetrievalResult",
-    "RunContext", "Stage", "Transform", "UnreadableFormat", "check_contents", "fetch_url", "format_of", "get_embedder", "guard_endpoint",
+    "RunContext", "Stage", "Transform", "UnreadableFormat", "check_contents", "document_info", "fetch_url", "format_of", "get_embedder", "guard_endpoint",
     "openai_client_kwargs", "raw_file", "register", "set_note", "set_usage",
 ]
 

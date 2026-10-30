@@ -438,7 +438,8 @@ returns a `DocumentInfo` with these fields:
 - `page_count`: pages of a PDF, or slides of a PowerPoint file. Otherwise `None`.
 - `text_layer`: for a PDF, `True` when one of the first three pages has text and `False`
   when none has. `None` for other formats, or when pypdfium2 is not installed.
-- `first_page_text`: the first PDF page's text, at most 4,000 characters.
+- `first_page_text`: the first PDF page's text, or the start of a Markdown or text file,
+  at most 4,000 characters. Empty for other formats.
 - `properties`: what is stored inside the file. Matching ignores case. The keys are:
 
 | Format | Property keys |

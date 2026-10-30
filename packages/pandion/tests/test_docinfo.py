@@ -9,6 +9,7 @@ from pdfs import build_pdf
 import pandion.docinfo as docinfo
 from pandion.docinfo import DocumentInfo, document_info
 from pandion.extend import DocumentInfo as Exported
+from pandion.extend import document_info as exported_fn
 
 CORE = (
     '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
@@ -41,7 +42,7 @@ def test_basic_facts(pdf):
     info = document_info(pdf, filename="a.pdf", doc_id="a.pdf")
     assert info.type == "pdf" and info.filename == "a.pdf"
     assert info.size == pdf.stat().st_size
-    assert Exported is DocumentInfo
+    assert Exported is DocumentInfo and exported_fn is document_info
 
 
 @pytest.mark.parametrize(
@@ -126,7 +127,7 @@ def test_jpg_exif_when_pillow_is_there(tmp_path):
     assert info_of(p).properties["Make"] == "Acme"
 
 
-def test_md_and_txt_have_no_properties(tmp_path):
+def test_md_has_no_properties(tmp_path):
     p = tmp_path / "a.md"
     p.write_text("# Hi\n", encoding="utf-8")
     info = info_of(p)
@@ -179,3 +180,50 @@ def test_unknown_extension_has_no_type(tmp_path):
     p.write_bytes(b"data")
     info = info_of(p)
     assert info.type is None and info.size == 4
+
+
+def test_html_keeps_the_first_title_and_title_wins_over_meta(tmp_path):
+    p = tmp_path / "a.html"
+    p.write_text(
+        '<meta name="title" content="Meta title"><title>Real</title>'
+        '<body><svg><title>Chart icon</title></svg><meta name="TITLE" content="Again"></body>',
+        encoding="utf-8",
+    )
+    assert info_of(p).properties == {"Title": "Real"}
+
+
+def test_exif_bytes_values_are_skipped(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    p = tmp_path / "a.jpg"
+    exif = Image.Exif()
+    exif[0x010F] = "Acme"
+    exif[0x9286] = b"\x00\x01binary"  # UserComment is bytes
+    Image.new("RGB", (4, 4)).save(p, exif=exif)
+    props = info_of(p).properties
+    assert props["Make"] == "Acme" and "UserComment" not in props
+
+
+def test_a_failing_later_page_keeps_the_other_facts(pdf, monkeypatch):
+    import pypdfium2
+
+    real = pypdfium2.PdfPage.get_textpage
+    calls = []
+
+    def flaky(self, *a, **k):
+        calls.append(1)
+        if len(calls) == 2:
+            raise RuntimeError("bad page")
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(pypdfium2.PdfPage, "get_textpage", flaky)
+    info = info_of(pdf)
+    assert info.page_count == 2 and "Hello there." in info.first_page_text and info.text_layer is True
+
+
+@pytest.mark.parametrize("name", ["a.txt", "a.md"])
+def test_text_and_markdown_have_first_page_text(tmp_path, name):
+    p = tmp_path / name
+    p.write_bytes(b"Hello \xff world " + b"x" * 5000)
+    info = info_of(p)
+    assert info.first_page_text.startswith("Hello") and len(info.first_page_text) == 4000
+    assert info.text_layer is None and info.page_count is None

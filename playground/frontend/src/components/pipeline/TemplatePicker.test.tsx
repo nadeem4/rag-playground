@@ -66,6 +66,14 @@ describe("TemplatePicker", () => {
     expect(within(panel).queryByText(/Add your key in Settings/)).toBeNull()
   })
 
+  it("shows the Web pages card, and no sample line for it", async () => {
+    await open()
+    fireEvent.click(card("1. What are your documents like?", /Web pages/))
+    const panel = screen.getByRole("region", { name: "Your pipeline" })
+    expect(within(panel).getByText("markdown_header")).toBeTruthy()
+    expect(within(panel).queryByText(/Try it on the sample/)).toBeNull()
+  })
+
   it("hands Build the composed column, on the document and question in use", async () => {
     const { onUse } = await open()
     fireEvent.click(card("1. What are your documents like?", /Reports with tables/))

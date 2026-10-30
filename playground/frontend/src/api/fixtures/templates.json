@@ -7,7 +7,7 @@
       "good_for": "It suits manuals, handbooks, guides and specifications with numbered or clearly styled headings.",
       "sample": "station-manual",
       "pipeline": {
-        "index": {
+        "category": {
           "parse": {
             "use": "docling",
             "heading_hierarchy": true,
@@ -29,14 +29,6 @@
             "max_tokens": 512,
             "keep_tables_whole": true,
             "heading_context": true
-          },
-          "embed": {
-            "use": "qwen3-embedding-0.6b"
-          },
-          "store": {
-            "use": "lancedb",
-            "metric": "cosine",
-            "build_fts": true
           }
         }
       }
@@ -48,7 +40,7 @@
       "good_for": "It suits scanned paper, photographed pages and any PDF whose text cannot be selected.",
       "sample": "scanned-notes",
       "pipeline": {
-        "index": {
+        "category": {
           "parse": {
             "use": "docling",
             "do_ocr": true,
@@ -70,14 +62,6 @@
             "max_tokens": 400,
             "keep_tables_whole": true,
             "heading_context": true
-          },
-          "embed": {
-            "use": "qwen3-embedding-0.6b"
-          },
-          "store": {
-            "use": "lancedb",
-            "metric": "cosine",
-            "build_fts": true
           }
         }
       }
@@ -89,7 +73,7 @@
       "good_for": "It suits financial reports, data sheets and studies whose answers sit in table rows.",
       "sample": "table-of-figures",
       "pipeline": {
-        "index": {
+        "category": {
           "parse": {
             "use": "docling",
             "do_table_structure": true,
@@ -109,14 +93,6 @@
             "max_tokens": 400,
             "keep_tables_whole": true,
             "heading_context": true
-          },
-          "embed": {
-            "use": "qwen3-embedding-0.6b"
-          },
-          "store": {
-            "use": "lancedb",
-            "metric": "cosine",
-            "build_fts": true
           }
         }
       }
@@ -128,7 +104,7 @@
       "good_for": "It suits articles, policies and plain reports set in one column, with few tables.",
       "sample": "chunking-primer",
       "pipeline": {
-        "index": {
+        "category": {
           "parse": {
             "use": "pdfium",
             "join_lines": true
@@ -146,14 +122,46 @@
             "use": "sentence_window",
             "sentences_per_chunk": 5,
             "overlap_sentences": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "web",
+      "name": "Web pages",
+      "summary": "Reads a saved web page, drops menus, cookie banners and footers, and starts a new piece at each heading.",
+      "good_for": "It suits articles, documentation pages and blog posts saved as HTML or fetched from a link.",
+      "pipeline": {
+        "category": {
+          "parse": {
+            "use": "docling",
+            "content_layers": [
+              "body"
+            ]
           },
-          "embed": {
-            "use": "qwen3-embedding-0.6b"
-          },
-          "store": {
-            "use": "lancedb",
-            "metric": "cosine",
-            "build_fts": true
+          "clean": [
+            {
+              "use": "drop_matching",
+              "mode": "regex",
+              "pattern": "^\\s*(we use cookies|this (web)?site uses cookies|accept (all )?cookies|manage (cookie|preferences))"
+            },
+            {
+              "use": "drop_matching",
+              "mode": "regex",
+              "pattern": "^\\s*(home|about|contact|menu|skip to content|sign in|log in)\\s*$"
+            },
+            {
+              "use": "drop_matching",
+              "mode": "regex",
+              "pattern": "^\\W*(copyright|all rights reserved|privacy policy|terms of (use|service))"
+            },
+            {
+              "use": "dedupe_blocks"
+            }
+          ],
+          "chunk": {
+            "use": "markdown_header",
+            "max_tokens": 400
           }
         }
       }
@@ -312,5 +320,17 @@
       },
       "needs_key": true
     }
-  ]
+  ],
+  "shared": {
+    "index": {
+      "embed": {
+        "use": "qwen3-embedding-0.6b"
+      },
+      "store": {
+        "use": "lancedb",
+        "metric": "cosine",
+        "build_fts": true
+      }
+    }
+  }
 }

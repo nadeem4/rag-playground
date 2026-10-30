@@ -766,14 +766,7 @@ class IndexPipeline:
                 path = self.sources.path(file.sha, file.filename)
                 if path.is_file():
                     check_contents(path, file.filename)
-        chosen = {
-            doc_id: sort_document(
-                self.config.index.route,
-                None,
-                pinned=(categories or {}).get(doc_id) or self._pins.get(doc_id),
-            ).category
-            for doc_id in documents
-        }
+        chosen = {doc_id: (categories or {}).get(doc_id) or self.category_of(doc_id) for doc_id in documents}
         graph, roles = self.graph(documents, chosen)
         known = self.config.index.categories
         targets = {f"{d}::{self._stop_for(stop, known[chosen[d]])}" for d in documents} if stop else None

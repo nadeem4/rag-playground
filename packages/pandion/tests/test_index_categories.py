@@ -222,3 +222,37 @@ def test_retrieval_graph_uses_the_index_categories():
     graph_nodes = nodes(p.retrieval.graph("q", documents=DOCS)[0])
     assert all(graph_nodes[k] == v for k, v in index_nodes.items())
     assert graph_nodes["a.pdf::chunk"][2]["max_tokens"] == 400
+
+
+def test_retrieval_and_evaluation_see_the_categories_of_the_last_run(tmp_path, _forget_parser):
+    @register
+    class Lines(Transform[NoSettings]):
+        name = "test_cat_lines"
+        stage = Stage.PARSE
+        inputs = {"file": PortSpec(ArtifactType.RAW_FILE)}
+        output = ArtifactType.PARSED_DOC
+        config_model = NoSettings
+        summary = "One block per line."
+
+        def apply(self, inputs, config, ctx):
+            lines = Path(inputs["file"]["path"]).read_text(encoding="utf-8").splitlines()
+            return ParsedDoc(
+                elements=[Element(id=f"l{i}", type="paragraph", text=t, order=i) for i, t in enumerate(lines)]
+            )
+
+    data = copy.deepcopy(NEW)
+    data["path"] = str(tmp_path / "idx")
+    data["retrieve"] = {"search": {"use": "dense"}}
+    for name in ("reports", "scans"):
+        data["categories"][name]["parse"] = {"use": "test_cat_lines"}
+    p = Pipeline.from_dict(data)
+    (tmp_path / "docs").mkdir()
+    for name in ("a.txt", "b.txt"):
+        (tmp_path / "docs" / name).write_text("one\ntwo\n", encoding="utf-8")
+    picks = {"a.txt": "reports", "b.txt": "scans"}
+    p.index.run(tmp_path / "docs", through="parse", categories=picks)
+    documents = p.index.documents
+    ran = nodes(p.index.graph(documents)[0])
+    assert nodes(p.retrieval.graph("q", documents=documents)[0]).items() >= ran.items()
+    again = p.index._index(documents, stop="parse", remember=False)
+    assert {d: r.category for d, r in again.documents.items()} == picks

@@ -417,8 +417,8 @@ A file without `categories` still works. Pandion reads its `index.parse`, `clean
 artifact ids, recipe hash and graph do not change.
 
 Each document goes to the category the route chooses (see "Route documents to
-categories" below), unless you choose its category by hand: `p.index.assign(categories={"a.pdf": "reports"})` (`links=` also tells it which link a stored document came from, for the `path` check), or
-`p.index.run(paths, categories={...})` for one call. An unknown category name is a
+categories" below), unless you choose its category by hand: `p.index.assign(categories={"a.pdf": "reports"})`, or
+`p.index.run(paths, categories={...})` for one call. `p.index.assign(links={"a.pdf": "https://..."})` tells it which link a stored document came from. The route's `path` check reads that link. An unknown category name is a
 `ValueError` that lists the real ones. `p.index.category_of("a.pdf")` says which category
 a document has, and `report.documents["a.pdf"].category` says which one it went through.
 In code, `Pipeline(path=..., categories={...}, route=[...], embed=..., store=...)` takes
@@ -427,8 +427,8 @@ the same blocks in place of `parse`, `clean` and `chunk`.
 ### What a route can look at
 
 A route will choose a category from the cheap facts about a file, known before any
-parsing. `pandion.extend.document_info(file, filename=..., doc_id=..., metadata=...)`
-returns a `DocumentInfo` with these fields:
+parsing. `pandion.extend.document_info(file, filename=..., doc_id=..., metadata=..., link=...)`
+returns a `DocumentInfo` with these fields. `link` is the address the file was fetched from, and `path` reads it.
 
 - `filename`, `type` (`pdf`, `docx`, `pptx`, `html`, `md`, `txt`, `png`, `jpg`, or `None`)
   and `size` in bytes.

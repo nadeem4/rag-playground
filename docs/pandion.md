@@ -1801,7 +1801,7 @@ dict, as `pandion.evaluate` takes), and returns the paths it wrote:
   (absolute, a drive, a URL, `~` or `..`) keeps only its last part, so no folder of the
   computer that wrote it ends up in the file. Every other setting is copied as it is.
   `models.public_endpoints_only` is left out, so the default applies at home.
-- `run.py`: indexes the files in `docs/` that the parse step reads (`.pdf` for pdfium; every
+- `run.py`: indexes the files in `docs/` that any category's parse step reads (`.pdf` for pdfium; every
   format in [Documents other than PDFs](#documents-other-than-pdfs) for docling), says which
   other files it skipped, then evaluates the questions in
   `questions.json`, or asks one example question when there is no question set. It

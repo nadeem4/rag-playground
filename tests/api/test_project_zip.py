@@ -86,6 +86,12 @@ def test_with_questions_the_zip_also_holds_them(client):
     assert "primer.pdf" in files["README.md"]
 
 
+def test_a_composed_template_posted_as_it_is_makes_a_zip(client):
+    r = client.post(ROUTE, json={"config": pandion.compose_template("web", "balanced"), "name": "Web"})
+
+    assert "categories:" in unzip(r)["pipeline.yaml"]
+
+
 def test_a_pipeline_without_a_name_gets_a_plain_one(client):
     r = client.post(ROUTE, json={"config": config()})
 

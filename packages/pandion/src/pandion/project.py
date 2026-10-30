@@ -232,7 +232,7 @@ HERE = Path(__file__).resolve().parent
 KEYS = {{
 {keys}}}
 
-#: The file types the pipeline's parse step reads; None reads every file.
+#: The file types every category's parse step reads; None reads every file.
 SUFFIXES = {suffixes!r}
 
 #: Asked when there is no questions.json.

@@ -27,10 +27,12 @@ categories:
         (cookie|preferences))
     - use: drop_matching
       mode: regex
-      pattern: ^\s*(home|about|contact|menu|skip to content|sign in|log in)\s*$
+      pattern: ^\s*((home|about|contact|menu|sign in|log in)\s*[|/·\s]\s*)+(home|about|contact|menu|sign
+        in|log in)\s*$|^\s*skip to content\s*$
     - use: drop_matching
       mode: regex
-      pattern: ^\W*(copyright|all rights reserved|privacy policy|terms of (use|service))
+      pattern: ^\W*(copyright|©)|all rights reserved|^\W*(privacy policy|terms of
+        (use|service))
     - use: dedupe_blocks
     chunk:
       use: markdown_header

@@ -408,9 +408,10 @@ def test_a_pipeline_with_categories_is_a_project(tmp_path):
     config = pandion.compose_template("text", "balanced")
     config["categories"]["web"] = {**pandion.compose_template("web", "balanced")["categories"]["web"]}
     config["route"].insert(0, {"when": [{"use": "file_type", "types": ["html"]}], "category": "web"})
-    written = pandion.new_project(tmp_path / "project", config)
+    pandion.new_project(tmp_path / "project", config)
 
     run_py = (tmp_path / "project" / "run.py").read_text(encoding="utf-8")
     assert "'.html'" in run_py and "'.pdf'" in run_py
-    assert yaml.safe_load((tmp_path / "project" / "pipeline.yaml").read_text(encoding="utf-8"))["categories"]
-    assert written
+    saved = yaml.safe_load((tmp_path / "project" / "pipeline.yaml").read_text(encoding="utf-8"))
+    assert saved["categories"]
+    assert saved["route"][0] == {"when": {"use": "file_type", "types": ["html"]}, "category": "web"}

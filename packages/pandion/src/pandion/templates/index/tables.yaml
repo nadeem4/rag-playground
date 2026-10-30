@@ -3,7 +3,7 @@ template:
   summary: Reads the page layout, rebuilds each table's rows and columns, and keeps every table whole in one piece.
   good_for: It suits financial reports, data sheets and studies whose answers sit in table rows.
   sample: table-of-figures
-index:
+category:
   parse:
     use: docling                # a layout model finds each table, its caption and its heading
     do_table_structure: true    # rebuilds rows and columns, so a table reaches the pieces as a markdown table
@@ -17,9 +17,3 @@ index:
     max_tokens: 400             # packs short paragraphs together up to about a long paragraph
     keep_tables_whole: true     # never splits a table: a row cut off from its header row cannot be read
     heading_context: true       # searches each piece with its heading, so a question about a section finds its table
-  embed:
-    use: qwen3-embedding-0.6b   # the strongest embedder in the catalog, and small enough to run on a CPU
-  store:
-    use: lancedb
-    metric: cosine              # Qwen3's vectors are compared by direction
-    build_fts: true             # the keyword index, which the hybrid search in every query template needs

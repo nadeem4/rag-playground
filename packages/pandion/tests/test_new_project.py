@@ -402,3 +402,15 @@ def test_a_folder_that_is_a_file_is_refused_plainly(tmp_path):
     target.write_text("x", encoding="utf-8")
     with pytest.raises(NotADirectoryError, match="is a file, not a folder"):
         pandion.new_project(target, OFFLINE)
+
+
+def test_a_pipeline_with_categories_is_a_project(tmp_path):
+    config = pandion.compose_template("text", "balanced")
+    config["categories"]["web"] = {**pandion.compose_template("web", "balanced")["categories"]["web"]}
+    config["route"].insert(0, {"when": [{"use": "file_type", "types": ["html"]}], "category": "web"})
+    written = pandion.new_project(tmp_path / "project", config)
+
+    run_py = (tmp_path / "project" / "run.py").read_text(encoding="utf-8")
+    assert "'.html'" in run_py and "'.pdf'" in run_py
+    assert yaml.safe_load((tmp_path / "project" / "pipeline.yaml").read_text(encoding="utf-8"))["categories"]
+    assert written

@@ -12,23 +12,29 @@ Every step in this pipeline runs on your computer, so it needs no API key.
 
 === pipeline.yaml
 path: ./pandion-index
+categories:
+  manuals:
+    name: Manuals and guides
+    template: manuals
+    parse:
+      use: docling
+      heading_hierarchy: true
+      do_table_structure: true
+      table_mode: fast
+      do_ocr: false
+      content_layers:
+      - body
+    clean:
+    - use: dedupe_blocks
+    chunk:
+      use: layout_blocks
+      section_level: 4
+      max_tokens: 512
+      keep_tables_whole: true
+      heading_context: true
+route:
+- category: manuals
 index:
-  parse:
-    use: docling
-    heading_hierarchy: true
-    do_table_structure: true
-    table_mode: fast
-    do_ocr: false
-    content_layers:
-    - body
-  clean:
-  - use: dedupe_blocks
-  chunk:
-    use: layout_blocks
-    section_level: 4
-    max_tokens: 512
-    keep_tables_whole: true
-    heading_context: true
   embed:
     use: qwen3-embedding-0.6b
   store:

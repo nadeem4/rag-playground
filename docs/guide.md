@@ -259,11 +259,11 @@ invite back is to clear this site's data in the browser.
 
 **Start from a template**, beside the Pipeline picker, opens two sets of cards. The first,
 **What are your documents like?**, sets how the document is read and cut: text documents,
-reports with tables, scanned PDFs, or manuals and guides. The second, **What will you ask?**,
+reports with tables, scanned PDFs, manuals and guides, or web pages. The second, **What will you ask?**,
 sets how the search and the answer work: balanced, exact terms, best precision, vague
 questions, or a chat answer. Each card says what it does, what it is good for and the steps
 it uses. A card marked **Needs a key** calls a language model, so add your key in Settings
-before you Ask. **Your pipeline** lists the steps the two cards make and names a sample to
+before you Ask. **Your pipeline** lists the steps the two cards make and, when the card has one, names a sample to
 try them on.
 
 Home's **Start from a template** opens Build with these cards already open. The link is

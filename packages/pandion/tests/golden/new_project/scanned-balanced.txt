@@ -12,23 +12,29 @@ Every step in this pipeline runs on your computer, so it needs no API key.
 
 === pipeline.yaml
 path: ./pandion-index
+categories:
+  scanned:
+    name: Scanned PDFs
+    template: scanned
+    parse:
+      use: docling
+      do_ocr: true
+      do_table_structure: true
+      table_mode: fast
+      content_layers:
+      - body
+    clean:
+    - use: dedupe_blocks
+      scope: near
+      similarity: 0.95
+    chunk:
+      use: layout_blocks
+      max_tokens: 400
+      keep_tables_whole: true
+      heading_context: true
+route:
+- category: scanned
 index:
-  parse:
-    use: docling
-    do_ocr: true
-    do_table_structure: true
-    table_mode: fast
-    content_layers:
-    - body
-  clean:
-  - use: dedupe_blocks
-    scope: near
-    similarity: 0.95
-  chunk:
-    use: layout_blocks
-    max_tokens: 400
-    keep_tables_whole: true
-    heading_context: true
   embed:
     use: qwen3-embedding-0.6b
   store:

@@ -27,6 +27,9 @@ def test_templates_serves_pandions_templates(client):
 
 def test_every_index_template_names_a_bundled_sample():
     for t in LISTED["index"]:
+        if t["id"] == "web":
+            assert "sample" not in t
+            continue
         assert (ROOT / "samples" / t["sample"] / "sample.json").is_file(), t["id"]
 
 

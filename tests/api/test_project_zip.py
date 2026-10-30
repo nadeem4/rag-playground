@@ -29,7 +29,10 @@ def config(query: str = "balanced") -> dict:
     """A pipeline as the page sends it: the file's shape without a path."""
     c = pandion.compose_template("text", query)
     c.pop("path")
-    return c
+    [category] = c.pop("categories").values()
+    c.pop("route")
+    parts = {key: category[key] for key in ("parse", "clean", "chunk")}
+    return {"index": {**parts, **c["index"]}, **{k: v for k, v in c.items() if k != "index"}}
 
 
 def questions(n: int = 2) -> dict:

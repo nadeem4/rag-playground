@@ -31,10 +31,13 @@ API = "/api/v2"
 DEVICE = {"device": "cpu"}
 
 LISTED = list_templates()
-SAMPLES = {t["id"]: t["sample"] for t in LISTED["index"]}
+SAMPLES = {t["id"]: t["sample"] for t in LISTED["index"] if t.get("sample")}
 KEYED = {t["id"] for t in LISTED["query"] if t["needs_key"]}
-PAIRS = list(product(sorted(SAMPLES), sorted(t["id"] for t in LISTED["query"])))
-NO_KEY_PAIRS = [(d, q) for d, q in PAIRS if q not in KEYED]
+QUERIES = sorted(t["id"] for t in LISTED["query"])
+#: Every pair Pandion must accept; `web` has no sample, so it has no full run.
+PAIRS = list(product(sorted(t["id"] for t in LISTED["index"]), QUERIES))
+PAIRS_WITH_SAMPLES = [(d, q) for d, q in PAIRS if d in SAMPLES]
+NO_KEY_PAIRS = [(d, q) for d, q in PAIRS_WITH_SAMPLES if q not in KEYED]
 #: One pair per kind of parse, and each no-key query template once.
 REPRESENTATIVE = [("text", "balanced"), ("tables", "precision"), ("scanned", "exact")]
 

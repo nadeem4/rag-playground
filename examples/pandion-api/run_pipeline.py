@@ -64,7 +64,10 @@ def choose(template: tuple[str, str]) -> tuple[dict, Path, Path, str]:
     asked = next(t for t in listed["query"] if t["id"] == query)
     if asked["needs_key"]:
         raise SystemExit(f"{asked['name']} needs an API key, and this example sends none. Pick a template that needs no key.")
-    sample = ROOT / "samples" / next(t["sample"] for t in listed["index"] if t["id"] == index)
+    name = next(t for t in listed["index"] if t["id"] == index).get("sample")
+    if not name:
+        raise SystemExit(f"The {index} template has no sample for this example to upload. Pick another index template.")
+    sample = ROOT / "samples" / name
     questions = sample / "questions.json"
     first = json.loads(questions.read_text(encoding="utf-8"))[0]["question"]
     return config, sample / f"{sample.name}.pdf", questions, first

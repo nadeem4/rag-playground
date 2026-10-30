@@ -1,0 +1,61 @@
+=== requirements.txt
+pandion[docling,lancedb,local]~=<pin>
+
+# Uncomment the next line to install the much smaller CPU-only build of torch.
+# --extra-index-url https://download.pytorch.org/whl/cpu
+=== README.md (head)
+# project
+
+This folder runs a Pandion retrieval pipeline on your own documents. The pipeline is in `pipeline.yaml`.
+
+Every step in this pipeline runs on your computer, so it needs no API key.
+
+=== pipeline.yaml
+path: ./pandion-index
+categories:
+  web:
+    name: Web pages
+    template: web
+    parse:
+      use: docling
+      content_layers:
+      - body
+    clean:
+    - use: drop_matching
+      mode: regex
+      pattern: ^\s*(we use cookies|this (web)?site uses cookies|accept (all )?cookies|manage
+        (cookie|preferences))
+    - use: drop_matching
+      mode: regex
+      pattern: ^\s*(home|about|contact|menu|skip to content|sign in|log in)\s*$
+    - use: drop_matching
+      mode: regex
+      pattern: ^\W*(copyright|all rights reserved|privacy policy|terms of (use|service))
+    - use: dedupe_blocks
+    chunk:
+      use: markdown_header
+      max_tokens: 400
+route:
+- category: web
+index:
+  embed:
+    use: qwen3-embedding-0.6b
+  store:
+    use: lancedb
+    metric: cosine
+    build_fts: true
+retrieve:
+  search:
+    use: hybrid_rrf
+    top_k: 30
+    rrf_k: 60
+    dense_weight: 1.0
+    bm25_weight: 2.0
+    query_expansion: none
+  rerank:
+  - use: cross_encoder
+    model: cross-encoder/ms-marco-MiniLM-L-6-v2
+    top_k: 5
+answer:
+  use: search
+  top_k: 5

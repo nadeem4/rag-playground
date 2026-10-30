@@ -636,7 +636,7 @@ manifest. A file's id is its file name, or its path inside the folder; a link's 
 route's `metadata` check reads. The index is built again, but every other document is a
 cache hit. Adding an id that is already indexed raises a `ValueError` that points to
 `p.index.move`. `add`, `move`, `sort` and `p.documents()` work with the upload source
-only, like `sync`. `sort` reads the file where it is and writes nothing.
+only, like `sync`. `sort` reads a file where it is and writes nothing. A link is fetched and kept in `sources/`.
 
 `p.documents()` lists what the manifest holds, sorted by id, as `DocumentEntry` values with
 `id`, `filename`, `category`, `reason`, `metadata` and `content_hash`. A document saved

@@ -75,6 +75,15 @@ before it. It returns them as a `RetrievalResult` in a new order, often fewer of
 Open `my_strategies/answer.py`. An answer step reads the `result` port and returns an
 `Output`. The text in `payload["text"]` is what `p.ask(question).text` gives back.
 
+### Route check: `is_invoice`
+
+Open `my_strategies/route.py`. A route check is not a stage, so it is not a `Transform`. It is a
+function of a `DocumentInfo` (the cheap facts about a file) and its settings that returns
+`True` or `False`, marked with `@route_check("is_invoice", config=...)`. A route then uses it as
+`when: {use: is_invoice, prefix: tid}`, and the report says why a document went where it did.
+`pipeline.yaml` has no route, because it has one category. See "Route documents to categories"
+in [docs/pandion.md](../../../docs/pandion.md).
+
 ## Use them
 
 `pipeline.yaml` lists `plugins: [my_strategies]`, so reading the file imports the package

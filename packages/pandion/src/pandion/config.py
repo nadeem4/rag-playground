@@ -88,7 +88,8 @@ from pandion.models import ModelSettings
 from pandion.plugins import discover
 from pandion.ports import Stage
 from pandion.registry import UnknownTransformError, registry
-from pandion.stages import _problems, _strategy
+from pandion.routing import CHECKS
+from pandion.stages import _problems, _settings, _strategy
 
 TOP_KEYS = ("plugins", "path", "models", "categories", "route", "index", "retrieve", "answer")
 CATEGORY_KEYS = ("name", "template", "parse", "clean", "chunk")
@@ -173,7 +174,7 @@ class CategoryConfig:
 @dataclass
 class RouteRule:
     """Documents that pass every check in `when` go to `category`; no `when`
-    takes every document that reaches the rule. `when` is only shape-checked
+    takes every document that reaches the rule. `when` is checked
     here, as (check name, its settings)."""
 
     category: str
@@ -202,9 +203,13 @@ class IndexConfig:
     legacy: bool = False
 
     @property
+    def default_rule(self) -> RouteRule:
+        """The last route rule, which takes every document no other rule took."""
+        return self.route[-1]
+
+    @property
     def default(self) -> CategoryConfig:
-        """The category of the last route rule, which takes every document no
-        other rule took."""
+        """The category of the last route rule."""
         return self.categories[self.route[-1].category]
 
 
@@ -677,7 +682,7 @@ def _route(data: Any, categories: dict[str, CategoryConfig]) -> list[RouteRule]:
         rules.append(
             RouteRule(
                 category=category,
-                when=[_use(check, f"{where}.when.{k}") for k, check in enumerate(checks, start=1)],
+                when=[_check(check, f"{where}.when.{k}") for k, check in enumerate(checks, start=1)],
             )
         )
     if rules[-1].when is not None:
@@ -686,6 +691,30 @@ def _route(data: Any, categories: dict[str, CategoryConfig]) -> list[RouteRule]:
             step="route",
         )
     return rules
+
+
+def _check(step: Any, where: str) -> tuple[str, dict[str, Any]]:
+    """One check of a route rule: a known check, with settings its model accepts."""
+    use, settings = _use(step, where)
+    discover()
+    check = CHECKS.get(use)
+    if check is None:
+        known = ", ".join(sorted(CHECKS))
+        raise ConfigError(
+            f"{where} uses '{use}', which is not a check. The checks are: {known}.", step=where, use=use
+        )
+    unknown = sorted(set(settings) - set(check.config_model.model_fields))
+    if unknown:
+        names = ", ".join(f"'{name}'" for name in unknown)
+        known = ", ".join(check.config_model.model_fields)
+        raise ConfigError(f"{where} ({use}) has no setting {names}. Its settings are: {known}.", step=where, use=use)
+    try:
+        check.config_model(**settings)
+    except ValidationError as exc:
+        raise ConfigError(
+            f"{where} ({use}): {_problems(exc)}.", step=where, use=use, settings=_settings(exc)
+        ) from None
+    return use, settings
 
 
 def _source(step: Any) -> tuple[str, dict[str, Any]]:

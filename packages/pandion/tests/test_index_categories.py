@@ -8,10 +8,9 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
-from pandion.config import RouteRule, from_dict, to_dict
+from pandion.config import from_dict, to_dict
 from pandion.extend import ArtifactType, Element, ParsedDoc, PortSpec, Stage, Transform, register
 from pandion.pipeline import IndexPipeline, Pipeline, extras_for
-from pandion.routing import Sorting, sort_document
 from pandion.sources import SourceFile
 
 SHA_A, SHA_B = "a" * 64, "b" * 64
@@ -117,10 +116,8 @@ def test_unknown_pin_is_refused():
         index().assign(categories={"a.pdf": "memos"})
 
 
-def test_sort_document_pin_then_first_rule_without_when():
-    route = [RouteRule("scans", when=[("file_type", {"types": ["pdf"]})]), RouteRule("text")]
-    assert sort_document(route, None, pinned="scans") == Sorting("scans", "Chosen when added")
-    assert sort_document(route, None) == Sorting("text", "Default: no rule matched")
+def test_unsorted_document_is_in_the_routes_default_category():
+    assert index().category_of("a.pdf") == "text"
 
 
 def test_through_clean_stops_each_document_at_its_last_cleaner():

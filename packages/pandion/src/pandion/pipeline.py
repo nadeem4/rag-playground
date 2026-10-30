@@ -50,7 +50,8 @@ from pandion.embedding_cache import EmbeddingCache
 from pandion.executor import NodeResult, RunResult, run
 from pandion.fetch import fetch_url, is_url
 from pandion.filters import check_where, resolve as _resolve_where
-from pandion.formats import check_contents, check_readable
+from pandion.docinfo import DocumentInfo, document_info
+from pandion.formats import check_contents, check_readable, format_of
 from pandion.graph import Edge, Graph, Node
 from pandion.manifest import MANIFEST, Manifest, recipe_hash
 from pandion.payloads import ChunkSet, Hit, Output, ParsedDoc, Query, RetrievalResult
@@ -58,7 +59,7 @@ from pandion.plugins import discover
 from pandion.ports import Stage
 from pandion.registry import registry
 from pandion.results import ResultStore, StageResult
-from pandion.routing import sort_document
+from pandion.routing import Sorting, sort_document
 from pandion.sources import SourceFile, Sources
 from pandion.storage import Store
 
@@ -98,6 +99,8 @@ class DocumentReport:
     stages: dict[str, StageResult] = field(default_factory=dict)
     #: The category whose steps this document went through.
     category: str = "default"
+    #: Why the document went to that category, in plain words.
+    reason: str = ""
 
 
 @dataclass
@@ -558,6 +561,8 @@ class IndexPipeline:
         self._pins: dict[str, str] = {}
         #: The category each document had in the last run or sync.
         self._categories: dict[str, str] | None = None
+        #: The same, with the reason for each.
+        self._sortings: dict[str, Sorting] = {}
 
     def assign(self, *, categories: dict[str, str] | None = None) -> None:
         """Send documents to categories by hand, by document id. The choice
@@ -572,7 +577,43 @@ class IndexPipeline:
             return self._pins[doc_id]
         if self._categories is not None and doc_id in self._categories:
             return self._categories[doc_id]
-        return sort_document(self.config.index.route, None).category
+        return self.config.index.default_rule.category
+
+    def _sort(
+        self,
+        documents: dict[str, SourceFile | str],
+        chosen: dict[str, str] | None = None,
+        *,
+        reuse: bool = False,
+    ) -> dict[str, Sorting]:
+        """Each document's category and the reason for it. A pin, or a name in
+        `chosen`, comes first; the rest are sorted by the route from the
+        file's cheap facts, or (`reuse`) keep what the last run decided."""
+        pins = {**self._pins, **(chosen or {})}
+        out = {}
+        for doc_id, doc in documents.items():
+            pinned = pins.get(doc_id)
+            if reuse and pinned is None and doc_id in self._sortings:
+                out[doc_id] = self._sortings[doc_id]
+                continue
+            info = None if pinned else self._info(doc_id, doc)
+            out[doc_id] = sort_document(self.config.index.route, info, pinned=pinned)
+        return out
+
+    def _info(self, doc_id: str, doc: SourceFile | str) -> DocumentInfo:
+        """What the route can know about a document. A file that is not on
+        disk (a location, or a stored file that is gone) has only its name."""
+        if isinstance(doc, SourceFile):
+            file = self.sources.path(doc.sha, doc.filename)
+            if file.is_file():
+                return document_info(file, filename=doc.filename, doc_id=doc_id)
+            name = doc.filename
+        else:
+            name = doc_id.rstrip("/").rsplit("/", 1)[-1]
+        return DocumentInfo(
+            filename=name, type=format_of(name), size=0, path=doc_id if "/" in doc_id else "",
+            metadata={}, properties={}, page_count=None, text_layer=None, first_page_text="",
+        )
 
     def _check_names(self, categories: dict[str, str] | None) -> None:
         known = self.config.index.categories
@@ -766,7 +807,8 @@ class IndexPipeline:
                 path = self.sources.path(file.sha, file.filename)
                 if path.is_file():
                     check_contents(path, file.filename)
-        chosen = {doc_id: (categories or {}).get(doc_id) or self.category_of(doc_id) for doc_id in documents}
+        sorted_ = self._sort(documents, categories, reuse=not remember)
+        chosen = {doc_id: s.category for doc_id, s in sorted_.items()}
         graph, roles = self.graph(documents, chosen)
         known = self.config.index.categories
         targets = {f"{d}::{self._stop_for(stop, known[chosen[d]])}" for d in documents} if stop else None
@@ -779,7 +821,7 @@ class IndexPipeline:
             force=force,
             roles=roles,
         )
-        reports = {doc_id: DocumentReport(category=chosen[doc_id]) for doc_id in documents}
+        reports = {doc_id: DocumentReport(category=chosen[doc_id], reason=sorted_[doc_id].reason) for doc_id in documents}
         index = None
         for node in graph.nodes:
             if result.nodes[node.id].status == "pruned":
@@ -793,6 +835,7 @@ class IndexPipeline:
         if remember:
             self.documents = documents
             self._categories = chosen
+            self._sortings = sorted_
         return IndexReport(documents=reports, index=index)
 
     def execute(

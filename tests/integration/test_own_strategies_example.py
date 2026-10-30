@@ -64,3 +64,30 @@ def test_jsonl_search_is_refused_with_the_lancedb_store(tmp_path):
     out = _run(["-c", REFUSED, str(EXAMPLE)], cwd=tmp_path)
     assert "CONFIGERROR:" in out
     assert "jsonl_search" in out and "format jsonl" in out
+
+
+ROUTED = textwrap.dedent("""
+    import sys
+    sys.path.insert(0, sys.argv[1])
+    import my_strategies
+    from pandion import Pipeline
+
+    steps = {"parse": {"use": "markdown"}, "chunk": {"use": "per_block"}}
+    p = Pipeline.from_dict({
+        "path": sys.argv[2],
+        "categories": {"tides": steps, "rest": steps},
+        "route": [{"when": {"use": "is_invoice", "prefix": "tid"}, "category": "tides"}, {"category": "rest"}],
+        "index": {"source": {"use": "text_file", "suffix": ".md"},
+                  "embed": {"use": "letter_counts"}, "store": {"use": "jsonl_store"}},
+    })
+    report = p.index.run(sorted(str(n) for n in (__import__("pathlib").Path(sys.argv[1]) / "notes").glob("*.md")),
+                         through="parse")
+    for name, doc in sorted(report.documents.items()):
+        print(name.replace("\\\\", "/").rsplit("/", 1)[-1], doc.category, "|", doc.reason)
+""")
+
+
+def test_own_route_check_sorts_the_notes(tmp_path):
+    out = _run(["-c", ROUTED, str(EXAMPLE), str(tmp_path)], cwd=tmp_path)
+    assert "tides.md tides | Rule 1: is_invoice is true" in out
+    assert "bees.md rest | Default: no rule matched" in out

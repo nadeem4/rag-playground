@@ -424,6 +424,34 @@ a document has, and `report.documents["a.pdf"].category` says which one it went 
 In code, `Pipeline(path=..., categories={...}, route=[...], embed=..., store=...)` takes
 the same blocks in place of `parse`, `clean` and `chunk`.
 
+### What a route can look at
+
+A route will choose a category from the cheap facts about a file, known before any
+parsing. `pandion.extend.document_info(file, filename=..., doc_id=..., metadata=...)`
+returns a `DocumentInfo` with these fields:
+
+- `filename`, `type` (`pdf`, `docx`, `pptx`, `html`, `md`, `txt`, `png`, `jpg`, or `None`)
+  and `size` in bytes.
+- `path`: the folder path the file was added from, or its link. It is empty for a bare
+  upload.
+- `metadata`: a copy of the metadata you gave.
+- `page_count`: pages of a PDF, or slides of a PowerPoint file. Otherwise `None`.
+- `text_layer`: for a PDF, `True` when one of the first three pages has text and `False`
+  when none has. `None` for other formats, or when pypdfium2 is not installed.
+- `first_page_text`: the first PDF page's text, at most 4,000 characters.
+- `properties`: what is stored inside the file. Matching ignores case. The keys are:
+
+| Format | Property keys |
+| --- | --- |
+| PDF | `Title`, `Author`, `Subject`, `Keywords`, `Creator`, `Producer` |
+| Word, PowerPoint | `Title`, `Author`, `Subject`, `Keywords`, `Category` |
+| HTML | `Title` from `<title>`, and every `<meta name=...>` or `<meta property=...>` under its own name, read from the first 64 KB |
+| JPG, PNG | EXIF tags by name, such as `Make`, when Pillow is installed |
+| Markdown, text | none |
+
+Reading never fails. A corrupt or encrypted file, a Word file with no core properties, or
+a PDF with no pypdfium2 installed gives empty facts for what could not be read.
+
 ### Context before embedding
 
 A piece cut out of a document often does not say what it is about. There are two ways to

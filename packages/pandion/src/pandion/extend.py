@@ -11,8 +11,9 @@ strategy per stage.
 
 A strategy, or a server, that calls a model endpoint the user named checks it
 with `guard_endpoint` and builds the OpenAI client's arguments with
-`openai_client_kwargs`. A server that parses a stored file catches
-`UnreadableFormat`, raised when the parser cannot read the file's format, and
+`openai_client_kwargs`. A route looks at a `DocumentInfo` (made by
+`document_info`): the cheap facts about a file before it is parsed. A server
+that parses a stored file catches `UnreadableFormat`, raised when the parser cannot read the file's format, and
 can judge a file before it keeps it with `format_of` (a file name's format by
 its extension, or None) and `FORMATS` (each format's name, what one file of it
 is, and its extensions). `check_contents` raises `UnreadableFormat` for a PDF
@@ -25,6 +26,7 @@ the guard refuses it.
 from typing import Any
 
 from pandion.artifacts import ArtifactType
+from pandion.docinfo import DocumentInfo
 from pandion.embeddings import Embedder, get_embedder, register_embedder
 from pandion.endpoints import EndpointRefused, guard_endpoint
 from pandion.fetch import FetchRefused, fetch_url
@@ -37,7 +39,7 @@ from pandion.sources import raw_file
 from pandion.transform import Explanation, Transform
 
 __all__ = [
-    "FORMATS", "ArtifactType", "Chunk", "ChunkSet", "Element", "Embedder", "EndpointRefused",
+    "FORMATS", "ArtifactType", "Chunk", "ChunkSet", "DocumentInfo", "Element", "Embedder", "EndpointRefused",
     "Explanation", "FetchRefused", "Hit", "Output", "ParsedDoc", "PortSpec", "Query", "RetrievalResult",
     "RunContext", "Stage", "Transform", "UnreadableFormat", "check_contents", "fetch_url", "format_of", "get_embedder", "guard_endpoint",
     "openai_client_kwargs", "raw_file", "register", "set_note", "set_usage",

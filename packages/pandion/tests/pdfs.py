@@ -55,13 +55,14 @@ def _page_stream(paragraphs: list[list[str]], paragraph_gap: int) -> bytes:
     return b"\n".join(parts)
 
 
-def build_pdf(pages: list[list[str]]) -> bytes:
+def build_pdf(pages: list[list[str]], info: dict[str, str] | None = None) -> bytes:
     """A minimal, deterministic PDF: one Helvetica text line per entry.
 
     Every line sits on the same pitch, so there is no paragraph structure in
     the layout at all. Use `build_paragraph_pdf` when there should be.
+    `info` becomes the document's properties, such as {"Title": "Annual report"}.
     """
-    return _assemble([_page_stream([lines], 0) for lines in pages])
+    return _assemble([_page_stream([lines], 0) for lines in pages], info)
 
 
 def build_paragraph_pdf(
@@ -76,7 +77,7 @@ def build_paragraph_pdf(
     return _assemble([_page_stream(paragraphs, paragraph_gap) for paragraphs in pages])
 
 
-def _assemble(streams: list[bytes]) -> bytes:
+def _assemble(streams: list[bytes], info: dict[str, str] | None = None) -> bytes:
     objects: list[bytes] = []
 
     def add(body: bytes) -> int:
@@ -105,6 +106,10 @@ def _assemble(streams: list[bytes]) -> bytes:
         % (b" ".join(b"%d 0 R" % pid for pid in page_ids), len(page_ids))
     ) == pages_id
     catalog_id = add(b"<< /Type /Catalog /Pages %d 0 R >>" % pages_id)
+    info_ref = b""
+    if info:
+        fields = b" ".join(b"/%s (%s)" % (k.encode(), _escape(v)) for k, v in info.items())
+        info_ref = b" /Info %d 0 R" % add(b"<< " + fields + b" >>")
 
     out = bytearray(b"%PDF-1.4\n")
     offsets: list[int] = []
@@ -115,9 +120,10 @@ def _assemble(streams: list[bytes]) -> bytes:
     out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
     for off in offsets:
         out += b"%010d 00000 n \n" % off
-    out += b"trailer\n<< /Size %d /Root %d 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (
+    out += b"trailer\n<< /Size %d /Root %d 0 R%s >>\nstartxref\n%d\n%%%%EOF\n" % (
         len(objects) + 1,
         catalog_id,
+        info_ref,
         xref,
     )
     return bytes(out)

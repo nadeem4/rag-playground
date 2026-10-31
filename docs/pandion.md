@@ -415,9 +415,8 @@ A file without `categories` still works. Pandion reads its `index.parse`, `clean
 `chunk` as one category named `default`, and writes it back the same way, so its
 artifact ids, recipe hash and graph do not change.
 
-In this version a rule with a `when` is kept but never matches, because the checks are
-not built yet. A document goes to the first rule without a `when`, unless you choose its
-category: `p.index.assign(categories={"a.pdf": "reports"})`, or
+Each document goes to the category the route chooses (see "Route documents to
+categories" below), unless you choose its category by hand: `p.index.assign(categories={"a.pdf": "reports"})`, or
 `p.index.run(paths, categories={...})` for one call. An unknown category name is a
 `ValueError` that lists the real ones. `p.index.category_of("a.pdf")` says which category
 a document has, and `report.documents["a.pdf"].category` says which one it went through.
@@ -452,6 +451,82 @@ returns a `DocumentInfo` with these fields:
 
 Reading never fails. A corrupt or encrypted file, a Word file with no core properties, or
 a PDF with no pypdfium2 installed gives empty facts for what could not be read.
+
+### Route documents to categories
+
+`route` is a list of rules. Pandion tries them in order, and the first rule that matches
+gives the document its category. A rule has a `category` and, except the last, a `when`.
+`when` is one check, or a list of checks that must all be true. The last rule has no
+`when`, so it takes every document no other rule took.
+
+```yaml
+route:
+  - when: {use: path, pattern: "legal/**"}
+    category: legal
+  - when:
+      - {use: file_type, types: [pdf]}
+      - {use: text_layer, has: false}
+    category: scans
+  - category: text
+```
+
+A pipeline run passes no metadata yet, so `metadata` is always false there. Metadata
+comes with adding or moving documents, in a later version. A source other than `upload`
+has no file to read, so for its documents `text_layer`, `contains` and `properties` are
+always false; `file_type`, `name` and `path` still work from the location.
+
+Text matching ignores case. A missing key, a missing property, or a check that does not
+apply to the file's type (`text_layer` on a Word file) is false, never an error. A check
+that raises an error is false too, and the error goes in the reason. In `name` and `path`
+patterns, `*` matches any text, including `/`, so `legal/**` and `legal/*` both match
+`legal/a/b.pdf`. A metadata or property key also matches ignoring case.
+
+| Check | True when | Settings |
+| --- | --- | --- |
+| `file_type` | the file's type is in the list | `types`: a list such as `[pdf, docx]` |
+| `name` | the file name matches the pattern | `pattern` |
+| `path` | the path the file was added from matches the pattern | `pattern` |
+| `metadata` | a label given when the document was added is present and matches | `key`, and one of `equals`, `contains`, `pattern` |
+| `properties` | a property stored inside the file is present and matches | `key`, and one of `equals`, `contains`, `pattern` |
+| `text_layer` | a PDF has selectable text (`has: true`) or none (`has: false`) | `has` |
+| `contains` | any of the words is in the first page's text | `words`: a list |
+
+`metadata` and `properties` refuse zero or more than one of `equals`, `contains` and
+`pattern`. A check you misspell, or a setting a check does not have, is a `ConfigError`
+when the file is read, with `step` set to the check's place, such as `route.1.when.2`.
+
+Every document gets a reason, in `report.documents["a.pdf"].reason`:
+
+- `Rule 2: path matches legal/**`: the first matching rule, with each check's phrase
+  joined by "and", such as `Rule 1: type is pdf and has no text layer`.
+- `Default: no rule matched`: the last rule took it. If a check raised an error, the
+  reason adds it, as in `Default: no rule matched; is_invoice failed: ValueError: boom`.
+- `Chosen when added`: you chose the category by hand.
+
+`pandion.catalog()["route"]` lists the checks with their settings as a JSON schema, in
+the same shape as the strategies, so an app can draw their forms.
+
+### Write your own check
+
+A check is a function of a `DocumentInfo` and its settings that returns `True` or `False`.
+Register it with `@route_check`, and its name works in `when: {use: <name>}`:
+
+```python
+from pydantic import BaseModel
+from pandion.extend import DocumentInfo, route_check
+
+class IsInvoice(BaseModel):
+    prefix: str = "INV"
+
+@route_check("is_invoice", summary="The file name starts with a prefix.", config=IsInvoice)
+def is_invoice(info: DocumentInfo, settings: IsInvoice) -> bool:
+    return info.filename.startswith(settings.prefix)
+```
+
+Load it with `plugins: [my_rules]` in the pipeline file, like a strategy. A name that is
+already taken is refused. Checks are not steps of the graph, so they have no cache and
+no `apply()`. A server that runs other people's requests does not accept `plugins`.
+[`examples/pandion/own_strategies/`](../examples/pandion/own_strategies) has this check.
 
 ### Context before embedding
 
@@ -1287,7 +1362,9 @@ summary and its settings as a JSON schema with defaults. `pandion.defaults()` na
 strategy a new pipeline starts with for each required part. `pandion.explain(stage, use,
 settings)` says in plain words what one strategy will do with those settings, and warns
 when they make no sense, without running anything. `catalog()` returns a copy each time,
-so changing it changes nothing in Pandion.
+so changing it changes nothing in Pandion. It also has a `route` entry, which lists the
+route checks in the same shape. A check is not a strategy, so `explain` refuses
+`"route"` with a `ValueError`.
 
 ```python
 import pandion
@@ -1773,7 +1850,8 @@ pandion questions report.pdf --model claude-haiku-4-5 --count 15 --out questions
 `pandion: The pipeline file has no index section.`
 
 **`pandion strategies [--stage STAGE] [--json]`** lists every strategy by stage, each with
-its summary. `--stage chunk` shows one stage. `--json` prints only the names, as JSON.
+its summary, and a `route` group for the route checks. `--stage chunk` shows one stage.
+`--json` prints only the names, as JSON.
 
 **`pandion index FILE DOC... [--sync] [--through STEP]`** indexes files and folders. With
 local files (the `upload` source, the default) it runs `p.index.sync`, so it remembers the
@@ -1960,7 +2038,8 @@ The ports each stage reads:
 
 The embedder is not a stage, so it is not in the table: `embed.py` (`letter_counts`) is its
 example, under [Your own embedder](#your-own-embedder). These are every stage
-`pandion.catalog()` lists, so the example covers each one.
+`pandion.catalog()` lists, so the example covers each one. The `route` group of the
+catalog holds checks, not stages, and `route.py` (`is_invoice`) is the example of one.
 
 `Stage.ENRICH` and `Stage.QUERY_TRANSFORM` are reserved: no strategy uses them yet, and they are kept so result ids stay stable.
 

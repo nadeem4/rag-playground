@@ -14,6 +14,7 @@ from my_strategies import (  # noqa: F401
     rerank,
     retrieve,
     rewrite,
+    route,
     source,
     store,
 )

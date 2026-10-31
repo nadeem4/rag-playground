@@ -53,6 +53,7 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "pandion.plugins.answer.search",
     "pandion.plugins.answer.chat",
     "pandion.plugins.answer.eval",
+    "pandion.plugins.route.checks",
 )
 
 _discovered = False

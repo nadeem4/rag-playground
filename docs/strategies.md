@@ -20,6 +20,7 @@ the API and exported files use it.
 - [Search](#search)
 - [Rerank](#rerank)
 - [Answer](#answer)
+- [Route checks](#route-checks)
 - [What each step passes to its library](#what-each-step-passes-to-its-library)
 
 To write a strategy of your own for any step, see "Write your own strategy" in
@@ -471,6 +472,24 @@ question in a set, and so does `pandion.evaluate` (see [the pandion guide](pandi
 
 - `top_k` (5): how many pieces are checked.
   `pandion.evaluate(p, questions, top_k=5)` sets it.
+
+## Route checks
+
+A route chooses a document's category from the cheap facts about the file, before any
+parsing. These checks go in a rule's `when`. See "Route documents to categories" in
+[pandion.md](pandion.md#route-documents-to-categories).
+
+| Check | True when |
+| --- | --- |
+| `file_type` | the file's type is in `types`, such as `[pdf, docx]` |
+| `name` | the file name matches `pattern` |
+| `path` | the path the file was added from matches `pattern` |
+| `metadata` | the label `key` is present and equals, contains or matches a value |
+| `properties` | the property `key` stored in the file is present and equals, contains or matches a value |
+| `text_layer` | a PDF has selectable text (`has: true`) or only page images (`has: false`) |
+| `contains` | any of `words` is in the first page's text |
+
+Text matching ignores case. A check that does not apply to a file is false.
 
 ## What each step passes to its library
 

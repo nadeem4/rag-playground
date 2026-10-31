@@ -12,7 +12,8 @@ strategy per stage.
 A strategy, or a server, that calls a model endpoint the user named checks it
 with `guard_endpoint` and builds the OpenAI client's arguments with
 `openai_client_kwargs`. A route looks at a `DocumentInfo` (made by
-`document_info`): the cheap facts about a file before it is parsed. A server
+`document_info`): the cheap facts about a file before it is parsed, and `@route_check`
+adds a check of those facts for `when: {use: <name>}`. A server
 that parses a stored file catches `UnreadableFormat`, raised when the parser cannot read the file's format, and
 can judge a file before it keeps it with `format_of` (a file name's format by
 its extension, or None) and `FORMATS` (each format's name, what one file of it
@@ -35,6 +36,7 @@ from pandion.llm import openai_client_kwargs
 from pandion.payloads import Chunk, ChunkSet, Element, Hit, Output, ParsedDoc, Query, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage, set_note, set_usage
 from pandion.registry import register as _register_transform
+from pandion.routing import route_check
 from pandion.sources import raw_file
 from pandion.transform import Explanation, Transform
 
@@ -42,7 +44,7 @@ __all__ = [
     "FORMATS", "ArtifactType", "Chunk", "ChunkSet", "DocumentInfo", "Element", "Embedder", "EndpointRefused",
     "Explanation", "FetchRefused", "Hit", "Output", "ParsedDoc", "PortSpec", "Query", "RetrievalResult",
     "RunContext", "Stage", "Transform", "UnreadableFormat", "check_contents", "document_info", "fetch_url", "format_of", "get_embedder", "guard_endpoint",
-    "openai_client_kwargs", "raw_file", "register", "set_note", "set_usage",
+    "openai_client_kwargs", "raw_file", "register", "route_check", "set_note", "set_usage",
 ]
 
 

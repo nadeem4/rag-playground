@@ -88,7 +88,8 @@ from pandion.models import ModelSettings
 from pandion.plugins import discover
 from pandion.ports import Stage
 from pandion.registry import UnknownTransformError, registry
-from pandion.stages import _problems, _strategy
+from pandion.routing import CHECKS
+from pandion.stages import _problems, _settings, _strategy
 
 TOP_KEYS = ("plugins", "path", "models", "categories", "route", "index", "retrieve", "answer")
 CATEGORY_KEYS = ("name", "template", "parse", "clean", "chunk")
@@ -173,7 +174,7 @@ class CategoryConfig:
 @dataclass
 class RouteRule:
     """Documents that pass every check in `when` go to `category`; no `when`
-    takes every document that reaches the rule. `when` is only shape-checked
+    takes every document that reaches the rule. `when` is checked
     here, as (check name, its settings)."""
 
     category: str
@@ -202,9 +203,13 @@ class IndexConfig:
     legacy: bool = False
 
     @property
+    def default_rule(self) -> RouteRule:
+        """The last route rule, which takes every document no other rule took."""
+        return self.route[-1]
+
+    @property
     def default(self) -> CategoryConfig:
-        """The category of the last route rule, which takes every document no
-        other rule took."""
+        """The category of the last route rule."""
         return self.categories[self.route[-1].category]
 
 
@@ -677,7 +682,7 @@ def _route(data: Any, categories: dict[str, CategoryConfig]) -> list[RouteRule]:
         rules.append(
             RouteRule(
                 category=category,
-                when=[_use(check, f"{where}.when.{k}") for k, check in enumerate(checks, start=1)],
+                when=[_check(check, f"{where}.when.{k}") for k, check in enumerate(checks, start=1)],
             )
         )
     if rules[-1].when is not None:
@@ -686,6 +691,38 @@ def _route(data: Any, categories: dict[str, CategoryConfig]) -> list[RouteRule]:
             step="route",
         )
     return rules
+
+
+def _check(step: Any, where: str) -> tuple[str, dict[str, Any]]:
+    """One check of a route rule: a known check, with settings its model accepts."""
+    use, settings = _use(step, where, "check")
+    discover()
+    check = CHECKS.get(use)
+    if check is None:
+        known = ", ".join(sorted(CHECKS))
+        raise ConfigError(
+            f"{where} uses '{use}', which is not a check. The checks are: {known}.", step=where, use=use
+        )
+    unknown = sorted(set(settings) - set(check.config_model.model_fields))
+    if unknown:
+        names = ", ".join(f"'{name}'" for name in unknown)
+        known = ", ".join(check.config_model.model_fields)
+        raise ConfigError(f"{where} ({use}) has no setting {names}. Its settings are: {known}.", step=where, use=use)
+    try:
+        check.config_model(**settings)
+    except ValidationError as exc:
+        fields = _settings(exc)
+        if not fields and len(exc.errors()) == 1:
+            # One sentence about the whole check: say it plainly, and name the
+            # settings it is about so a form can mark them.
+            message = exc.errors()[0]["msg"].removeprefix("Value error, ")
+            names = [f for f in check.config_model.model_fields if f in message]
+            raise ConfigError(
+                f"{where} ({use}): {message.rstrip('.')}.", step=where, use=use,
+                settings=[{"field": f, "message": message.rstrip(".") + "."} for f in names],
+            ) from None
+        raise ConfigError(f"{where} ({use}): {_problems(exc)}.", step=where, use=use, settings=fields) from None
+    return use, settings
 
 
 def _source(step: Any) -> tuple[str, dict[str, Any]]:
@@ -808,10 +845,10 @@ def _store(embed: Any, store: Any) -> tuple[str, dict[str, Any]]:
     return kind, settings
 
 
-def _use(step: Any, where: str) -> tuple[str, dict[str, Any]]:
+def _use(step: Any, where: str, noun: str = "strategy") -> tuple[str, dict[str, Any]]:
     use = step.get("use") if isinstance(step, dict) else None
     if not isinstance(use, str) or not use:
-        raise ConfigError(f"{where} must say which strategy to use, as use: <name>.", step=place(where))
+        raise ConfigError(f"{where} must say which {noun} to use, as use: <name>.", step=place(where))
     _named(step, where)
     settings = dict(step)
     return settings.pop("use"), settings

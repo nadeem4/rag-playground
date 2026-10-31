@@ -621,6 +621,38 @@ call a chat model fill it. A step that fails after its model call keeps the usag
 recorded, because the call was still billed. It is None for a step that calls no model,
 and for a cached step, because a cached step used no tokens this time.
 
+### Add one document
+
+```python
+p = Pipeline.from_yaml("pipeline.yaml")
+p.index.add("legal/contract.pdf", metadata={"cms_type": "contract"})
+p.index.add("https://example.com/guide", category="reports")
+print(p.index.sort("draft.pdf"))   # what category it would get, and why; runs nothing
+```
+
+`add` takes one file, one link, or a folder of files, and adds them to the documents in the
+manifest. A file's id is its file name, or its path inside the folder; a link's id is the link. It goes to `category` if you give one (the reason is then
+`Chosen when added`), and otherwise where the route sends it. `metadata` is the labels the
+route's `metadata` check reads. The index is built again, but every other document is a
+cache hit. Adding an id that is already indexed raises a `ValueError` that points to
+`p.index.move`. `add`, `move`, `sort` and `p.documents()` work with the upload source
+only, like `sync`. `sort` reads a file where it is and writes nothing. A link is fetched and kept in `sources/`.
+
+`p.documents()` lists what the manifest holds, sorted by id, as `DocumentEntry` values with
+`id`, `filename`, `category`, `reason`, `metadata` and `content_hash`. A document saved
+before categories existed shows the category `unsorted` until the next sync sorts it.
+
+To send a document to another category, use `move`:
+
+```python
+p.index.move("legal/contract.pdf", "scans")
+```
+
+Only that document runs parse, clean and chunk again, and its old pieces leave the index.
+The reason becomes `Chosen when moved`. An unknown document or category raises a
+`ValueError` that names the valid ones. Moving a document to the category it is already in
+runs nothing.
+
 ## Keep an index up to date
 
 When files in a folder are added, changed or removed, sync the index with the folder:
@@ -637,8 +669,15 @@ print("unchanged", report.unchanged)
 
 `sync` takes the same paths as `run` and names documents the same way. It keeps a file
 called `manifest.json` under the pipeline's `path`. For each document, the manifest
-records its name, a hash of its bytes and the id of its pieces. It also records a hash
-of the index settings and the id of the index.
+records its name, a hash of its bytes, the id of its pieces, its category, the reason for
+that category, and its `metadata` labels if it has any. It also records a hash of the
+index settings and the id of the index. `sync` takes `metadata` (labels by document id)
+and `categories` (a document id to a category name) for the new files it finds.
+
+A document keeps its category, reason and labels until you move it. Its checks do not run
+again, even when its bytes change. `metadata` is used only for new documents, and
+`categories` naming a document that is already in the manifest raises a `ValueError` that
+points to `p.index.move`.
 
 Each sync compares the folder with the manifest:
 
@@ -647,10 +686,24 @@ Each sync compares the folder with the manifest:
 - A removed file has its pieces taken out of the index.
 - An unchanged file costs nothing. Every one of its steps is read from the cache.
 
-A document is in `report.changed` when its bytes changed, or when its pieces came out
-different because the settings changed. `report.config_changed` is true when the index
+A document is in `report.changed` when its bytes changed, when its pieces came out
+different because the settings changed, or when it was moved. `report.config_changed` is true when the index
 settings differ from the last sync. Then only the steps from the first changed setting
 on run again, as in [The cache](#the-cache).
+
+Three rules say what a change re-runs:
+
+- Changing a category's settings re-runs only the documents in that category.
+- Changing the route moves nothing. It sorts only the files that are new.
+- Moving a document re-runs only that document.
+
+Removing a category that documents are in is refused before anything runs, with their
+names: `Move them to another category first, or put the category back.` This holds even when your
+paths leave those documents out, so move them, or sync without removing the category first. A route that names
+a category the pipeline does not have is refused when the file is loaded.
+
+A search in a new process builds each document with the category the manifest recorded,
+so it reads the same index the sync made.
 
 The index is built again on each sync rather than edited in place. That is cheap: the
 steps of unchanged files are cache hits, and their vectors come from the embedding
@@ -2152,6 +2205,10 @@ In code it is the `source=` keyword:
 
 `p.index.sync` works with local files only (the `upload` source); `p.index.run` works with
 any source.
+
+A source can hand over labels with `raw_file(ctx, data, filename, metadata={"cms_type": "invoice"})`.
+A route that has a check (such as `metadata`) runs the source step first, so the labels can
+choose the document's category. That step is a cache hit when the run goes on.
 
 A source's result is cached by its settings, so by `location`: the same location is read
 once and reused. If the content at a location can change, set `cacheable = False` on the

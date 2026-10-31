@@ -91,6 +91,18 @@ OnEvent = Callable[[dict[str, Any]], None]
 #: Events that list several node ids, and the field that names their steps.
 _NAMED_LISTS = (("nodes", "steps"), ("selected", "selected_steps"), ("skipped", "skipped_steps"))
 
+@dataclass(frozen=True)
+class DocumentEntry:
+    """One document in the manifest: where it went, why, and its labels."""
+
+    id: str
+    filename: str
+    category: str
+    reason: str
+    metadata: dict[str, str]
+    content_hash: str
+
+
 @dataclass
 class DocumentReport:
     """What each step did to one document, keyed source, parse, clean.1 ...,
@@ -398,6 +410,11 @@ class Pipeline:
             )
         )
 
+    def documents(self) -> list[DocumentEntry]:
+        """The documents the last sync, add or move saved, with the category
+        and reason of each, sorted by id. Empty before the first one."""
+        return self.index.listed()
+
     def _setup(self, config: PipelineConfig) -> None:
         self.config = config
         self.index = IndexPipeline._of(config)
@@ -563,12 +580,21 @@ class IndexPipeline:
         self._categories: dict[str, str] | None = None
         #: The same, with the reason for each.
         self._sortings: dict[str, Sorting] = {}
+        #: Labels by document id, read by the route's metadata check (see `assign`).
+        self._labels: dict[str, dict[str, str]] = {}
 
-    def assign(self, *, categories: dict[str, str] | None = None) -> None:
+    def assign(
+        self,
+        *,
+        categories: dict[str, str] | None = None,
+        metadata: dict[str, dict[str, str]] | None = None,
+    ) -> None:
         """Send documents to categories by hand, by document id. The choice
-        holds for this object and wins over the route."""
+        holds for this object and wins over the route. `metadata` gives labels
+        by document id, used when a document is sorted and saved."""
         self._check_names(categories)
         self._pins.update(categories or {})
+        self._labels.update(metadata or {})
 
     def category_of(self, doc_id: str) -> str:
         """The category of a document: its pin, else the one it had in the
@@ -585,36 +611,74 @@ class IndexPipeline:
         chosen: dict[str, str] | None = None,
         *,
         reuse: bool = False,
+        known: dict[str, Sorting] | None = None,
+        labels: dict[str, dict[str, str]] | None = None,
     ) -> dict[str, Sorting]:
-        """Each document's category and the reason for it. A pin, or a name in
-        `chosen`, comes first; the rest are sorted by the route from the
-        file's cheap facts, or (`reuse`) keep what the last run decided."""
+        """Each document's category and the reason for it. A `known` sorting
+        (from the manifest) comes first, then a pin or a name in `chosen`; the
+        rest are sorted by the route from the file's cheap facts, or (`reuse`)
+        keep what the last run decided."""
+        known = known or {}
         pins = {**self._pins, **(chosen or {})}
-        out = {}
+        labels = {**self._labels, **(labels or {})}
         # Checks are the only reason to read a file; a route without any does not.
         needs_info = any(rule.when for rule in self.config.index.route)
+        todo = {
+            d: doc
+            for d, doc in documents.items()
+            if d not in known and pins.get(d) is None and not (reuse and d in self._sortings)
+        }
+        records = self._source_records(todo) if needs_info and todo and not self._uploads() else {}
+        out = {}
         for doc_id, doc in documents.items():
+            if doc_id in known:
+                out[doc_id] = known[doc_id]
+                continue
             pinned = pins.get(doc_id)
             if reuse and pinned is None and doc_id in self._sortings:
                 out[doc_id] = self._sortings[doc_id]
                 continue
-            info = self._info(doc_id, doc) if pinned is None and needs_info else None
+            info = None
+            if pinned is None and needs_info:
+                info = self._info(doc_id, doc, labels.get(doc_id), records.get(doc_id))
             out[doc_id] = sort_document(self.config.index.route, info, pinned=pinned)
         return out
 
-    def _info(self, doc_id: str, doc: SourceFile | str) -> DocumentInfo:
+    def _source_records(self, documents: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """What a custom source gives for each document: its source step alone
+        is run first (a cache hit later), so the labels it hands over can route
+        the document. A source that fails here is reported by the real run."""
+        graph, roles = self.graph(documents)
+        sources = {node_id for node_id, (_, role) in roles.items() if role == "source"}
+        result = self.execute(graph, targets=sources)
+        out = {}
+        for node_id in sources:
+            artifact = result.nodes[node_id].artifact
+            if artifact is not None:
+                out[roles[node_id][0]] = self.store.load(artifact.id, artifact.type)
+        return out
+
+    def _info(
+        self,
+        doc_id: str,
+        doc: SourceFile | str,
+        metadata: dict[str, str] | None = None,
+        record: dict[str, Any] | None = None,
+    ) -> DocumentInfo:
         """What the route can know about a document. A file that is not on
-        disk (a location, or a stored file that is gone) has only its name."""
+        disk (a location, or a stored file that is gone) has only its name.
+        `record` is what a custom source returned."""
+        metadata = {**(record or {}).get("metadata", {}), **(metadata or {})}
+        file, name = None, doc_id.rstrip("/").rsplit("/", 1)[-1]
         if isinstance(doc, SourceFile):
-            file = self.sources.path(doc.sha, doc.filename)
-            if file.is_file():
-                return document_info(file, filename=doc.filename, doc_id=doc_id)
-            name = doc.filename
-        else:
-            name = doc_id.rstrip("/").rsplit("/", 1)[-1]
+            file, name = self.sources.path(doc.sha, doc.filename), doc.filename
+        elif record and record.get("path"):
+            file, name = Path(record["path"]), record.get("filename", name)
+        if file is not None and file.is_file():
+            return document_info(file, filename=name, doc_id=doc_id, metadata=metadata)
         return DocumentInfo(
             filename=name, type=format_of(name), size=0, path=doc_id if "/" in doc_id else "",
-            metadata={}, properties={}, page_count=None, text_layer=None, first_page_text="",
+            metadata=metadata, properties={}, page_count=None, text_layer=None, first_page_text="",
         )
 
     def _check_names(self, categories: dict[str, str] | None) -> None:
@@ -690,7 +754,14 @@ class IndexPipeline:
             return f"clean.{len(category.clean)}" if category.clean else "parse"
         return stop
 
-    def sync(self, paths: Documents, *, credentials: dict[str, str] | None = None) -> SyncReport:
+    def sync(
+        self,
+        paths: Documents,
+        *,
+        credentials: dict[str, str] | None = None,
+        metadata: dict[str, dict[str, str]] | None = None,
+        categories: dict[str, str] | None = None,
+    ) -> SyncReport:
         """Bring the index in line with the files at `paths` now.
 
         Reads `manifest.json` under the config's `path`, indexes the files the
@@ -705,15 +776,82 @@ class IndexPipeline:
         so the pieces of a removed or changed document are gone. After a sync
         with a failed step, both are left as they were. `credentials` (model
         keys, for a step such as llm_context) work as in `run`.
+
+        A document already in the manifest keeps its category, reason and
+        labels, even when its bytes changed: the checks do not run again, and
+        `categories` or `metadata` naming it is not applied (`categories` for
+        it raises ValueError that points to `p.index.move`). A new one goes
+        where `categories` (a document id to a name) says, else where the route
+        sends it; `metadata` gives its labels by document id. A manifest
+        document in a category the pipeline no longer has raises ValueError
+        before anything runs, even if the paths drop that document: move it
+        first, or sync without the removal first.
         """
         if not self._uploads():
             raise ValueError(
                 "sync works with local files (the upload source); index.run works with any source."
             )
-        manifest_path = self.config.path / MANIFEST
-        before = Manifest.load(manifest_path)
+        before = Manifest.load(self.config.path / MANIFEST)
+        self._check_recorded(before)
+        self._check_names(categories)
+        held = [d for d in categories or {} if d in before.documents]
+        if held:
+            raise ValueError(
+                f"{', '.join(held)} already in the index. Use p.index.move to change a category."
+            )
         documents = self._documents(paths)
-        report = self._index(documents, credentials=credentials)
+        known = self._recorded(before)
+        known.update({d: Sorting(c, "Chosen when added") for d, c in (categories or {}).items()})
+        new = {d: m for d, m in (metadata or {}).items() if d not in before.documents}
+        return self._commit(documents, before, known, new, credentials=credentials)
+
+    def _check_recorded(self, manifest: Manifest, moving: str | None = None) -> None:
+        """Refuse a manifest document whose category the pipeline no longer
+        has, naming the documents. `moving` is on its way out and is skipped."""
+        gone: dict[str, list[str]] = {}
+        for doc_id, entry in sorted(manifest.documents.items()):
+            name = entry.get("category")
+            if doc_id != moving and name is not None and name not in self.config.index.categories:
+                gone.setdefault(name, []).append(doc_id)
+        if gone:
+            names = ", ".join(f'"{n}"' for n in gone)
+            docs = ", ".join(d for ids in gone.values() for d in ids)
+            raise ValueError(
+                f"These documents are in a category the pipeline no longer has ({names}): {docs}. "
+                "Move them to another category first, or put the category back."
+            )
+
+    @staticmethod
+    def _recorded(manifest: Manifest) -> dict[str, Sorting]:
+        """The sorting the manifest recorded, for the documents that have one."""
+        return {
+            d: Sorting(e["category"], e.get("reason", ""))
+            for d, e in manifest.documents.items()
+            if "category" in e
+        }
+
+    def _commit(
+        self,
+        documents: dict[str, SourceFile | str],
+        before: Manifest,
+        known: dict[str, Sorting],
+        labels: dict[str, dict[str, str]] | None = None,
+        *,
+        credentials: dict[str, str] | None = None,
+        on_event: OnEvent | None = None,
+        cancel: threading.Event | None = None,
+    ) -> SyncReport:
+        """Index `documents` (every document the index should hold), then, if
+        every step worked, write the manifest and delete the previous index.
+        `known` is the sorting each already-sorted document keeps; `labels`
+        are for documents new to the manifest."""
+        labels = {
+            **{d: e["metadata"] for d, e in before.documents.items() if e.get("metadata")},
+            **(labels or {}),
+        }
+        report = self._index(
+            documents, credentials=credentials, on_event=on_event, cancel=cancel, known=known, labels=labels
+        )
         recipe = recipe_hash(self.config.index)
         after = Manifest(
             index_recipe=recipe,
@@ -722,32 +860,162 @@ class IndexPipeline:
                 doc_id: {
                     "content_hash": file.sha,
                     "chunk_set": report.documents[doc_id].stages["chunk"].artifact_id,
+                    "category": report.documents[doc_id].category,
+                    "reason": report.documents[doc_id].reason,
+                    **({"metadata": labels[doc_id]} if labels.get(doc_id) else {}),
                     # A fetched page's file name comes from its content type.
                     **({} if file.filename == PurePosixPath(doc_id).name else {"filename": file.filename}),
                 }
                 for doc_id, file in documents.items()
             },
         )
+
+        def same(doc_id: str) -> bool:
+            # An entry from before categories has no category to compare.
+            old, new = before.documents[doc_id], after.documents[doc_id]
+            return (
+                old["content_hash"] == new["content_hash"]
+                and old["chunk_set"] == new["chunk_set"]
+                and old.get("category", new["category"]) == new["category"]
+            )
+
         sync = SyncReport(
             documents=report.documents,
             index=report.index,
             added=sorted(set(after.documents) - set(before.documents)),
-            changed=sorted(
-                d for d in after.documents if d in before.documents and after.documents[d] != before.documents[d]
-            ),
+            changed=sorted(d for d in after.documents if d in before.documents and not same(d)),
             removed=sorted(set(before.documents) - set(after.documents)),
-            unchanged=sorted(d for d in after.documents if after.documents[d] == before.documents.get(d)),
+            unchanged=sorted(d for d in after.documents if d in before.documents and same(d)),
             config_changed=before.index_recipe is not None and before.index_recipe != recipe,
         )
         if sync.ok:
-            after.save(manifest_path)
+            after.save(self.config.path / MANIFEST)
             if before.index_artifact and before.index_artifact != after.index_artifact:
                 self.store.delete(before.index_artifact)
         return sync
 
+    def add(
+        self,
+        file: str | Path,
+        *,
+        category: str | None = None,
+        metadata: dict[str, str] | None = None,
+        credentials: dict[str, str] | None = None,
+        on_event: OnEvent | None = None,
+        cancel: threading.Event | None = None,
+    ) -> SyncReport:
+        """Add one file or link to the documents in the manifest and save it.
+
+        It goes to `category`, else where the route sends it, and the reason is
+        saved. `metadata` is its labels. The index is rebuilt, but every other
+        document is a cache hit. The id is the file name, or the link; one that
+        is already indexed raises ValueError. Works with the upload source only.
+        """
+        before, stored = self._stored()
+        self._check_recorded(before)
+        self._check_names({"": category} if category else None)
+        for doc_id in self._ids(file):
+            if doc_id in stored:
+                raise ValueError(f"`{doc_id}` is already in the index. Use p.index.move to change its category.")
+        found = self._documents(file)
+        known = self._recorded(before)
+        if category:
+            known.update({d: Sorting(category, "Chosen when added") for d in found})
+        labels = {d: metadata for d in found} if metadata else None
+        return self._commit(
+            {**stored, **found}, before, known, labels, credentials=credentials, on_event=on_event, cancel=cancel
+        )
+
+    def move(
+        self,
+        document: str,
+        category: str,
+        *,
+        credentials: dict[str, str] | None = None,
+        on_event: OnEvent | None = None,
+        cancel: threading.Event | None = None,
+    ) -> SyncReport:
+        """Move a document to another category and save it. Only that document
+        runs parse, clean and chunk again; its old pieces leave the index. An
+        unknown document or category raises ValueError. Moving a document to
+        the category it is in runs nothing."""
+        before, stored = self._stored()
+        if document not in stored:
+            raise ValueError(f"`{document}` is not in the index. The documents are: {', '.join(stored) or 'none'}.")
+        self._check_names({document: category})
+        if before.documents[document].get("category") == category:
+            return SyncReport(documents={}, index=None, unchanged=[document])
+        self._check_recorded(before, moving=document)
+        known = self._recorded(before)
+        known[document] = Sorting(category, "Chosen when moved")
+        self._pins.pop(document, None)
+        return self._commit(stored, before, known, credentials=credentials, on_event=on_event, cancel=cancel)
+
+    def sort(
+        self, file: str | Path | list[str | Path], *, metadata: dict[str, dict[str, str]] | None = None
+    ) -> dict[str, Sorting]:
+        """What category each file would get now, and why, by document id.
+        Nothing runs and nothing is written for a file; a link is fetched and
+        kept in `sources/`. `metadata` gives labels by document id. Works with
+        the upload source only."""
+        if not self._uploads():
+            raise ValueError("sort works with local files (the upload source).")
+        items = file if isinstance(file, list) else [file]
+        labels = {**self._labels, **(metadata or {})}
+        needs_info = any(rule.when for rule in self.config.index.route)
+        files = [i for i in items if not is_url(i)]
+        infos: dict[str, DocumentInfo | None] = {}
+        for doc_id, path in _files(files) if files else []:
+            infos[doc_id] = (
+                document_info(path, filename=path.name, doc_id=doc_id, metadata=labels.get(doc_id))
+                if needs_info
+                else None
+            )
+        for url in (i for i in items if is_url(i)):
+            infos[url] = self._info(url, self._fetch(url), labels.get(url)) if needs_info else None
+        return {
+            doc_id: sort_document(self.config.index.route, info, pinned=self._pins.get(doc_id))
+            for doc_id, info in sorted(infos.items())
+        }
+
+    def listed(self) -> list[DocumentEntry]:
+        """The documents in the manifest, sorted by id."""
+        manifest = Manifest.load(self.config.path / MANIFEST)
+        return [
+            DocumentEntry(
+                id=doc_id,
+                filename=entry.get("filename", PurePosixPath(doc_id).name),
+                category=entry.get("category", "unsorted"),
+                reason=entry.get("reason", ""),
+                metadata=dict(entry.get("metadata", {})),
+                content_hash=entry["content_hash"],
+            )
+            for doc_id, entry in sorted(manifest.documents.items())
+        ]
+
+    def _stored(self) -> tuple[Manifest, dict[str, SourceFile | str]]:
+        """The manifest and its documents as stored files (upload only)."""
+        if not self._uploads():
+            raise ValueError(
+                "add, move and sync work with local files (the upload source); index.run works with any source."
+            )
+        manifest = Manifest.load(self.config.path / MANIFEST)
+        return manifest, {
+            doc_id: SourceFile(sha=e["content_hash"], filename=e.get("filename", PurePosixPath(doc_id).name))
+            for doc_id, e in sorted(manifest.documents.items())
+        }
+
     def _uploads(self) -> bool:
         """The documents are local files (the upload source)."""
         return self.config.index.source[0] == "upload"
+
+    def _ids(self, paths: Documents) -> list[str]:
+        """The document ids `_documents` would give, without storing anything."""
+        if isinstance(paths, dict):
+            return [str(d) for d in paths]
+        items = paths if isinstance(paths, list) else [paths]
+        files = [i for i in items if not is_url(i)]
+        return [d for d, _ in (_files(files) if files else [])] + [str(i) for i in items if is_url(i)]
 
     def _documents(self, paths: Documents) -> dict[str, SourceFile | str]:
         """By document id: with upload, every file at `paths`, kept in
@@ -797,6 +1065,8 @@ class IndexPipeline:
         force: bool = False,
         remember: bool = True,
         categories: dict[str, str] | None = None,
+        known: dict[str, Sorting] | None = None,
+        labels: dict[str, dict[str, str]] | None = None,
     ) -> IndexReport:
         """Index `documents`. `remember=False` leaves `self.documents` as it
         was; evaluate's trace of a miss uses it so the pipeline is unchanged."""
@@ -809,7 +1079,7 @@ class IndexPipeline:
                 path = self.sources.path(file.sha, file.filename)
                 if path.is_file():
                     check_contents(path, file.filename)
-        sorted_ = self._sort(documents, categories, reuse=not remember)
+        sorted_ = self._sort(documents, categories, reuse=not remember, known=known, labels=labels)
         chosen = {doc_id: s.category for doc_id, s in sorted_.items()}
         graph, roles = self.graph(documents, chosen)
         known = self.config.index.categories
@@ -908,18 +1178,18 @@ class IndexPipeline:
             raise ValueError(
                 "There is no index to search yet: index some documents first, with p.index.run."
             )
-        manifest = Manifest.load(self.config.path / MANIFEST)
+        manifest, stored = self._stored()
         if not manifest.documents:
             raise ValueError(
                 "There is no index to search yet: index some files first, with "
                 "p.index.run or p.index.sync."
             )
-        return {
-            doc_id: SourceFile(
-                sha=entry["content_hash"], filename=entry.get("filename", PurePosixPath(doc_id).name)
-            )
-            for doc_id, entry in manifest.documents.items()
-        }
+        # Build each document with the category the sync recorded.
+        self._check_recorded(manifest)
+        recorded = self._recorded(manifest)
+        self._categories = {**(self._categories or {}), **{d: s.category for d, s in recorded.items()}}
+        self._sortings.update(recorded)
+        return stored
 
     def graph(
         self, documents: dict[str, SourceFile | str], categories: dict[str, str] | None = None

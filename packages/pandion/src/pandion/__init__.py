@@ -19,6 +19,7 @@ from pandion.models import ModelSettings, preload_embedder, preload_parser, prel
 from pandion.config import ConfigError
 from pandion.pipeline import (
     Answer,
+    DocumentEntry,
     IndexPipeline,
     Pipeline,
     QueryPipeline,
@@ -48,6 +49,7 @@ __all__ = [
     "Answer",
     "Comparison",
     "Comparisons",
+    "DocumentEntry",
     "ConfigError",
     "EvaluationReport",
     "IndexPipeline",

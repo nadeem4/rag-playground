@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
 import { keyMissing, keyNeedFor, missingKeySteps, needsKey, useApiKey, withArticle } from "@/api/apiKey"
 import { v2 } from "@/api/v2"
@@ -23,7 +23,8 @@ import { FirstRun } from "@/components/pipeline/FirstRun"
 import { KeptNotice } from "@/components/pipeline/KeptNotice"
 import { fmtMs, plainName } from "@/components/pipeline/NodeCard"
 import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
-import { ShowingDocument } from "@/components/pipeline/ShowingDocument"
+import { IndexDocuments } from "@/components/inspectors/IndexByDocument"
+import { DocumentTabs, tabIdOf } from "@/components/pipeline/DocumentTabs"
 import { PipelineBar } from "@/components/pipeline/PipelineBar"
 import { RunStrip, stripSegments, type LiveRun, type StripLine } from "@/components/pipeline/RunStrip"
 import { GuideCoach } from "@/components/guide/GuideCoach"
@@ -56,6 +57,7 @@ import {
   useStoredGraph,
   type PipelineGraph,
 } from "@/state/graph"
+import { fileOf, filesOf, type FileInfo } from "@/lib/files"
 import { clearDocument, documentOf, documentsOf, useDocument } from "@/state/document"
 import { starterPipeline, useStarter } from "@/state/starter"
 import { GUIDE_RULE, readGuide } from "@/state/guide"
@@ -188,6 +190,9 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   const pipelineDocs = documentsOf(graph)
   const [shownSha, setShownSha] = useState<string | null>(null)
   const shownDoc = pipelineDocs.find((d) => d.sha === shownSha) ?? pipelineDocs[0] ?? null
+  const files = filesOf(pipelineDocs)
+  const shownFile = fileOf(files, shownDoc?.sha)
+  const tabs: DocTabs = { files, value: shownDoc?.sha ?? "", onChange: setShownSha }
   const shownFilename = pipelineDocs.length > 1 ? (shownDoc?.filename ?? null) : null
   const shownRunSha = pipelineDocs.length > 1 ? shownDoc?.sha : undefined
   const shown = useMemo(() => forDocument(results, shownFilename, shownRunSha), [results, shownFilename, shownRunSha])
@@ -669,11 +674,9 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
             <>
               {/* On a phone the Inspector is a sheet, so the invitation sits above the cards instead. */}
               {isPhone && guide.invite ? <div className="p-3">{guide.invite}</div> : null}
-              {pipelineDocs.length > 1 ? (
-                <ShowingDocument documents={pipelineDocs} value={shownDoc?.sha ?? ""} onChange={setShownSha} />
-              ) : null}
               <PipelineColumn
                 graph={graph}
+                file={shownFile}
                 registry={registry}
                 results={shown}
                 stale={stale}
@@ -717,7 +720,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
           </OutputSheet>
         ) : outputOpen && inspectedNode ? (
           <OutputSheet title={titleFor(inspectedNode)} sub={`${plainName(inspectedNode.transform)}, ${inspectedNode.transform}`} onClose={closeOutput}>
-            <InspectorPanel graph={graph} registry={registry} results={shown} stale={stale} selected={inspected} roomForButton={false} inSheet />
+            <InspectorPanel graph={graph} registry={registry} results={shown} stale={stale} selected={inspected} tabs={tabs} roomForButton={false} inSheet />
           </OutputSheet>
         ) : null
       ) : guide.askResults ? (
@@ -731,6 +734,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
           results={shown}
           stale={stale}
           selected={inspected}
+          tabs={tabs}
           failedHint={failedNode && INDEX_STAGES.includes(failedNode.stage) ? titleFor(failedNode) : undefined}
           roomForButton={!dock.open && !guide.active}
           invite={isPhone ? null : guide.invite}
@@ -808,12 +812,23 @@ const BUILD_TITLE = "Runs Document, Parse, Clean, Chunk and Index with their cur
 /** Stages whose output is placed on the upstream chunk set's document. */
 const RETRIEVAL = new Set(["retrieve", "rerank", "use_case"])
 
+/** The document tabs' props: one choice shared by the cards and the Parse, Clean and Chunk panes. */
+interface DocTabs {
+  files: FileInfo[]
+  value: string
+  onChange: (sha: string) => void
+}
+
+/** The steps that run once for each document. */
+const TAB_STAGES = ["parse", "clean", "chunk"]
+
 function InspectorPanel({
   graph,
   registry,
   results,
   stale,
   selected,
+  tabs,
   failedHint,
   roomForButton,
   inSheet = false,
@@ -824,6 +839,7 @@ function InspectorPanel({
   results: Record<string, NodeState>
   stale: Set<string>
   selected: string | null
+  tabs: DocTabs
   failedHint?: string
   /** The guided run's invitation, shown while nothing has run. */
   invite?: ReactNode
@@ -847,7 +863,7 @@ function InspectorPanel({
       </section>
     )
   }
-  return <CardInspector graph={graph} registry={registry} results={results} stale={stale} node={picked} roomForButton={roomForButton} inSheet={inSheet} />
+  return <CardInspector graph={graph} registry={registry} results={results} stale={stale} node={picked} tabs={tabs} roomForButton={roomForButton} inSheet={inSheet} />
 }
 
 function CardInspector({
@@ -856,6 +872,7 @@ function CardInspector({
   results,
   stale,
   node,
+  tabs,
   roomForButton,
   inSheet = false,
 }: {
@@ -864,6 +881,7 @@ function CardInspector({
   results: Record<string, NodeState>
   stale: Set<string>
   node: GraphNode
+  tabs: DocTabs
   /** Ask is closed: the round button sits over the foot of the pane. */
   roomForButton: boolean
   /** Inside the phone's output sheet, whose head already names the step: no title of its own. */
@@ -887,10 +905,15 @@ function CardInspector({
   const docResult = docNode ? results[docNode.id] : undefined
   const docId = artifactId && docResult && !stale.has(docNode!.id) ? docResult.artifact_id : undefined
 
+  // The Index pane counts the chunks each document made, from the Chunk step's own results.
+  const chunkNode = node.stage === "index" ? upstreamOfStage(graph, node.id, "chunk") : undefined
+
   const payload = useArtifactPayload(artifactId)
   const before = useArtifactPayload(relatedId)
   const parsed = useArtifactPayload(docId)
   const verb = titleFor(node)
+  const tabbed = TAB_STAGES.includes(node.stage)
+  const panelId = `${useId()}-doc`
 
   let body: ReactNode
   if (!result) {
@@ -927,6 +950,9 @@ function CardInspector({
           status={waitingBefore ? { kind: "loading" } : payload.status}
           context={context}
         />
+        {node.stage === "index" ? (
+          <IndexDocuments files={tabs.files} documents={chunkNode && !stale.has(chunkNode.id) ? results[chunkNode.id]?.documents : undefined} />
+        ) : null}
       </>
     )
   }
@@ -958,7 +984,18 @@ function CardInspector({
       </div>
       {/* While Ask is closed, room at the foot so the round Ask button never covers the last line. */}
       <div data-testid="main-scroll" className={cn("p-3 md:min-h-0 md:flex-1 md:overflow-y-auto", roomForButton && "pb-[72px]")}>
-        {body}
+        {tabbed ? (
+          <div className="mb-3 empty:hidden">
+            <DocumentTabs {...tabs} panelId={panelId} />
+          </div>
+        ) : null}
+        {tabbed && tabs.files.length > 1 ? (
+          <div role="tabpanel" id={panelId} aria-labelledby={tabIdOf(panelId, tabs.value)}>
+            {body}
+          </div>
+        ) : (
+          body
+        )}
       </div>
     </section>
   )

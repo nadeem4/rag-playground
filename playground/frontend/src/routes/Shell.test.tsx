@@ -2200,14 +2200,84 @@ describe("a pipeline on several documents", () => {
     storeGraph(both())
     render(<Shell />)
     await waitFor(() => expect(card("parse")).toBeTruthy())
-    const showing = screen.getByLabelText("Showing the steps for") as HTMLSelectElement
-    expect([...showing.options].map((o) => o.textContent)).toEqual(["report.pdf", "notes.md"])
-    expect(showing.value).toBe(SOURCE.sha)
-    fireEvent.change(showing, { target: { value: NOTES.sha } })
-    expect(showing.value).toBe(NOTES.sha)
+    expect(screen.queryByLabelText("Showing the steps for")).toBeNull()
+    fireEvent.click(within(card("chunk")).getByRole("button", { name: "Chunk" }))
+    const tabs = await screen.findAllByRole("tab")
+    expect(tabs.map((t) => t.textContent)).toEqual(["report.pdf", "notes.md"])
+    expect(tabs[0].getAttribute("aria-selected")).toBe("true")
+    fireEvent.click(tabs[1])
+    expect(screen.getAllByRole("tab")[1].getAttribute("aria-selected")).toBe("true")
+    const panel = screen.getByRole("tabpanel")
+    expect(panel.getAttribute("aria-labelledby")).toBe(screen.getAllByRole("tab")[1].id)
+    expect(screen.getAllByRole("tab")[1].getAttribute("aria-controls")).toBe(panel.id)
     fireEvent.click(screen.getByRole("button", { name: "Build the index" }))
     await waitFor(() => expect(posts).toHaveLength(1))
     expect((posts[0].body as { documents: string[] }).documents).toEqual([SOURCE.sha, NOTES.sha])
+  })
+
+  it("the Parse, Clean and Chunk cards and panes all follow one choice of document", async () => {
+    storeGraph(both())
+    render(<Shell />)
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    const fileOn = (stage: string) => card(stage).querySelector("[data-file-tag]")?.getAttribute("title")
+    expect(fileOn("parse")).toBe("report.pdf")
+    fireEvent.click(within(card("chunk")).getByRole("button", { name: "Chunk" }))
+    fireEvent.click((await screen.findAllByRole("tab"))[1])
+    expect(fileOn("parse")).toBe("notes.md")
+    expect(fileOn("chunk")).toBe("notes.md")
+    fireEvent.click(within(card("parse")).getByRole("button", { name: "Parse" }))
+    await waitFor(() => expect(screen.getAllByRole("tab")[1].getAttribute("aria-selected")).toBe("true"))
+  })
+
+  it("shows no tabs and no file tags with one document", async () => {
+    storeGraph(withDocuments(initialGraph(TEST_REGISTRY), [{ sha: SOURCE.sha, filename: SOURCE.filename }]))
+    render(<Shell />)
+    await waitFor(() => expect(card("parse")).toBeTruthy())
+    fireEvent.click(within(card("chunk")).getByRole("button", { name: "Chunk" }))
+    await screen.findByLabelText("Inspector")
+    expect(screen.queryAllByRole("tab")).toHaveLength(0)
+    expect(document.querySelector("[data-file-tag]")).toBeNull()
+  })
+
+  it("the Index pane counts the chunks each document made, with the total", async () => {
+    const sent: { onmessage: ((e: MessageEvent) => void) | null }[] = []
+    class OpenES {
+      onmessage: ((e: MessageEvent) => void) | null = null
+      onerror = null
+      onopen = null
+      constructor() {
+        sent.push(this)
+      }
+      close() {}
+    }
+    vi.stubGlobal("EventSource", OpenES)
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    const sizes: Record<string, number> = { "ck-report": 3, "ck-notes": 5 }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const m = /^\/api\/v2\/results\/([^/]+)(\/payload)?$/.exec(url)
+        if (m && m[1] in sizes) return new Response(JSON.stringify(m[2] ? { chunks: Array.from({ length: sizes[m[1]] }, () => ({})) } : { id: m[1] }), { status: 200 })
+        if (m && m[1] === "idx-both") return new Response(JSON.stringify(m[2] ? { dim: 4 } : { id: m[1] }), { status: 200 })
+        return base(url, init)
+      }),
+    )
+    storeGraph(both())
+    render(<Shell />)
+    const build = await screen.findByRole("button", { name: "Build the index" })
+    await act(async () => {})
+    await waitFor(() => expect((build as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(build)
+    await waitFor(() => expect(sent).toHaveLength(1))
+    const emit = (e: Record<string, unknown>, id: string) =>
+      act(() => sent[0].onmessage!(new MessageEvent("message", { data: JSON.stringify(e), lastEventId: id })))
+    emit({ event: "node_finished", node_id: `${SOURCE.sha}::chunk`, document: SOURCE.sha, step: "chunk", artifact_id: "ck-report", cache_hit: false, duration_ms: 1 }, "1")
+    emit({ event: "node_finished", node_id: `${NOTES.sha}::chunk`, document: NOTES.sha, step: "chunk", artifact_id: "ck-notes", cache_hit: false, duration_ms: 1 }, "2")
+    emit({ event: "node_finished", node_id: "index", artifact_id: "idx-both", cache_hit: false, duration_ms: 1 }, "3")
+    emit({ event: "stream_end", status: "finished", ok: true }, "4")
+    fireEvent.click(within(card("index")).getByTestId("card-title"))
+    const table = await screen.findByTestId("index-by-document")
+    await waitFor(() => expect(within(table).getByText("Total").closest("tr")!.textContent).toContain("8"))
   })
 
   it("removes a document from the Document card, and with one left there is nothing to pick", async () => {
@@ -2215,7 +2285,7 @@ describe("a pipeline on several documents", () => {
     render(<Shell />)
     await waitFor(() => expect(card("parse")).toBeTruthy())
     fireEvent.click(within(card("source")).getByRole("button", { name: /^Remove .*notes.* from this pipeline$/i }))
-    await waitFor(() => expect(screen.queryByLabelText("Showing the steps for")).toBeNull())
+    await waitFor(() => expect(document.querySelector("[data-file-tag]")).toBeNull())
     expect(documentsOf(readStoredGraph(TEST_REGISTRY))).toEqual([{ sha: SOURCE.sha, filename: SOURCE.filename }])
   })
 })

@@ -11,6 +11,7 @@ import type { FieldErrors } from "@/components/fields/schema"
 import { KeyHint } from "@/components/ApiKeyControl"
 import { DocumentControl } from "@/components/DocumentControl"
 import { DocumentItem } from "@/components/DocumentItem"
+import { FileTag } from "@/components/FileTag"
 import { fmt } from "@/components/inspectors/status"
 import { SchemaForm } from "@/components/SchemaForm"
 import { Button } from "@/components/ui/button"
@@ -43,6 +44,8 @@ import { MonoNumbers, WhatItDid } from "./WhatItDid"
 
 export interface NodeCardProps {
   node: GraphNode
+  /** The document this card shows, when the pipeline has several (Parse, Clean and Chunk). */
+  file?: { filename: string; slot: number }
   title: string
   transforms: TransformInfo[]
   result?: NodeState
@@ -273,6 +276,9 @@ function revealIfHidden(el: HTMLElement | null) {
   if (r.top < view.top || r.bottom > view.bottom) el.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" })
 }
 
+/** The steps that run once for each document. */
+const FILE_STAGES: string[] = ["parse", "clean", "chunk"]
+
 export function NodeCard(p: NodeCardProps) {
   const id = useId()
   // The Document card is deliberately plain: no run status, no explain button,
@@ -445,7 +451,7 @@ export function NodeCard(p: NodeCardProps) {
         {shown.look === "running" && !isSource ? (
           <span aria-hidden data-testid="running-bar" className="step-running-edge pointer-events-none absolute inset-x-0 top-0 h-[2px] rounded-t-panel bg-primary" />
         ) : null}
-        <div className="flex items-center gap-x-2">
+        <div className="flex min-w-0 items-center gap-x-2">
           <h3 className="text-sm font-semibold">
             <button
               type="button"
@@ -480,6 +486,7 @@ export function NodeCard(p: NodeCardProps) {
               </span>
             </button>
           </h3>
+          {p.file && FILE_STAGES.includes(p.node.stage) ? <FileTag file={p.file} /> : null}
           {/* The gear opens and closes the settings, on the title line so it never wraps away.
               The Document card has nothing to open. */}
           {isSource ? null : (

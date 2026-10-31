@@ -777,3 +777,24 @@ describe("guided run look", () => {
     expect(el.className).not.toContain("opacity-50")
   })
 })
+
+describe("the file a step card shows", () => {
+  it("the Parse card names the file it shows when there are several documents", () => {
+    const parse = initialGraph(R).nodes.find((n) => n.stage === "parse")!
+    renderCard({ node: parse, title: "Parse", transforms: transformsFor(R, "parse"), file: { filename: "notes.md", slot: 2 } })
+    const tag = screen.getByRole("article").querySelector("[data-file-tag]")!
+    expect(tag.getAttribute("title")).toBe("notes.md")
+  })
+
+  it("lets the file tag shrink to the room there is, with no fixed cap", () => {
+    const parse = initialGraph(R).nodes.find((n) => n.stage === "parse")!
+    renderCard({ node: parse, title: "Parse", transforms: transformsFor(R, "parse"), file: { filename: "a-very-long-file-name.pdf", slot: 2 } })
+    expect(screen.getByRole("article").querySelector("[data-file-tag]")!.className).not.toMatch(/max-w-\[\d+ch\]/)
+  })
+
+  it("has no file tag with one document", () => {
+    const parse = initialGraph(R).nodes.find((n) => n.stage === "parse")!
+    renderCard({ node: parse, title: "Parse", transforms: transformsFor(R, "parse") })
+    expect(screen.getByRole("article").querySelector("[data-file-tag]")).toBeNull()
+  })
+})

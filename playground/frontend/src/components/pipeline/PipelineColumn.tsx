@@ -31,6 +31,8 @@ export interface PipelineColumnProps {
   results: Record<string, NodeState>
   /** Node ids whose stored result no longer matches the graph. */
   stale: Set<string>
+  /** The document the cards show, when the pipeline has several. */
+  file?: { filename: string; slot: number }
   selected: string | null
   busy: boolean
   errors: Record<string, NodeErrors>
@@ -122,6 +124,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
           <Fragment key={node.id}>
             <NodeCard
               node={node}
+              file={p.file}
               title={title}
               transforms={transformsFor(p.registry, node.stage)}
               upstream={upstreamFor(p.graph, p.registry, node.id)}

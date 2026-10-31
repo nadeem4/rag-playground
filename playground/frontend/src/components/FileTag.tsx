@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 
 /** A file's colour dot, alone: for a pill or a row that names the file beside it. */
 export function FileDot({ slot }: { slot: number }) {
-  return <span aria-hidden data-file-dot="" className="size-[7px] shrink-0 rounded-[2px]" style={{ background: `var(--file-${slot})` } as CSSProperties} />
+  return <span aria-hidden data-file-dot="" className="size-[7px] shrink-0 rounded-[2px] ring-1 ring-fg-muted" style={{ background: `var(--file-${slot})` } as CSSProperties} />
 }
 
 /**

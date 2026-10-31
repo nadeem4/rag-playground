@@ -241,12 +241,14 @@ To move a document to a Category that does not exist yet, pick **Move to a new c
 end of the **Category** menu and type a name. The Category the document was in is copied under
 the new name, and only that document moves to the copy.
 
-Open **Categories**, above the cards, to change a Category in one place. It shows the name, which
-template the Category started from, and a line such as "Used by 3 documents". Rename it there,
-or use **Add a category** to start a new one from a template. **Remove** is switched off while
+Press **Categories**, above the cards, to change a Category in one place. It starts on the Category
+of the document on show, and the **Category to edit** menu picks any other. It shows the name, which
+template the Category started from, and a line such as "Used by 3 documents". Rename it there, or
+use **Add a category** to start a new one from a template. **Remove** is switched off while
 documents use the Category or a rule sends documents to it, and the line beside it says which.
 A pipeline always keeps at least one Category. The Parse, Clean and Chunk settings of the
-Category are the cards below.
+Category on show are the cards below. When a pipeline has several documents, the **Category** menu
+and **Categories** are there even before you add a second Category.
 
 ### The guided run
 

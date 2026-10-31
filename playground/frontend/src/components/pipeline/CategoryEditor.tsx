@@ -1,8 +1,9 @@
-import { useEffect, useId, useMemo, useState } from "react"
+import { useEffect, useId, useState } from "react"
 
 import { api } from "@/api/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Picker } from "@/components/ui/Picker"
 import { addFromTemplate, removeCategory, renameCategory } from "@/state/categories"
 import { categoriesOf, type PipelineConfig } from "@/state/config"
 import type { DocRef } from "@/state/sourceDocs"
@@ -37,7 +38,7 @@ export function CategoryEditor({
       <label htmlFor={field} className="text-xs text-fg-muted">
         Category name
       </label>
-      <Input id={field} value={def.name ?? id} maxLength={60} onChange={(e) => onChange(renameCategory(config, id, e.target.value))} />
+      <Input id={field} value={def.name ?? id} maxLength={60} onChange={(e) => onChange(renameCategory(config, id, e.target.value.trim() ? e.target.value : id))} />
       {def.template ? <p className="text-fg-muted">{origin ? `Started from ${origin.name}` : `Started from ${def.template}`}</p> : null}
       <p>{`Used by ${users.length} ${users.length === 1 ? "document" : "documents"}`}</p>
       <div className="flex flex-wrap items-center gap-2">
@@ -100,19 +101,25 @@ export function NewCategoryForm({ onSubmit, onCancel }: { onSubmit: (name: strin
   )
 }
 
-/** "Categories" under the tabs: the editor of the category on show. The templates load when it first opens. */
+/**
+ * "Categories" under the tabs: the editor of one category. It starts on the
+ * category of the document on show (`shown`); the menu picks any other. The
+ * templates load when it first opens.
+ */
 export function CategoriesSection({
-  id,
+  shown,
   config,
-  users,
+  usersOf,
   onChange,
 }: {
-  id: string
+  shown: string
   config: PipelineConfig
-  users: DocRef[]
+  usersOf: (id: string) => DocRef[]
   onChange: (config: PipelineConfig) => void
 }) {
+  const label = useId()
   const [open, setOpen] = useState(false)
+  const [picked, setPicked] = useState<string | null>(null)
   const [templates, setTemplates] = useState<IndexTemplate[] | null>(null)
   useEffect(() => {
     if (!open || templates) return
@@ -125,11 +132,32 @@ export function CategoriesSection({
       live = false
     }
   }, [open, templates])
-  const list = useMemo(() => templates ?? [], [templates])
+  const cats = categoriesOf(config)
+  const id = picked && picked in cats ? picked : shown
   return (
-    <details className="border-b border-hairline" onToggle={(e) => setOpen(e.currentTarget.open)}>
-      <summary className="cursor-pointer p-3 text-sm font-medium">Categories</summary>
-      {open && templates ? <CategoryEditor id={id} config={config} users={users} templates={list} onChange={onChange} /> : null}
-    </details>
+    <div className="border-b border-hairline">
+      <Button variant="ghost" size="sm" className="m-2" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        Categories
+      </Button>
+      {open ? (
+        <>
+          {Object.keys(cats).length > 1 ? (
+            <div className="flex items-center gap-2 px-3">
+              <span id={`${label}-label`} className="text-xs text-fg-muted">
+                Category to edit
+              </span>
+              <Picker
+                id={`${label}-menu`}
+                labelledBy={`${label}-label`}
+                options={Object.entries(cats).map(([k, c]) => ({ value: k, name: c.name ?? k }))}
+                value={id}
+                onChange={setPicked}
+              />
+            </div>
+          ) : null}
+          <CategoryEditor id={id} config={config} users={usersOf(id)} templates={templates ?? []} onChange={onChange} />
+        </>
+      ) : null}
+    </div>
   )
 }

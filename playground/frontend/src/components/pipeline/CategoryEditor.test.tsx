@@ -52,6 +52,12 @@ describe("CategoryEditor", () => {
     expect(next.categories!.default).toEqual(CONFIG.categories!.default)
   })
 
+  it("an empty name falls back to the id", () => {
+    const onChange = show("reports", [])
+    fireEvent.change(screen.getByLabelText("Category name"), { target: { value: "  " } })
+    expect((onChange.mock.calls[0][0] as PipelineConfig).categories!.reports.name).toBe("reports")
+  })
+
   it("Remove explains which documents use the category", () => {
     show("reports", [doc(1), doc(2)])
     const remove = screen.getByRole("button", { name: "Remove" }) as HTMLButtonElement

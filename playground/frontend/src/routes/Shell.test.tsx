@@ -2345,10 +2345,23 @@ describe("a pipeline with categories", () => {
     expect(sent.route).toEqual([{ category: "default" }])
   })
 
-  it("Move to a new category copies the category and moves only the shown document", async () => {
+  it("Move to a new category copies the category, moves only the shown document and reuses the others", async () => {
+    const streams: { onmessage: ((m: MessageEvent<string>) => void) | null }[] = []
+    class OpenES {
+      onmessage: ((m: MessageEvent<string>) => void) | null = null
+      onerror = null
+      onopen = null
+      constructor() {
+        streams.push(this)
+      }
+      close() {}
+    }
+    vi.stubGlobal("EventSource", OpenES)
     keepWorking()
     render(<Shell />)
     await waitFor(() => expect(card("chunk")).toBeTruthy())
+    fireEvent.click(screen.getByRole("button", { name: "Build the index" }))
+    await waitFor(() => expect(posts).toHaveLength(1))
     fireEvent.click(within(card("chunk")).getByRole("button", { name: "Chunk" }))
     fireEvent.click((await screen.findAllByRole("tab"))[1])
     choose(screen.getByRole("button", { name: /Category/ }), "Move to a new category")
@@ -2357,6 +2370,58 @@ describe("a pipeline with categories", () => {
     await waitFor(() => expect(readWorking()!.config.categories!["big-tables"]).toMatchObject({ name: "Big tables", chunk: { use: "token_based" } }))
     expect(readWorking()!.documents.map((d) => d.category)).toEqual(["default", "big-tables"])
     expect(readWorking()!.config.route).toEqual([{ category: "default" }])
+    await waitFor(() => expect(posts).toHaveLength(2))
+    expect((posts[1].body as { categories: unknown }).categories).toEqual({ [SOURCE.sha]: "default", [NOTES.sha]: "big-tables" })
+    const send = (e: Record<string, unknown>, id: string) =>
+      act(() => streams[streams.length - 1].onmessage!(new MessageEvent("message", { data: JSON.stringify(e), lastEventId: id })))
+    send({ event: "node_finished", node_id: "chunk", document: "report.pdf", artifact_id: "c1", cache_hit: true, duration_ms: 1 }, "1")
+    send({ event: "node_finished", node_id: "chunk", document: "notes.md", artifact_id: "c2", cache_hit: false, duration_ms: 1 }, "2")
+    send({ event: "stream_end", status: "finished", ok: true }, "3")
+    // The moved document is computed in its new category; the other came back reused (its own column
+    // draws it as out of date, because outputs are marked stale per column, not per category).
+    fireEvent.click(screen.getAllByRole("tab")[1])
+    await waitFor(() => expect(screen.getByTestId("inspector-timing").textContent).toContain("computed"))
+  })
+
+  it("an old-shape pipeline on two documents says Used by 2 documents and can move one to a new category", async () => {
+    const base = graphToConfig(withDocuments(initialGraph(TEST_REGISTRY), [{ sha: SOURCE.sha, filename: SOURCE.filename }, NOTES]))
+    if (!base.ok) throw new Error(base.problem)
+    storeWorking({ ...base.pipeline, documents: [{ sha: SOURCE.sha, filename: SOURCE.filename }, { sha: NOTES.sha, filename: NOTES.filename }] })
+    render(<Shell />)
+    await waitFor(() => expect(card("chunk")).toBeTruthy())
+    fireEvent.click(within(card("chunk")).getByRole("button", { name: "Chunk" }))
+    fireEvent.click(screen.getByRole("button", { name: "Categories" }))
+    expect(screen.getByText("Used by 2 documents")).toBeTruthy()
+    fireEvent.click((await screen.findAllByRole("tab"))[1])
+    choose(screen.getByRole("button", { name: /^Category/ }), "Move to a new category")
+    fireEvent.change(screen.getByLabelText("Name of the new category"), { target: { value: "Scans" } })
+    fireEvent.click(screen.getByRole("button", { name: "Move" }))
+    await waitFor(() => expect(Object.keys(readWorking()!.config.categories ?? {})).toEqual(["default", "scans"]))
+    expect(readWorking()!.documents.find((d) => d.sha === NOTES.sha)!.category).toBe("scans")
+  })
+
+  it("an added category can be picked in Categories and removed when nothing uses it", async () => {
+    keepWorking()
+    const w = readWorking()!
+    storeWorking({ ...w, config: { ...w.config, categories: { ...w.config.categories!, spare: { name: "Spare", parse, chunk: { use: "token_based" } } } } })
+    render(<Shell />)
+    await waitFor(() => expect(card("chunk")).toBeTruthy())
+    fireEvent.click(screen.getByRole("button", { name: "Categories" }))
+    choose(screen.getByRole("button", { name: /Category to edit/ }), "Spare")
+    expect(screen.getByText("Used by 0 documents")).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }))
+    await waitFor(() => expect(Object.keys(readWorking()!.config.categories!)).toEqual(["default", "tables"]))
+  })
+
+  it("editing a card on the second tab changes only that document's category", async () => {
+    keepWorking()
+    render(<Shell />)
+    await waitFor(() => expect(card("chunk")).toBeTruthy())
+    fireEvent.click(within(card("chunk")).getByRole("button", { name: "Chunk" }))
+    fireEvent.click((await screen.findAllByRole("tab"))[1])
+    fireEvent.change(within(card("chunk")).getByLabelText("Max Tokens"), { target: { value: "300" } })
+    await waitFor(() => expect(readWorking()!.config.categories!.tables.chunk).toMatchObject({ max_tokens: 300 }))
+    expect(readWorking()!.config.categories!.default.chunk).toEqual({ use: "recursive_character" })
   })
 
   it("choosing a category for one document runs again with only that pin changed, and the others are reused", async () => {

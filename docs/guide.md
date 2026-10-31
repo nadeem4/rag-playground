@@ -250,6 +250,20 @@ A pipeline always keeps at least one Category. The Parse, Clean and Chunk settin
 Category on show are the cards below. When a pipeline has several documents, the **Category** menu
 and **Categories** are there even before you add a second Category.
 
+#### Routes
+
+Under the Category settings, **Routes** lists the rules that decide which Category a new document
+gets. Each rule has one or more checks, such as "the file type is pdf" or "the PDF has no text
+layer", and a Category. The first rule whose checks all pass wins, so the order matters. Use **Up** and
+**Down** to move a rule, **Add a rule** to add one, and **Add a check to rule** to make a rule need more
+than one thing. Each check has its own settings. A sentence under each rule says what it does, for
+example "When the file type is pdf and the PDF has no text layer, use Scanned PDFs."
+
+The last rule is always **Anything else**. It has no check, it cannot be moved or removed, and it
+catches every document no other rule took. A note reminds you that changing the rules affects new
+documents only: documents already sorted stay where they are. If the rules are not valid, a message
+says which rule to fix.
+
 ### The guided run
 
 When nothing has run yet on Build, an invite offers a guided run. It sits in the pane beside

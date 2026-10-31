@@ -97,7 +97,15 @@ export interface Lesson {
 }
 
 /** `stages` of `GET /api/v2/strategies`: stage -> transform name -> info. */
+/** One route check under `route` in `GET /strategies`: what a rule can test about a document. */
+export interface RouteCheckInfo {
+  name: string
+  summary: string
+  config_schema: JsonSchema
+}
 export type Registry = Partial<Record<Stage, Record<string, TransformInfo>>>
+/** The route checks of a registry as the server sent it: `route` sits beside the stages. None when the server lists none. */
+export const routeChecksOf = (registry: Registry): Record<string, RouteCheckInfo> => (registry as { route?: Record<string, RouteCheckInfo> }).route ?? {}
 
 // ---------------------------------------------------------------- payloads --
 

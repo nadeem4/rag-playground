@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { refreshUploads, useDocument } from "@/state/document"
 import { storeGraph } from "@/state/graph"
+import { servedConfig } from "@/state/config"
+import { storeWorking } from "@/state/working"
 import {
   base64ToBytes,
   buildExport,
@@ -192,13 +194,17 @@ export function Library({ go = navigate }: { go?: (path: string) => void } = {})
     }
     try {
       // The registry the page holds; asked for only if it has not arrived yet.
-      const graph = usableGraph(item.pipeline, registry ?? (await loadRegistry()))
+      const reg = registry ?? (await loadRegistry())
+      const graph = usableGraph(item.pipeline, reg)
       if (!graph) {
         setNotice(`${item.name} uses steps this server does not have, so it cannot open here.`)
         return
       }
       setCurrentId(item.id)
-      storeGraph(graph)
+      // With categories the whole pipeline is the working one, as the Build picker opens it.
+      const { config, documents, question } = item.pipeline
+      if (config?.categories) storeWorking({ config: servedConfig(config, reg).config, documents, question })
+      else storeGraph(graph)
       go("/build")
     } catch {
       setNotice("The server did not answer, so the pipeline could not open. Try again in a moment.")

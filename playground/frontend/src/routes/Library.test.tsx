@@ -350,6 +350,22 @@ describe("Library", () => {
     expect(fetchMock.mock.calls.filter(([u, i]) => u === "/api/v2/documents" && i?.method === "POST")).toHaveLength(3)
   })
 
+  it("opens a pipeline with categories as the whole working pipeline", async () => {
+    seed()
+    const go = await ready()
+    const c = graphToConfig(withDocument(initialGraph(registry), { sha: UP, filename: "NK_Resume.pdf" }))
+    if (!c.ok) throw new Error(c.problem)
+    const { store, ...steps } = c.pipeline.config.index
+    const config = { ...c.pipeline.config, index: { store }, categories: { default: { name: "Default", ...steps }, tables: { name: "Tables", ...steps } }, route: [{ category: "default" }] }
+    const item = { kind: "pipeline", id: "cats0000", name: "Two kinds", savedAt: iso(H), config, documents: c.pipeline.documents, question: c.pipeline.question }
+    const file = { format: "rag-playground-library", version: 2, exportedAt: new Date().toISOString(), items: [item], documents: [] }
+    fireEvent.change(screen.getByLabelText("Import a file", { selector: "input" }), { target: { files: [new File([JSON.stringify(file)], "lib.json", { type: "application/json" })] } })
+    await screen.findByText(/^Imported 1 pipeline from lib\.json\./)
+    fireEvent.click(within(row("Two kinds")).getByRole("button", { name: "Open in Build" }))
+    await waitFor(() => expect(go).toHaveBeenCalledWith("/build"))
+    expect(Object.keys(JSON.parse(storedGraphJson()!).config.categories)).toEqual(["default", "tables"])
+  })
+
   it("an imported pipeline that carries a prompt opens in Build without it", async () => {
     seed()
     const go = await ready()

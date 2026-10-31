@@ -3,17 +3,54 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, Callable
+from typing import Annotated, Any, Callable
 
 from fastapi import HTTPException, Request
+from pydantic import BaseModel, Field
 
 from pandion_api.credentials import guarded, redact
 from pandion_api.documents import NO_SUCH_DOCUMENT, SHA, safe_name
+from pandion_api.pipelines import problems
 
 #: What a run's work does on the worker thread: given the event callback, the
 #: cancel event and the keys (None when there are none), it returns
 #: (ok, cancelled, result) with a plain JSON result.
 Work = Callable[[Callable[[dict[str, Any]], None], threading.Event, dict[str, str] | None], tuple[bool, bool, Any]]
+
+
+#: One document's labels: at most 50, a name up to 2,000 characters, a value up to 10,000.
+Labels = Annotated[dict[Annotated[str, Field(max_length=2000)], Annotated[str, Field(max_length=10000)]], Field(max_length=50)]
+
+
+class SortedIn(BaseModel):
+    """A request body that names documents and may say which category each
+    goes to. Both maps are keyed by the document's sha, as `documents` is."""
+
+    #: Pin a document to a category; this wins over the route.
+    categories: dict[str, str] = {}
+    #: Labels for a document, read by the route's `metadata` check.
+    metadata: dict[str, Labels] = {}
+
+
+def assign_to(p: Any, body: SortedIn, names: list[str], request: Request) -> None:
+    """Give `p` the pins and labels of `body`, and the link each URL document
+    was fetched from. `names` are the document ids the pipeline knows, in the
+    order of `body.documents`. A pin or label for a document not in
+    `documents`, or a pin to an unknown category, is a 422."""
+    ids = dict(zip(body.documents, names))
+    store = request.app.state.documents
+    links = {name: d.origin_url for sha, name in ids.items() if (d := store.get(sha)) and d.origin_url}
+    for sha in [*body.categories, *body.metadata]:
+        if sha not in ids:
+            raise problems(f"categories and metadata name document {sha}, which is not one of the documents sent.")
+    try:
+        p.index.assign(
+            categories={ids[s]: c for s, c in body.categories.items()},
+            metadata={ids[s]: m for s, m in body.metadata.items()},
+            links=links,
+        )
+    except ValueError as exc:
+        raise problems(str(exc)) from None
 
 
 def documents_of(shas: list[str], request: Request) -> dict[str, str]:

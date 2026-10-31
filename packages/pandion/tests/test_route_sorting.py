@@ -231,3 +231,28 @@ def test_explain_refuses_the_route_stage():
 
     with pytest.raises(ValueError, match="checks.*no explain"):
         pandion.explain("route", "file_type", {"types": ["pdf"]})
+
+
+LINK_ROUTE = [{"when": {"use": "path", "pattern": "https://**"}, "category": "legal"}, {"category": "other"}]
+
+
+def test_a_pinned_link_routes_a_document_the_same_in_sort_and_run(tmp_path, _forget_parser):
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "page.pdf").write_bytes(build_pdf([["Hello there."]]))
+    p = make_pipeline(tmp_path, route=LINK_ROUTE)
+    p.index.assign(links={"page.pdf": "https://x/y"})
+    reason = "Rule 1: path matches https://**"
+    sorted_ = p.index.sort({"page.pdf": docs / "page.pdf"})["page.pdf"]
+    assert (sorted_.category, sorted_.reason) == ("legal", reason)
+    ran = p.index.run(docs, through="parse").documents["page.pdf"]
+    assert (ran.category, ran.reason) == ("legal", reason)
+
+
+def test_document_info_reads_the_path_from_the_link(tmp_path):
+    from pandion.docinfo import document_info
+
+    file = tmp_path / "page.html"
+    file.write_text("<html></html>", encoding="utf-8")
+    assert document_info(file, filename="page.html", doc_id="page.html").path == ""
+    assert document_info(file, filename="page.html", doc_id="page.html", link="https://x/y").path == "https://x/y"

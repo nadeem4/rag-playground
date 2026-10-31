@@ -136,7 +136,7 @@ def test_every_key_is_scrubbed_from_events_and_the_result(tmp_path, monkeypatch)
         seen["credentials"] = credentials
         on_event({"event": "node_failed", "ts": 0, "node_id": "x", "error": "Traceback: bad key sk-secret-123"})
         failed = StageResult(stage="parse", transform="pdfium", output=None, status="failed", error="bad key sk-secret-123")
-        return SimpleNamespace(ok=False, documents={"report.pdf": SimpleNamespace(stages={"parse": failed})}, index=None, cost=lambda: {})
+        return SimpleNamespace(ok=False, documents={"report.pdf": SimpleNamespace(stages={"parse": failed}, category="default", reason="")}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", leaky_run)
     with make_client(tmp_path, Keyed()) as c:
@@ -234,7 +234,7 @@ def test_every_error_a_run_shows_goes_through_the_policys_scrub(tmp_path, monkey
     def failing_run(self, documents, *, on_event=None, **kwargs):
         on_event({"event": "node_failed", "ts": 0, "node_id": "x", "error": "File /srv/secret/a.py, bad"})
         failed = StageResult(stage="parse", transform="pdfium", output=None, status="failed", error="at /srv/secret/b")
-        return SimpleNamespace(ok=False, documents={"report.pdf": SimpleNamespace(stages={"parse": failed})}, index=None, cost=lambda: {})
+        return SimpleNamespace(ok=False, documents={"report.pdf": SimpleNamespace(stages={"parse": failed}, category="default", reason="")}, index=None, cost=lambda: {})
 
     monkeypatch.setattr(IndexPipeline, "run", failing_run)
     with make_client(tmp_path, NoPaths()) as c:

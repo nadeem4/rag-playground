@@ -611,6 +611,12 @@ def _categories(data: Any) -> dict[str, CategoryConfig]:
     if not isinstance(data, dict) or not data:
         raise ConfigError("categories must be a mapping of at least one category.", step="categories")
     _named(data, "categories")
+    for key in data:
+        if not re.fullmatch(r"[a-z0-9_-]+", str(key)):
+            raise ConfigError(
+                f"The category id '{key}' can use only lowercase letters, digits, underscore and dash.",
+                step="categories",
+            )
     return {key: _category(key, value) for key, value in data.items()}
 
 

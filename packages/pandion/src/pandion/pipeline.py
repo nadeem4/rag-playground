@@ -582,19 +582,25 @@ class IndexPipeline:
         self._sortings: dict[str, Sorting] = {}
         #: Labels by document id, read by the route's metadata check (see `assign`).
         self._labels: dict[str, dict[str, str]] = {}
+        #: The link each fetched document came from, by document id (see `assign`).
+        self._links: dict[str, str] = {}
 
     def assign(
         self,
         *,
         categories: dict[str, str] | None = None,
         metadata: dict[str, dict[str, str]] | None = None,
+        links: dict[str, str] | None = None,
     ) -> None:
         """Send documents to categories by hand, by document id. The choice
         holds for this object and wins over the route. `metadata` gives labels
-        by document id, used when a document is sorted and saved."""
+        by document id, used when a document is sorted and saved. `links` gives
+        the address a stored document was fetched from, by document id: the
+        route's `path` check reads it, whether the document is sorted or run."""
         self._check_names(categories)
         self._pins.update(categories or {})
         self._labels.update(metadata or {})
+        self._links.update(links or {})
 
     def category_of(self, doc_id: str) -> str:
         """The category of a document: its pin, else the one it had in the
@@ -675,9 +681,12 @@ class IndexPipeline:
         elif record and record.get("path"):
             file, name = Path(record["path"]), record.get("filename", name)
         if file is not None and file.is_file():
-            return document_info(file, filename=name, doc_id=doc_id, metadata=metadata)
+            return document_info(file, filename=name, doc_id=doc_id, metadata=metadata, link=self._links.get(doc_id))
         return DocumentInfo(
-            filename=name, type=format_of(name), size=0, path=doc_id if "/" in doc_id else "",
+            filename=name,
+            type=format_of(name),
+            size=0,
+            path=self._links.get(doc_id) or (doc_id if "/" in doc_id else ""),
             metadata=metadata, properties={}, page_count=None, text_layer=None, first_page_text="",
         )
 
@@ -739,12 +748,16 @@ class IndexPipeline:
         last cleaner (see `_stop_for`)."""
         if through is None or through == "index":
             return None
-        most = max(len(c.clean) for c in self.config.index.categories.values())
-        cleans = [f"clean.{n}" for n in range(1, most + 1)]
-        if through in ("parse", "clean", "chunk", *cleans):
+        names = self.step_names()
+        if through in names:
             return through
-        named = ", ".join(["parse", "clean", *cleans, "chunk", "index"])
-        raise ValueError(f"through names the step to stop after: one of {named}, not '{through}'.")
+        raise ValueError(f"through names the step to stop after: one of {', '.join(names)}, not '{through}'.")
+
+    def step_names(self) -> list[str]:
+        """The steps `through` can name: parse, clean, clean.N for as many
+        cleaners as the category with the most has, chunk and index."""
+        most = max(len(c.clean) for c in self.config.index.categories.values())
+        return ["parse", "clean", *[f"clean.{n}" for n in range(1, most + 1)], "chunk", "index"]
 
     @staticmethod
     def _stop_for(stop: str, category: CategoryConfig) -> str:
@@ -952,19 +965,37 @@ class IndexPipeline:
         return self._commit(stored, before, known, credentials=credentials, on_event=on_event, cancel=cancel)
 
     def sort(
-        self, file: str | Path | list[str | Path], *, metadata: dict[str, dict[str, str]] | None = None
+        self,
+        file: str | Path | list[str | Path] | dict[str, str | Path],
+        *,
+        metadata: dict[str, dict[str, str]] | None = None,
     ) -> dict[str, Sorting]:
         """What category each file would get now, and why, by document id.
         Nothing runs and nothing is written for a file; a link is fetched and
-        kept in `sources/`. `metadata` gives labels by document id. Works with
-        the upload source only."""
+        kept in `sources/`. `metadata` gives labels by document id. A dict
+        gives the ids itself, `{document id: file}`: nothing is fetched, and the
+        address `assign(links=...)` gave for an id is the path the route's
+        `path` check reads. Works with the upload source only."""
         if not self._uploads():
             raise ValueError("sort works with local files (the upload source).")
-        items = file if isinstance(file, list) else [file]
+        given = file if isinstance(file, dict) else {}
+        items = [] if isinstance(file, dict) else file if isinstance(file, list) else [file]
         labels = {**self._labels, **(metadata or {})}
         needs_info = any(rule.when for rule in self.config.index.route)
         files = [i for i in items if not is_url(i)]
         infos: dict[str, DocumentInfo | None] = {}
+        for doc_id, path in given.items():
+            infos[doc_id] = (
+                document_info(
+                    Path(path),
+                    filename=PurePosixPath(doc_id).name,
+                    doc_id=doc_id,
+                    metadata=labels.get(doc_id),
+                    link=self._links.get(doc_id),
+                )
+                if needs_info
+                else None
+            )
         for doc_id, path in _files(files) if files else []:
             infos[doc_id] = (
                 document_info(path, filename=path.name, doc_id=doc_id, metadata=labels.get(doc_id))

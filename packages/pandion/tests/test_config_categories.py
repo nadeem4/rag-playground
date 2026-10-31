@@ -188,3 +188,21 @@ def test_recipe_hash_changes_with_a_category_setting(tmp_path):
     data = edited()
     data["categories"]["reports"]["chunk"]["max_tokens"] = 200
     assert recipe_hash(read(NEW, tmp_path).index) != recipe_hash(read(data, tmp_path).index)
+
+
+@pytest.mark.parametrize("bad", ["My Cat", "Reports", "a/b", "tab\u00e9"])
+def test_a_category_id_may_only_use_lowercase_letters_digits_underscore_and_dash(tmp_path, bad):
+    data = edited()
+    data["categories"][bad] = data["categories"].pop("text")
+    data["route"][-1]["category"] = bad
+    with pytest.raises(ConfigError) as info:
+        read(data, tmp_path)
+    assert f"'{bad}'" in str(info.value) and "lowercase letters, digits" in str(info.value)
+    assert info.value.step == "categories"
+
+
+def test_a_category_id_with_dash_and_underscore_is_fine(tmp_path):
+    data = edited()
+    data["categories"]["legal-docs_2"] = data["categories"].pop("text")
+    data["route"][-1]["category"] = "legal-docs_2"
+    assert "legal-docs_2" in read(data, tmp_path).index.categories

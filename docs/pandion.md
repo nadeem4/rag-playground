@@ -409,7 +409,8 @@ index:                  # shared by every category
 
 Every category shares one `embed` and one `store`, so `embed`, `store`, `source` and
 `enrich` stay under `index`. A file with both `categories` and `index.parse` is refused,
-and so is a route whose last rule has a `when`.
+and so is a route whose last rule has a `when`. A category id may use only lowercase
+letters, digits, underscore and dash, and any other is a `ConfigError` that names it.
 
 A file without `categories` still works. Pandion reads its `index.parse`, `clean` and
 `chunk` as one category named `default`, and writes it back the same way, so its
@@ -417,7 +418,7 @@ artifact ids, recipe hash and graph do not change.
 
 Each document goes to the category the route chooses (see "Route documents to
 categories" below), unless you choose its category by hand: `p.index.assign(categories={"a.pdf": "reports"})`, or
-`p.index.run(paths, categories={...})` for one call. An unknown category name is a
+`p.index.run(paths, categories={...})` for one call. `p.index.assign(links={"a.pdf": "https://..."})` tells it which link a stored document came from. The route's `path` check reads that link. An unknown category name is a
 `ValueError` that lists the real ones. `p.index.category_of("a.pdf")` says which category
 a document has, and `report.documents["a.pdf"].category` says which one it went through.
 In code, `Pipeline(path=..., categories={...}, route=[...], embed=..., store=...)` takes
@@ -426,8 +427,8 @@ the same blocks in place of `parse`, `clean` and `chunk`.
 ### What a route can look at
 
 A route will choose a category from the cheap facts about a file, known before any
-parsing. `pandion.extend.document_info(file, filename=..., doc_id=..., metadata=...)`
-returns a `DocumentInfo` with these fields:
+parsing. `pandion.extend.document_info(file, filename=..., doc_id=..., metadata=..., link=...)`
+returns a `DocumentInfo` with these fields. `link` is the address the file was fetched from, and `path` reads it.
 
 - `filename`, `type` (`pdf`, `docx`, `pptx`, `html`, `md`, `txt`, `png`, `jpg`, or `None`)
   and `size` in bytes.
@@ -636,7 +637,7 @@ manifest. A file's id is its file name, or its path inside the folder; a link's 
 route's `metadata` check reads. The index is built again, but every other document is a
 cache hit. Adding an id that is already indexed raises a `ValueError` that points to
 `p.index.move`. `add`, `move`, `sort` and `p.documents()` work with the upload source
-only, like `sync`. `sort` reads a file where it is and writes nothing. A link is fetched and kept in `sources/`.
+only, like `sync`. `sort` reads a file where it is and writes nothing. A link is fetched and kept in `sources/`. `sort` also takes a dict of `{document id: file}`. Then it gives the ids itself and fetches nothing, and the address that `assign(links={document id: link})` gave for an id is the path that the route's `path` check reads. A run reads the same address.
 
 `p.documents()` lists what the manifest holds, sorted by id, as `DocumentEntry` values with
 `id`, `filename`, `category`, `reason`, `metadata` and `content_hash`. A document saved
@@ -1265,6 +1266,13 @@ that step, as `index.run(through=...)` does, so comparing ten chunkers with
 with that stage changed (`r.pipeline.to_yaml()` writes it as a file), and `r.to_dict()`
 is all of it as plain JSON. A variant whose index run fails is reported, with
 `r.index.ok` false and no `report`.
+
+Categories chosen by hand with `p.index.assign` carry over to every variant.
+
+In a pipeline with categories, comparing `parse`, `clean` or `chunk` sets each variant in every
+category. `pandion.evaluation.with_stage(data, stage, block)` does this to a pipeline file's
+dict, and `p.index.step_names()` lists the steps `through` can name: `parse`, `clean`,
+`clean.N` for as many cleaners as the category with the most has, `chunk` and `index`.
 
 `print(results)` gives one plain line per variant and names the best one: the variant
 with the highest hit rate (answers found out of the questions scored), then the one with

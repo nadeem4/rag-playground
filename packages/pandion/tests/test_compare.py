@@ -398,3 +398,30 @@ def test_through_must_name_a_step_at_or_after_the_varied_one(tmp_path, docs):
     with pytest.raises(ValueError, match="before the embed step"):
         pandion.compare(p, "embed", ["fake-deterministic"], docs, through="chunk")
     assert p.index.documents is None
+
+
+CATEGORIES = {
+    "path": "idx",
+    "categories": {
+        "a": {"parse": {"use": "pdfium"}, "chunk": V70, "clean": [{"use": "dedupe_blocks"}]},
+        "b": {"parse": {"use": "pdfium"}, "chunk": V70},
+    },
+    "route": [{"when": {"use": "name", "pattern": "x*"}, "category": "a"}, {"category": "b"}],
+    "index": {"embed": {"use": "fake-deterministic"}, "store": {"use": "lancedb"}},
+}
+
+
+def test_compare_varies_the_stage_in_every_category(tmp_path, docs):
+    p = Pipeline.from_dict({**CATEGORIES, "path": str(tmp_path / "index")})
+    results = pandion.compare(p, "chunk", [V70, V30], docs)
+    for r in results:
+        assert {c.chunk[1]["chunk_size"] for c in r.pipeline.config.index.categories.values()} == {r.variant["chunk_size"]}
+    assert [len(r.outputs["sample.pdf"].output.chunks) for r in results] == [5, 10]
+
+
+def test_compare_keeps_the_categories_chosen_by_hand(tmp_path, docs):
+    p = Pipeline.from_dict({**CATEGORIES, "path": str(tmp_path / "index")})
+    p.index.assign(categories={"sample.pdf": "a"})
+    results = pandion.compare(p, "chunk", [V70, V30], docs)
+    assert [r.index.documents["sample.pdf"].category for r in results] == ["a", "a"]
+    assert results[0].index.documents["sample.pdf"].reason == "Chosen when added"

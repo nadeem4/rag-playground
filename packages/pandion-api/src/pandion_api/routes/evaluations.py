@@ -35,7 +35,7 @@ from pandion.evaluation import (
     regression,
 )
 from pandion_api import reports
-from pandion_api.jobs import documents_of, start
+from pandion_api.jobs import SortedIn, assign_to, documents_of, start
 from pandion_api.pipelines import NOT_A_MAPPING, prepare, problems, variant_config
 from pandion_api.routes.ask import NO_ANSWER, NO_SEARCH
 from pandion_api.routes.questions import (
@@ -102,7 +102,7 @@ def _kept(shas: list[str], names: list[str], request: Request) -> list[dict[str,
     return questions
 
 
-class EvaluationIn(BaseModel):
+class EvaluationIn(SortedIn):
     config: Any
     documents: list[str] = Field(min_length=1)
     #: Left out: the sets kept against the documents.
@@ -118,6 +118,7 @@ async def create_evaluation(body: EvaluationIn, request: Request) -> dict[str, s
     if p.retrieval is None:
         raise problems(NO_SEARCH)
     documents = documents_of(body.documents, request)
+    assign_to(p, body, list(documents), request)
     if body.questions is not None:
         questions = await run_in_threadpool(_checked, body.questions)
     else:
@@ -153,7 +154,7 @@ def _check_through(p: Any, body: "ComparisonIn", documents: dict[str, str], ques
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
 
-class ComparisonIn(BaseModel):
+class ComparisonIn(SortedIn):
     config: Any
     #: The stage that varies: parse, clean, chunk, embed, store, rewrite, search or rerank.
     stage: str
@@ -210,6 +211,9 @@ async def create_comparison(body: ComparisonIn, request: Request) -> dict[str, s
     if body.question is not None and body.answer and any(v.query is None for v in prepared):
         raise problems(NO_ANSWER)
     documents = documents_of(body.documents, request)
+    # Pandion gives its own variants the pins; the one-question path runs these directly.
+    for each in (p, *prepared) if body.question is not None else (p,):
+        assign_to(each, body, list(documents), request)
     questions = await run_in_threadpool(_checked, body.questions) if body.questions is not None else None
     if questions is not None:
         named_documents(questions, documents, body.documents)

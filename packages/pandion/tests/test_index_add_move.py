@@ -233,3 +233,13 @@ def test_source_metadata_routes_a_document(tmp_path, meta_source):
 
 def test_documents_of_an_empty_pipeline_is_an_empty_list(tmp_path):
     assert make(tmp_path).documents() == []
+
+
+def test_sort_takes_ids_for_files_and_reads_the_path_from_an_id_with_slashes(tmp_path, pdfs):
+    data = config(tmp_path)
+    data["route"] = [{"when": {"use": "path", "pattern": "https://**"}, "category": "reports"}, {"category": "text"}]
+    p = Pipeline.from_dict(data)
+    got = p.index.sort({"https://example.com/x/a.pdf": pdfs[0], "b.pdf": pdfs[1]})
+    assert got["https://example.com/x/a.pdf"].category == "reports"
+    assert got["b.pdf"].category == "text"
+    assert not (tmp_path / "index" / "sources").exists()

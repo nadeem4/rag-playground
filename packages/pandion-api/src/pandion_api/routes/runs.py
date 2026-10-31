@@ -20,14 +20,14 @@ from pydantic import BaseModel, Field
 from pandion import Pipeline
 from pandion.extend import UnreadableFormat, check_contents
 from pandion_api import reports
-from pandion_api.jobs import documents_of, start
+from pandion_api.jobs import SortedIn, assign_to, documents_of, start
 from pandion_api.pipelines import prepare
 from pandion_api.runs import RunState, cancel_response, events_response, start_at
 
 router = APIRouter()
 
 
-class RunIn(BaseModel):
+class RunIn(SortedIn):
     config: Any
     #: Document ids (sha256), as POST /documents gave them.
     documents: list[str] = Field(min_length=1)
@@ -40,8 +40,7 @@ def check_through(p: Pipeline, through: str | None) -> None:
     """A `through` that names no step is a 400 before anything runs."""
     if through is None:
         return
-    cleaners = p.to_dict()["index"].get("clean", [])
-    names = ["parse", "clean", *[f"clean.{n}" for n in range(1, len(cleaners) + 1)], "chunk", "index"]
+    names = p.index.step_names()
     if through not in names:
         raise HTTPException(
             status_code=400,
@@ -66,6 +65,7 @@ async def create_run(body: RunIn, request: Request) -> dict[str, str]:
     p = prepare(body.config, request)
     check_through(p, body.through)
     documents = documents_of(body.documents, request)
+    assign_to(p, body, list(documents), request)
     refuse_disguised(documents)
 
     def work(on_event, cancel, credentials):

@@ -55,9 +55,10 @@ class _Facts:
 
 
 def document_info(
-    file: Path, *, filename: str, doc_id: str, metadata: dict[str, str] | None = None
+    file: Path, *, filename: str, doc_id: str, metadata: dict[str, str] | None = None, link: str | None = None
 ) -> DocumentInfo:
-    """The cheap facts about `file`, which was added as `filename` with id `doc_id`."""
+    """The cheap facts about `file`, which was added as `filename` with id
+    `doc_id`. `link` is the address it was fetched from; the `path` check reads it."""
     kind = format_of(filename)
     reader = _READERS.get(kind or "")
     try:
@@ -68,7 +69,7 @@ def document_info(
         filename=filename,
         type=kind,
         size=Path(file).stat().st_size,
-        path=doc_id if "/" in doc_id or is_url(doc_id) else "",
+        path=link or (doc_id if "/" in doc_id or is_url(doc_id) else ""),
         metadata=dict(metadata or {}),
         properties=facts.properties,
         page_count=facts.page_count,

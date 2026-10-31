@@ -323,6 +323,11 @@ document and question you already have. A line then says what Build holds, with 
 which puts your previous pipeline back exactly. **Keep my current pipeline** closes the
 cards and changes nothing.
 
+**Add as a category** is beside it once the pipeline has a document. It keeps the pipeline you
+have and adds the first card you picked as one more category, with the settings that card
+sets. Your categories and routes stay as they are. The web pages card has no sample, so it
+asks you to add your own document. **Undo** puts the earlier pipeline back, categories and routes included.
+
 ### Saved pipelines
 
 Changing a step marks the pipeline **edited**. A saved pipeline then offers **Save**, which

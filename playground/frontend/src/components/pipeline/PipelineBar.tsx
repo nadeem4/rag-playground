@@ -95,7 +95,7 @@ export function PipelineBar({
     const rest = params.toString()
     window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""))
   }, [])
-  const [applied, setApplied] = useState<{ line: string; graph: PipelineGraph; id: string | null; used: WorkingPipeline | null } | null>(null)
+  const [applied, setApplied] = useState<{ line: string; graph: PipelineGraph; id: string | null; used: WorkingPipeline | null; prior?: WorkingPipeline } | null>(null)
   const working = graphToConfig(graph, into)
 
   // The pipeline is no longer the one the template made: the visitor changed it, so Undo goes.
@@ -185,17 +185,19 @@ export function PipelineBar({
   ]
 
   function applyTemplate(used: UsedTemplate) {
-    const made = graphToConfig(used.graph)
-    setApplied({ line: used.line, graph, id: currentId, used: made.ok ? made.pipeline : null })
+    const made = used.whole ?? (graphToConfig(used.graph).ok ? (graphToConfig(used.graph) as { pipeline: WorkingPipeline }).pipeline : null)
+    // Undo puts back the whole pipeline, categories and routes included.
+    const prior = into && working.ok ? { ...working.pipeline, config: into.config } : undefined
+    setApplied({ line: used.line, graph, id: currentId, used: made, prior })
     setChoosing(false)
     setCurrentId(null)
-    onLoad(used.graph, used.note)
+    onLoad(used.graph, used.note, used.whole)
   }
 
   function undoTemplate() {
     if (!applied) return
     setCurrentId(applied.id)
-    onLoad(applied.graph)
+    onLoad(applied.graph, undefined, applied.prior)
     setApplied(null)
     // The Undo button goes away with its line, so focus moves to the button that started it.
     document.getElementById(`${id}-template`)?.focus()
@@ -257,7 +259,7 @@ export function PipelineBar({
       {choosing && working.ok ? (
         <TemplatePicker
           registry={registry}
-          current={{ documents: working.pipeline.documents, question: working.pipeline.question }}
+          current={{ documents: working.pipeline.documents, question: working.pipeline.question, config: working.pipeline.config }}
           onUse={applyTemplate}
           onClose={() => setChoosing(false)}
         />

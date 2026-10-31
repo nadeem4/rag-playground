@@ -6,6 +6,7 @@ import type { Registry } from "@/api/types"
 
 import { columnOf, isConfigShape } from "./config"
 import { columnOrder } from "./graph"
+import { addTemplateAsCategory } from "./templates"
 import {
   appliedLine,
   COMING_NEXT,
@@ -125,5 +126,18 @@ describe("appliedLine and COMING_NEXT", () => {
   it("keeps the coming card in the playground, with no steps", () => {
     expect(COMING_NEXT.name).toBe("Tables across pages")
     expect(T.index.some((t) => t.id === COMING_NEXT.id)).toBe(false)
+  })
+})
+
+describe("addTemplateAsCategory", () => {
+  it("Add as a category keeps the current categories and routes", () => {
+    const one = composeConfig(idx("text"), q("balanced"), shared)
+    const first = addTemplateAsCategory(one, idx("tables"))
+    const route = [{ when: { use: "name", pattern: "r*" }, category: first.id }, { category: "default" }]
+    const second = addTemplateAsCategory({ ...first.config, route }, idx("manuals"))
+    expect(Object.keys(second.config.categories!)).toEqual(["default", first.id, second.id])
+    expect(second.config.route).toEqual(route)
+    expect(second.config.categories![second.id]).toMatchObject({ template: "manuals" })
+    expect(second.config.retrieve).toEqual(one.retrieve)
   })
 })

@@ -1,5 +1,6 @@
 import type { Registry } from "@/api/types"
 
+import { addFromTemplate } from "./categories"
 import { columnOf, removedText, servedConfig, unknownStrategy, type AskQuestion, type PipelineConfig, type Step } from "./config"
 import type { DocRef } from "./document"
 import type { PipelineGraph } from "./graph"
@@ -127,6 +128,11 @@ export function templatePipeline(
   const note = removedText(servedConfig(config, registry).removed) ?? undefined
   const graph = columnOf({ config, documents: current.documents, question: current.question }, registry)
   return note ? { ok: true, graph, note } : { ok: true, graph }
+}
+
+/** The current pipeline with an index template added as one more category; the categories, routes and the rest stay. */
+export function addTemplateAsCategory(config: PipelineConfig, index: IndexTemplate): { config: PipelineConfig; id: string } {
+  return addFromTemplate(config, index)
 }
 
 export function appliedLine(indexName: string, queryName: string, steps: number): string {

@@ -60,7 +60,7 @@ export function pipelineChoices({
   if (working && documentOf(working)) {
     const current = currentId === STARTER_ID ? starter : (saved.find((p) => p.id === currentId) ?? null)
     // The Starter on the visitor's own document is unsaved work too, even though Build does not call it edited.
-    if (isUnsaved(current, working, into)) {
+    if (isUnsaved(current, working, into, registry)) {
       const own = current && current.id !== STARTER_ID ? current : null
       out.push({
         id: ON_BUILD,

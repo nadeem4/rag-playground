@@ -430,8 +430,8 @@ type Comparable = { id: string; documents: DocRef[]; config: PipelineConfig | nu
  * changed step, or another document, the Starter included. Evaluate lists such
  * a copy as the pipeline on Build, and nothing replaces it without a word.
  */
-export function isUnsaved(p: Comparable | null, working: PipelineGraph, into?: Into): boolean {
-  return !p || isEdited(p, working, into) || !sameDocuments(p.documents, documentsOf(working))
+export function isUnsaved(p: Comparable | null, working: PipelineGraph, into?: Into, registry?: Registry): boolean {
+  return !p || isEdited(p, working, into, registry) || !sameDocuments(p.documents, documentsOf(working))
 }
 
 const toBase64Url = (s: string) =>

@@ -2315,6 +2315,40 @@ describe("a pipeline with categories", () => {
     })
   }
 
+  /** Saved and working: two categories, the second made with only the settings a template gives. */
+  const keepSparse = () => {
+    keepWorking()
+    const w = readWorking()!
+    const sparse = { ...w, config: { ...w.config, categories: { ...w.config.categories!, tables: { name: "Reports with tables", parse, chunk: { use: "token_based" } } } } }
+    storeWorking(sparse)
+    const saved = savePipeline("Two kinds", initialGraph(TEST_REGISTRY), { documents: sparse.documents })!.saved
+    const all = readPipelines().map((p) => (p.id === saved.id ? { ...p, config: sparse.config } : p))
+    window.localStorage.setItem("rag-playground:pipelines:v2", JSON.stringify(all))
+    resetPipelinesForTests()
+    setCurrentId(saved.id)
+    return sparse
+  }
+
+  it("a category with only some settings is not marked edited when it is on show", async () => {
+    keepSparse()
+    render(<Shell />)
+    await waitFor(() => expect(card("chunk")).toBeTruthy())
+    fireEvent.click(within(card("chunk")).getByRole("button", { name: "Chunk" }))
+    fireEvent.click((await screen.findAllByRole("tab"))[1])
+    await waitFor(() => expect(card("chunk").textContent).toMatch(/token_based/))
+    expect(within(screen.getByRole("group", { name: "Pipeline" })).queryByText("edited")).toBeNull()
+  })
+
+  it("a share link of a saved pipeline with such a category matches it instead of saving a copy", async () => {
+    const w = keepSparse()
+    const code = btoa(JSON.stringify({ v: 3, name: "Two kinds", config: w.config, documents: w.documents, question: w.question })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+    window.history.replaceState(null, "", `/build?pipeline=${code}`)
+    render(<Shell />)
+    await waitFor(() => expect(card("chunk")).toBeTruthy())
+    await waitFor(() => expect(window.location.search).toBe(""))
+    expect(readPipelines()).toHaveLength(1)
+  })
+
   it("a share link opened in a fresh browser keeps its categories, past the Starter", async () => {
     const SAMPLE = { sha: "ef".repeat(32), filename: "chunking-primer.pdf", size: 4096, content_type: "application/pdf" }
     const card0 = { name: "chunking-primer", title: "A primer", blurb: "b", shows: "s", stresses: "chunk", pages: 3, default: true, filename: SAMPLE.filename, sha: SAMPLE.sha, question: "Why?" }

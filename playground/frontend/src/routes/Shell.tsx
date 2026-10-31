@@ -200,7 +200,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
       const current = id === STARTER_ID ? starter : (readPipelines().find((p) => p.id === id) ?? null)
       const onSample = samples?.some((c) => c.sha === doc.sha) ?? false
       const storedInto = intoOf(readWorking()?.config)
-      const kept = current?.id === STARTER_ID ? isEdited(current, stored, storedInto) || !onSample : isUnsaved(current, stored, storedInto)
+      const kept = current?.id === STARTER_ID ? isEdited(current, stored, storedInto, registry) || !onSample : isUnsaved(current, stored, storedInto, registry)
       if (kept) return
     }
     const on = asked !== null ? starterPipeline(registry, samples, asked) : starter
@@ -416,7 +416,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
       // A link can carry any name; clamp it to what Save as accepts (M2).
       const name = decoded.name.trim().slice(0, 60).trim() || "Shared pipeline"
       const linkInto = intoOf(decoded.config)
-      const existing = readPipelines().find((p) => p.name === name && !isUnsaved(p, decoded.graph, linkInto))
+      const existing = readPipelines().find((p) => p.name === name && !isUnsaved(p, decoded.graph, linkInto, registry))
       // The link's settings the server does not allow are already gone from the graph; say which.
       const removed = removedText(decoded.removed ?? [])
       setBarNotice(removed)

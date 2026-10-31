@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { columnOf, graphToConfig, type PipelineConfig } from "./config"
+
 import { withDocument } from "./document"
 import { initialGraph, sampleGraph, setTransform } from "./graph"
 import { defaultChoice, ON_BUILD, pipelineChoices } from "./pipelineChoice"
@@ -88,5 +90,24 @@ describe("a kept pipeline in the choices", () => {
     const [, choice] = pipelineChoices({ starter, saved: [kept], registry: R, working: null, currentId: null })
     expect(choice).toMatchObject({ id: "keptkept", graph: null, problem: kept.kept!.problem })
     expect(choice.problem).toContain("extract")
+  })
+})
+
+describe("a category made with only some settings", () => {
+  it("is not offered as the pipeline on Build once drawn with defaults", () => {
+    const base = graphToConfig(withDocument(initialGraph(R), table))
+    if (!base.ok) throw new Error(base.problem)
+    const { store, ...steps } = base.pipeline.config.index
+    const config: PipelineConfig = {
+      ...base.pipeline.config,
+      index: { store },
+      categories: { default: { name: "Default", parse: steps.parse!, chunk: steps.chunk! }, tables: { name: "Tables", parse: { use: steps.parse!.use }, chunk: { use: steps.chunk!.use } } },
+      route: [{ category: "default" }],
+    }
+    const mine: SavedPipeline = { id: "mine1234", name: "Mine", savedAt: "2026-10-01T00:00:00Z", config, documents: base.pipeline.documents, question: base.pipeline.question }
+    const into = { config, category: "tables" }
+    const working = columnOf({ config, documents: mine.documents, question: mine.question }, R, "tables")
+    const choices = pipelineChoices({ starter, saved: [mine], registry: R, working, into, currentId: "mine1234" })
+    expect(choices.find((c) => c.id === ON_BUILD)).toBeUndefined()
   })
 })

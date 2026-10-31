@@ -200,7 +200,7 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
     const id = readCurrentId()
     const current = id === STARTER_ID ? a.starter : (readPipelines().find((p) => p.id === id) ?? null)
     const onSample = a.samples?.some((c) => c.sha === doc.sha) ?? false
-    const work = current?.id === STARTER_ID ? isEdited(current, graph, workingInto) || !onSample : isUnsaved(current, graph, workingInto)
+    const work = current?.id === STARTER_ID ? isEdited(current, graph, workingInto, registry) || !onSample : isUnsaved(current, graph, workingInto, registry)
     if (work) setConfirming(true)
     else begin(at)
   }

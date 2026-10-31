@@ -2,7 +2,6 @@ import { useEffect, useId, useState } from "react"
 
 import type { Registry } from "@/api/types"
 import { CONTROL } from "@/components/fields/types"
-import { CopyYaml } from "@/components/pipeline/CopyYaml"
 import { TakeHome } from "@/components/pipeline/TakeHome"
 import { TemplatePicker, type UsedTemplate } from "@/components/pipeline/TemplatePicker"
 import { Button } from "@/components/ui/button"
@@ -44,7 +43,7 @@ function samePipeline(a: WorkingPipeline, b: WorkingPipeline): boolean {
  * Evaluate's Build your own, it shows Back to Evaluate, and a save goes back
  * there with the pipeline selected (`onSaved`).
  *
- * Take it home, next to Copy as YAML, opens a sheet that downloads the
+ * Take it home opens a sheet that downloads the
  * pipeline as a ready-to-run project zip (`TakeHome`).
  *
  * Start from a template opens the template picker, and so does opening Build
@@ -317,7 +316,6 @@ export function PipelineBar({
               </Button>
             </>
           ) : null}
-          <CopyYaml graph={graph} />
           {working.ok ? <TakeHome graph={graph} name={current?.name ?? ""} pipelineKey={current ? currentId : null} registry={registry} /> : null}
           {flash ? (
             <span role="status" className="text-xs text-fg-muted">

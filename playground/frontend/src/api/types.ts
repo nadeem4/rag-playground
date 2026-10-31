@@ -842,9 +842,6 @@ export interface ProblemDetail {
   use: string | null
   settings: { field: string; message: string }[]
 }
-export type Validated =
-  | { ok: true; problems: []; details?: []; config: PipelineConfig; yaml: string }
-  | { ok: false; problems: string[]; details?: ProblemDetail[] }
 export interface V2RunRequest {
   config: PipelineConfig
   documents: string[]

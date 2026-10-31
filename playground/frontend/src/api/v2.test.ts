@@ -48,8 +48,4 @@ describe("the /api/v2 client", () => {
     expect(calls[0].url).toBe("/api/v2/questions?documents=a&documents=b")
   })
 
-  it("keeps a problem list as the error's detail", async () => {
-    capture({ detail: { problems: ["index.chunk: chunk_overlap must be smaller than chunk_size."] } }, 422)
-    await expect(v2.validate({})).rejects.toMatchObject({ status: 422, detail: { problems: [expect.stringContaining("index.chunk")] } })
-  })
 })

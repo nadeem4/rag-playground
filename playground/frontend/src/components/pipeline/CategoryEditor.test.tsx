@@ -104,3 +104,12 @@ describe("NewCategoryForm", () => {
     expect((screen.getByRole("button", { name: "Move" }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
+
+describe("CategoriesSection routes", () => {
+  it("shows the Routes editor when the server lists checks", async () => {
+    const { CategoriesSection } = await import("./CategoryEditor")
+    render(<CategoriesSection shown="default" config={CONFIG} usersOf={() => []} checks={{}} onChange={vi.fn()} />)
+    fireEvent.click(screen.getByRole("button", { name: "Categories" }))
+    expect(screen.getByText("Routes")).toBeTruthy()
+  })
+})

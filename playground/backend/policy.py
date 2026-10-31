@@ -243,6 +243,27 @@ def scrub_paths(text: str, data_dir: Path | None = None) -> str:
     return _PATH.sub(short, text)
 
 
+#: The route checks Pandion ships. Any other is a plugin's, so the demo does not list or run it.
+BUILT_IN_CHECKS = pandion.built_in_checks()
+
+DEMO_NO_PLUGIN_CHECK = (
+    "the check {name} is not built in, and this hosted demo never runs a plugin's own code. "
+    "Use a built-in check, or run the playground locally."
+)
+
+
+def plugin_check_used(config: dict[str, Any]) -> str | None:
+    """The first route check in `config` that is not built in, or None."""
+    route = config.get("route")
+    for rule in route if isinstance(route, list) else []:
+        when = rule.get("when") if isinstance(rule, dict) else None
+        for check in when if isinstance(when, list) else [when]:
+            use = check.get("use") if isinstance(check, dict) else None
+            if isinstance(use, str) and use not in BUILT_IN_CHECKS:
+                return use
+    return None
+
+
 class PlaygroundPolicy(Policy):
     not_readable = NOT_AVAILABLE
     not_keeping_note = NO_STORING
@@ -414,7 +435,11 @@ class PlaygroundPolicy(Policy):
         return demo.MAX_ACTIVE_RUNS if demo.enabled() else None
 
     def strategies(self, catalog: dict[str, Any], request: Request) -> dict[str, Any]:
-        return served_catalog(catalog)
+        """The demo never runs people's own code, so it lists only the built-in route checks."""
+        served = served_catalog(catalog)
+        if demo.enabled() and "route" in served:
+            served["route"] = {k: v for k, v in served["route"].items() if k in BUILT_IN_CHECKS}
+        return served
 
     def check_run(self, config: dict[str, Any], request: Request) -> None:
         """On the demo, no custom endpoint: the server would send a request to a
@@ -429,6 +454,8 @@ class PlaygroundPolicy(Policy):
         (`_as_int`) before comparing it."""
         if demo.enabled() and custom_endpoint_steps(config):
             raise HTTPException(status_code=403, detail=DEMO_NO_CUSTOM)
+        if demo.enabled() and (name := plugin_check_used(config)):
+            raise HTTPException(status_code=403, detail=DEMO_NO_PLUGIN_CHECK.format(name=name))
         if changed_read_only_settings(config):
             raise HTTPException(status_code=403, detail=PROMPTS_FIXED)
         refusal = over_limit(config) or (too_many_context_pieces(config) if demo.enabled() else None)

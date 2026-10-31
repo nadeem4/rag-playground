@@ -149,3 +149,15 @@ def test_own_check_loads_through_plugins(tmp_path, monkeypatch):
     finally:
         CHECKS.pop("is_invoice", None)
         sys.modules.pop("my_rules", None)
+
+
+def test_built_in_checks_are_the_seven_pandion_ships_not_a_plugins():
+    import pandion
+    from pandion.routing import CHECKS, route_check
+
+    route_check("zz_plugin_check")(lambda info, settings: True)
+    try:
+        assert pandion.built_in_checks() == {"file_type", "name", "path", "metadata", "properties", "text_layer", "contains"}
+        assert "zz_plugin_check" in pandion.catalog()["route"]
+    finally:
+        CHECKS.pop("zz_plugin_check", None)

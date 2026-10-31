@@ -135,6 +135,11 @@ does not follow redirects. The app also leaves "Custom (OpenAI-compatible)" out 
 model choice and the Custom endpoint row out of the key panel. OpenRouter is not a custom
 endpoint: its address is fixed, so it works on the demo with a visitor's own key.
 
+**Only the built-in route checks.** The rules that sort documents into categories use checks.
+The demo lists only the ones that ship with Pandion (file type, name, path, metadata,
+properties, text layer and contains). A check that a plugin added is not listed, a route that uses one is refused, and a request
+that sends `plugins` is still refused, because the demo never runs anyone's own code.
+
 **No Dev menu.** The header's Dev menu, with the component inspectors and the token
 specimen page, is hidden.
 

@@ -56,3 +56,70 @@ def test_folders_that_are_not_siblings_are_refused_with_a_sentence(tmp_path):
     deps = build_deps(artifacts_dir=tmp_path / "a" / "artifacts", sources_dir=tmp_path / "b" / "sources")
     with pytest.raises(ValueError, match="side by side"):
         create_app(deps)
+
+
+def built_in_checks() -> set[str]:
+    from playground.backend.policy import BUILT_IN_CHECKS
+
+    return set(BUILT_IN_CHECKS)
+
+
+@pytest.fixture
+def plugin_check():
+    """A route check a plugin registered, removed again after the test."""
+    from pandion.routing import CHECKS, route_check
+
+    route_check("is_invoice", summary="Is an invoice.")(lambda info, settings: True)
+    yield "is_invoice"
+    CHECKS.pop("is_invoice", None)
+
+
+def test_the_demo_lists_only_the_built_in_checks_even_when_a_plugin_registered_one(client, monkeypatch, plugin_check):
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    assert set(client.get("/api/v2/strategies").json()["stages"]["route"]) == built_in_checks()
+
+
+def test_a_local_run_lists_plugin_checks(client, plugin_check):
+    assert set(client.get("/api/v2/strategies").json()["stages"]["route"]) == built_in_checks() | {plugin_check}
+
+
+def test_the_demo_still_refuses_a_request_that_sends_plugins(client, monkeypatch):
+    from tests.api.test_v2_strategies import PIPELINE
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    r = client.post("/api/v2/pipelines/validate", json={"config": {**PIPELINE, "plugins": ["my_checks"]}})
+    assert r.json()["ok"] is False and "cannot load plugins" in r.text
+
+
+def _routed_by(check):
+    from tests.api.test_v2_strategies import PIPELINE
+
+    index = {k: v for k, v in PIPELINE["index"].items() if k not in ("parse", "chunk")}
+    return {
+        **PIPELINE,
+        "index": index,
+        "categories": {"inv": {"parse": {"use": "pdfium"}, "chunk": {"use": "recursive_character"}}},
+        "route": [{"when": [{"use": "file_type", "types": ["pdf"]}, {"use": check}], "category": "inv"}, {"category": "inv"}],
+    }
+
+
+def test_the_built_in_checks_are_the_seven_pandion_ships():
+    assert built_in_checks() == {"file_type", "name", "path", "metadata", "properties", "text_layer", "contains"}
+
+
+@pytest.mark.parametrize("path", ["/api/v2/pipelines/validate", "/api/v2/pipelines/sort"])
+def test_the_demo_refuses_a_plugin_check_in_a_route(client, monkeypatch, plugin_check, path):
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    r = client.post(path, json={"config": _routed_by(plugin_check), "documents": ["0" * 64]})
+    assert r.status_code == 403 and plugin_check in r.text and "built-in" in r.text
+
+
+def test_the_demo_accepts_a_built_in_check_in_a_route(client, monkeypatch):
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    r = client.post("/api/v2/pipelines/validate", json={"config": _routed_by("text_layer")})
+    assert r.status_code == 200 and r.json()["ok"] is True
+
+
+def test_a_local_run_accepts_a_plugin_check_in_a_route(client, plugin_check):
+    r = client.post("/api/v2/pipelines/validate", json={"config": _routed_by(plugin_check)})
+    assert r.status_code == 200 and r.json()["ok"] is True

@@ -4,6 +4,7 @@ import { keyMissing, keyNeedFor, missingKeySteps, needsKey, useApiKey, withArtic
 import { v2 } from "@/api/v2"
 import { forDocument, type NodeState } from "@/api/runState"
 import type { GraphNode, LlmProvider, LlmSettings, Registry } from "@/api/types"
+import { routeChecksOf } from "@/api/types"
 import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
 import { useRegistry } from "@/api/useRegistry"
 import { useRun } from "@/api/useRun"
@@ -746,6 +747,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
                     shown={shownCategory ?? DEFAULT_CATEGORY}
                     config={working.config}
                     usersOf={(cid) => (categoried ? usedBy(working.documents, sorted, cid) : working.documents)}
+                    checks={routeChecksOf(registry)}
                     onChange={(config) => storeWorking({ ...working, config })}
                   />
                 </>

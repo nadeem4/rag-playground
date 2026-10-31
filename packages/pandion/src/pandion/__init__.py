@@ -41,6 +41,7 @@ from pandion.results import ResultStore, StageResult
 from pandion.strategy_catalog import catalog, defaults, explain
 from pandion.pipeline_templates import compose_template, list_templates
 from pandion.project import new_project
+from pandion.routing import built_in_checks
 from pandion import answer, chunk, clean, evaluation, parse, rerank, retrieve, rewrite
 
 __version__ = "0.6.0"
@@ -63,6 +64,7 @@ __all__ = [
     "ResultStore",
     "StageResult",
     "answer",
+    "built_in_checks",
     "catalog",
     "check_where",
     "chunk",

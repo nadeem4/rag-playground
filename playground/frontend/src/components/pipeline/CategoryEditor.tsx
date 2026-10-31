@@ -4,9 +4,11 @@ import { api } from "@/api/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Picker } from "@/components/ui/Picker"
+import { RoutesEditor } from "./RoutesEditor"
 import { addFromTemplate, removeCategory, renameCategory } from "@/state/categories"
 import { categoriesOf, type PipelineConfig } from "@/state/config"
 import type { DocRef } from "@/state/sourceDocs"
+import type { CheckInfo } from "@/state/routes"
 import { INDEX_ORDER, orderTemplates, type IndexTemplate } from "@/state/templates"
 
 /**
@@ -127,11 +129,14 @@ export function CategoriesSection({
   shown,
   config,
   usersOf,
+  checks,
   onChange,
 }: {
   shown: string
   config: PipelineConfig
   usersOf: (id: string) => DocRef[]
+  /** The route checks the server lists. The Routes editor shows when this is given. */
+  checks?: Record<string, CheckInfo>
   onChange: (config: PipelineConfig) => void
 }) {
   const label = useId()
@@ -173,6 +178,7 @@ export function CategoriesSection({
             </div>
           ) : null}
           <CategoryEditor id={id} config={config} users={usersOf(id)} templates={templates ?? []} onChange={onChange} />
+          {checks && config.route ? <RoutesEditor route={config.route} categories={cats} checks={checks} onChange={(route) => onChange({ ...config, route })} /> : null}
         </>
       ) : null}
     </div>

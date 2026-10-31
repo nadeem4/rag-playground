@@ -56,3 +56,33 @@ def test_folders_that_are_not_siblings_are_refused_with_a_sentence(tmp_path):
     deps = build_deps(artifacts_dir=tmp_path / "a" / "artifacts", sources_dir=tmp_path / "b" / "sources")
     with pytest.raises(ValueError, match="side by side"):
         create_app(deps)
+
+
+BUILT_IN_CHECKS = {"file_type", "name", "path", "metadata", "properties", "text_layer", "contains"}
+
+
+@pytest.fixture
+def plugin_check():
+    """A route check a plugin registered, removed again after the test."""
+    from pandion.routing import CHECKS, route_check
+
+    route_check("is_invoice", summary="Is an invoice.")(lambda info, settings: True)
+    yield "is_invoice"
+    CHECKS.pop("is_invoice", None)
+
+
+def test_the_demo_lists_only_the_built_in_checks_even_when_a_plugin_registered_one(client, monkeypatch, plugin_check):
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    assert set(client.get("/api/v2/strategies").json()["stages"]["route"]) == BUILT_IN_CHECKS
+
+
+def test_a_local_run_lists_plugin_checks(client, plugin_check):
+    assert set(client.get("/api/v2/strategies").json()["stages"]["route"]) == BUILT_IN_CHECKS | {plugin_check}
+
+
+def test_the_demo_still_refuses_a_request_that_sends_plugins(client, monkeypatch):
+    from tests.api.test_v2_strategies import PIPELINE
+
+    monkeypatch.setenv("RAG_PLAYGROUND_DEMO", "1")
+    r = client.post("/api/v2/pipelines/validate", json={"config": {**PIPELINE, "plugins": ["my_checks"]}})
+    assert r.json()["ok"] is False and "cannot load plugins" in r.text

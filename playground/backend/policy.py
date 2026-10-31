@@ -243,6 +243,10 @@ def scrub_paths(text: str, data_dir: Path | None = None) -> str:
     return _PATH.sub(short, text)
 
 
+#: The route checks Pandion ships. Any other is a plugin's, so the demo does not list it.
+BUILT_IN_CHECKS = frozenset({"file_type", "name", "path", "metadata", "properties", "text_layer", "contains"})
+
+
 class PlaygroundPolicy(Policy):
     not_readable = NOT_AVAILABLE
     not_keeping_note = NO_STORING
@@ -414,7 +418,11 @@ class PlaygroundPolicy(Policy):
         return demo.MAX_ACTIVE_RUNS if demo.enabled() else None
 
     def strategies(self, catalog: dict[str, Any], request: Request) -> dict[str, Any]:
-        return served_catalog(catalog)
+        """The demo never runs people's own code, so it lists only the built-in route checks."""
+        served = served_catalog(catalog)
+        if demo.enabled() and "route" in served:
+            served["route"] = {k: v for k, v in served["route"].items() if k in BUILT_IN_CHECKS}
+        return served
 
     def check_run(self, config: dict[str, Any], request: Request) -> None:
         """On the demo, no custom endpoint: the server would send a request to a

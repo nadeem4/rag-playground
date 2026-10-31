@@ -6,6 +6,7 @@ import { Clip } from "@/components/Clip"
 import { Button } from "@/components/ui/button"
 import { useUpload } from "@/components/useUpload"
 import { cn } from "@/lib/utils"
+import { readBuildSession, writeBuildSession } from "@/state/buildSession"
 import { useDocument } from "@/state/document"
 import { setGuideStep } from "@/state/guide"
 import { defaultSample } from "@/state/starter"
@@ -346,6 +347,8 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
   async function tryStarter() {
     // A guided run left partway ends here, or its coach would stay over the Starter.
     setGuideStep(null)
+    const session = readBuildSession()
+    if (session) writeBuildSession({ ...session, guideAsk: null, guideAfter: null })
     let card = defaultSample(current.samples)
     if (!card) {
       try {

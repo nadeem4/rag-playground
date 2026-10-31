@@ -63,7 +63,8 @@ export function removeCheck(route: RouteRule[], i: number, j: number): RouteRule
 
 export const checksOfRule = checksOf
 
-const list = (v: unknown): string => (Array.isArray(v) ? v.join(" or ") : String(v ?? ""))
+// The list field keeps a blank row while it is being typed into, so the sentence leaves blanks out.
+const list = (v: unknown): string => (Array.isArray(v) ? v.filter((x) => String(x ?? "").trim() !== "").join(" or ") : String(v ?? ""))
 const KEYED = (label: string, s: Step) =>
   s.equals != null ? `${label} ${s.key} equals ${s.equals}` : s.contains != null ? `${label} ${s.key} contains ${s.contains}` : `${label} ${s.key} matches ${s.pattern}`
 

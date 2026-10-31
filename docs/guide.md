@@ -165,8 +165,9 @@ The column on the left of Build is the index pipeline: Document, Parse, Clean, C
 Index, one card each with its own settings. The Document card lists the pipeline's
 documents, each with **Preview**. Its **Add a file or link** link adds one more: every step
 runs on each document, and the index and Ask cover them all. With two or more documents,
-each has **Remove**, and a **Showing the steps for** picker above the column chooses which
-document's results the cards show. To replace the only document, add the new one, then
+each has **Remove**. The Parse, Clean and Chunk panes then show one tab for each document,
+and the tab you pick is the document whose results all three panes and their cards show;
+each of those cards names that file. To replace the only document, add the new one, then
 remove the old one. Two documents with the same name cannot run together, since the server
 tells them apart by their names: with several documents, adding one whose name is taken is
 refused, and you remove the old one first or upload the new one under another name. With

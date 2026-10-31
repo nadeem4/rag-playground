@@ -14,7 +14,7 @@ import { intoOf } from "@/state/config"
 import { readWorking } from "@/state/working"
 import { documentOf } from "@/state/document"
 import type { GuideAsk } from "@/state/buildSession"
-import { askNodes, infoFor, type PipelineGraph } from "@/state/graph"
+import { askNodes, infoFor, storeGraph, type PipelineGraph } from "@/state/graph"
 import {
   GUIDE_FIX,
   GUIDE_FIX_REACHED,
@@ -58,7 +58,6 @@ export interface GuideRunInput {
   /** The note above the cards when a run could not start. */
   columnError: string | null
   busy: boolean
-  edit: (next: PipelineGraph, ...touched: string[]) => void
   /** Build's own run starter: (node id, force, select). */
   start: (target: string | undefined, force: boolean, select?: boolean) => Promise<string | undefined>
   /** Build's own Ask: the same run the Ask panel starts. */
@@ -187,7 +186,8 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
     setCurrentId(null)
     setGuideAsk(null)
     setGuideAfter(null)
-    a.edit(target)
+    // Stored plain, whatever the open pipeline had: the guided run has no categories and no routes.
+    storeGraph(target)
     goTo(at)
     // Steps before the chosen one run as one run, once the pipeline above is the working copy.
     setPreparing(at > 1 ? "wait" : null)

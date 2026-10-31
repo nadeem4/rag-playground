@@ -4,7 +4,7 @@ import type { Graph, GraphEdge, GraphNode, PortSchema, Registry, Stage, Transfor
 import { defaultsFor } from "@/components/fields/schema"
 import { formatOf } from "@/lib/formats"
 
-import { columnOf, graphToConfig, unknownStrategy } from "./config"
+import { columnOf, graphToConfig, intoOf, unknownStrategy, type Into } from "./config"
 import { docsOfSource } from "./sourceDocs"
 import { keepUndrawn, parseWorking, readWorking, resetWorkingForTests, storedWorkingJson, storeWorking, subscribeWorking } from "./working"
 
@@ -632,6 +632,14 @@ export function storeGraph(g: PipelineGraph, category?: string): boolean {
   return true
 }
 
+/** `storeGraph` for a pipeline that is not the stored one: its cards are written into its own categories config, when it has one. */
+export function storeGraphInto(g: PipelineGraph, into?: Into): boolean {
+  const c = graphToConfig(g, into)
+  if (!c.ok) return false
+  storeWorking(c.pipeline)
+  return true
+}
+
 export function useStoredGraph(registry: Registry): PipelineGraph | null
 export function useStoredGraph(registry: Registry, fallback: () => PipelineGraph, category?: string): PipelineGraph
 export function useStoredGraph(registry: Registry, fallback?: () => PipelineGraph, category?: string): PipelineGraph | null {
@@ -644,6 +652,12 @@ export function useStoredGraph(registry: Registry, fallback?: () => PipelineGrap
     if (!stored && seed.current) storeGraph(seed.current)
   }, [stored])
   return graph
+}
+
+/** Where the working pipeline's cards sit in its categories config; none for the old shape. */
+export function useStoredInto(): Into | undefined {
+  const json = useSyncExternalStore(subscribeWorking, storedWorkingJson)
+  return useMemo(() => intoOf(parseWorking(json)?.config), [json])
 }
 
 /** Tests only: forget the in-memory copy. */

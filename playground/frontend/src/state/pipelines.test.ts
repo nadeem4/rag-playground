@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { graphToConfig } from "./config"
+import { columnOf, graphToConfig, intoOf, withCategory, type PipelineConfig } from "./config"
 import { documentsOf, withDocument, withDocuments } from "./document"
 import { addEnrich, initialGraph, sampleGraph, setConfig, setTransform } from "./graph"
 import { buildExport, libraryItems, parseImport } from "./library"
@@ -20,6 +20,8 @@ import {
   followSample,
   importPipelines,
   isEdited,
+  isUnsaved,
+  notHere,
   sameSteps,
   STARTER_ID,
   decodePipeline,
@@ -180,7 +182,7 @@ describe("the share link codec", () => {
     const graph = setTransform(g(), "chunk", "token_based", R)
     const code = encodePipeline("Token chunks", graph)
     expect(code).toMatch(/^[A-Za-z0-9_-]+$/)
-    expect(decodePipeline(code, R)).toEqual({ ok: true, name: "Token chunks", graph, documents: [] })
+    expect(decodePipeline(code, R)).toMatchObject({ ok: true, name: "Token chunks", graph, documents: [] })
   })
 
   it("refuses garbage and a wrong version, and says why a graph with an unknown transform cannot open", () => {
@@ -588,5 +590,93 @@ describe("a link or a file that names an Object.prototype key", () => {
     if (!c.ok) throw new Error(c.problem)
     const p = asSaved({ id: "a", name: "a", savedAt: "", config: c.pipeline.config, documents: [DOC], question: { text: "Q?", gold_answers: ["yes", 5, null, { x: 1 }] } })
     expect(p?.question).toEqual({ text: "Q?", gold_answers: ["yes"] })
+  })
+})
+
+describe("categories in saved pipelines, links and the Library", () => {
+  const A = "a".repeat(64)
+  const B = "b".repeat(64)
+  const RR = { ...R, route: { name_matches: { name: "name_matches", summary: "", config_schema: { type: "object", properties: {} } } } } as typeof R
+  const NO_QUESTION = { text: "", gold_answers: [] }
+  const OLD_SERVER = { ...R, route: undefined } as typeof R
+  const two = () => {
+    const base = graphToConfig(g()) as { ok: true; pipeline: { config: PipelineConfig } }
+    const { parse, chunk } = base.pipeline.config.index
+    const config: PipelineConfig = {
+      ...withCategory(base.pipeline.config, "scans", { name: "Scans", parse: parse!, chunk: chunk! }),
+      route: [{ when: { use: "name_matches", pattern: "s*" }, category: "scans" }, { category: "default" }],
+    }
+    const documents = [
+      { sha: A, filename: "scan.pdf", category: "scans" },
+      { sha: B, filename: "notes.pdf", category: "default" },
+    ]
+    return { config, documents, graph: columnOf({ config, documents, question: NO_QUESTION }, RR) }
+  }
+
+  it("a saved pipeline with two categories reloads with its routes and pins", () => {
+    const { config, documents, graph } = two()
+    savePipeline("Two", graph, { documents, into: intoOf(config) })
+    resetPipelinesForTests()
+    const saved = readPipelines()[0]
+    expect(Object.keys(saved.config!.categories!)).toEqual(["default", "scans"])
+    expect(saved.config!.route).toEqual(config.route)
+    expect(saved.documents).toEqual(documents)
+  })
+
+  it("a share link round trips categories, routes and pins", () => {
+    const { config, documents, graph } = two()
+    const out = decodePipeline(encodePipeline("Two", graph, documents, intoOf(config)), RR)
+    if (!out || !out.ok) throw new Error("did not open")
+    expect(Object.keys(out.config.categories!)).toEqual(["default", "scans"])
+    expect(out.config.route).toEqual(config.route)
+    expect(out.documents).toEqual(documents)
+  })
+
+  it("buildExport puts each document's category on the pipeline item's documents, not in the config", () => {
+    const { config, documents, graph } = two()
+    savePipeline("Two", graph, { documents, into: intoOf(config) })
+    const file = JSON.parse(JSON.stringify(buildExport(libraryItems(readPipelines(), []), [], Date.now())))
+    expect(file.items[0].documents.map((d: { category: string }) => d.category)).toEqual(["scans", "default"])
+    expect(JSON.stringify(file.items[0].config)).not.toContain(A)
+    const back = parseImport(JSON.stringify(file))
+    if (!back.ok) throw new Error(back.error)
+    expect(back.pipelines[0].documents).toEqual(documents)
+  })
+
+  it("importing a version 2 file without categories still works", () => {
+    savePipeline("Old", g())
+    const back = parseImport(JSON.stringify(buildExport(libraryItems(readPipelines(), []), [], Date.now())))
+    if (!back.ok) throw new Error(back.error)
+    expect(back.pipelines[0].config?.categories).toBeUndefined()
+    expect(sameGraph(usableGraph(back.pipelines[0], R)!, g())).toBe(true)
+  })
+
+  it("a pipeline using a check the server lacks is listed but not opened", () => {
+    const { config, documents, graph } = two()
+    savePipeline("Two", graph, { documents, into: intoOf(config) })
+    const saved = readPipelines()[0]
+    expect(notHere(saved.config!, RR)).toBeNull()
+    expect(notHere(saved.config!, OLD_SERVER)).toContain("name_matches")
+    expect(usableGraph(saved, OLD_SERVER)).toBeNull()
+    expect(decodePipeline(encodePipeline("Two", graph, documents, intoOf(config)), OLD_SERVER)).toMatchObject({ ok: false })
+    expect(importPipelines([saved])).not.toBeNull()
+  })
+
+  it("an old-shape pipeline is saved and exported in the old shape", () => {
+    const { saved } = savePipeline("Old", g())!
+    expect(saved.config).not.toHaveProperty("categories")
+    expect(saved.config).not.toHaveProperty("route")
+    const file = JSON.parse(JSON.stringify(buildExport(libraryItems([saved], []), [], Date.now())))
+    expect(file.items[0].config).not.toHaveProperty("categories")
+    expect(JSON.stringify(file.items[0].documents)).not.toContain("category")
+  })
+
+  it("Save changes and the edited mark see the whole config, not one category's cards", () => {
+    const { config, documents, graph } = two()
+    const { saved } = savePipeline("Two", graph, { documents, into: intoOf(config) })!
+    expect(isEdited(saved, graph, intoOf(saved.config!))).toBe(false)
+    expect(isUnsaved(saved, graph, intoOf(saved.config!))).toBe(false)
+    expect(updatePipeline(saved.id, graph, documents, intoOf(saved.config!))).toBe(true)
+    expect(readPipelines()[0].config!.route).toEqual(config.route)
   })
 })

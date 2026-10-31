@@ -14,6 +14,9 @@ import type { Registry } from "@/api/types"
 import { chooseDocument, documentsOf, resetDocumentForTests, withDocuments } from "@/state/document"
 import { experimentDocuments, readExperiments, requestOpenExperiment, resetExperimentsForTests, saveExperiment } from "@/state/experiments"
 import { addEnrich, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, storeGraph, transformsFor } from "@/state/graph"
+import { graphToConfig, withCategory } from "@/state/config"
+import type { WorkingPipeline } from "@/state/config"
+import { storeWorking } from "@/state/working"
 import { readCurrentId, resetPipelinesForTests, STARTER_ID } from "@/state/pipelines"
 
 import { Compare, seedVariants, VariantResult } from "./Compare"
@@ -1538,5 +1541,66 @@ describe("a pipeline with several documents", () => {
     expect(text()).toContain(`The Chunk step over ${SOURCE.filename}`)
     fireEvent.click(screen.getByRole("button", { name: "Save experiment" }))
     expect(screen.getByLabelText<HTMLInputElement>("Name this experiment").value).toBe(`Chunk sizes on ${SOURCE.filename}`)
+  })
+})
+
+describe("a pipeline with two categories", () => {
+  const OTHER = { sha: "ab".repeat(32), filename: "field-guide.docx" }
+  const twoCategories = (pins: boolean) => {
+    const base = graphToConfig(sampleGraph(registry, SOURCE)) as { ok: true; pipeline: WorkingPipeline }
+    const { parse, chunk } = base.pipeline.config.index
+    storeWorking({
+      ...base.pipeline,
+      config: { ...withCategory(base.pipeline.config, "scans", { name: "Scans", parse: parse!, chunk: chunk! }), route: [{ category: "default" }] },
+      documents: [
+        { ...SOURCE, ...(pins ? { category: "default" } : {}) },
+        { ...OTHER, ...(pins ? { category: "scans" } : {}) },
+      ],
+    })
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal("EventSource", DrivenEventSource)
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+  })
+
+  it("shows the category beside each file", async () => {
+    serve()
+    twoCategories(true)
+    render(<Compare />)
+    const line = await screen.findByTestId("document-line")
+    expect(Array.from(line.querySelectorAll("[data-category-note]")).map((n) => n.textContent)).toEqual(["in Default", "in Scans"])
+  })
+
+  it("shows no category when the files are not pinned", async () => {
+    serve()
+    twoCategories(false)
+    render(<Compare />)
+    const line = await screen.findByTestId("document-line")
+    expect(line.querySelector("[data-category-note]")).toBeNull()
+  })
+
+  it("keeps the categories and the pins when it sends a comparison", async () => {
+    serve()
+    twoCategories(true)
+    render(<Compare />)
+    fireEvent.click(await screen.findByRole("button", { name: /^Run \d+ recipes?$/ }))
+    await waitFor(() => expect(posted()).toBeTruthy())
+    expect(Object.keys(posted().config.categories)).toEqual(["default", "scans"])
+    expect(posted().categories).toEqual({ [SOURCE.sha]: "default", [OTHER.sha]: "scans" })
+  })
+})
+
+describe("an old-shape pipeline with pinned documents", () => {
+  it("shows no category note", async () => {
+    vi.stubGlobal("EventSource", DrivenEventSource)
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    serve()
+    const OTHER = { sha: "ab".repeat(32), filename: "field-guide.docx" }
+    storeGraph(withDocuments(sampleGraph(registry, SOURCE), [{ ...SOURCE, category: "default" }, { ...OTHER, category: "scans" }]))
+    render(<Compare />)
+    const line = await screen.findByTestId("document-line")
+    expect(line.querySelectorAll("[data-file-tag]").length).toBe(2)
+    expect(line.querySelector("[data-category-note]")).toBeNull()
   })
 })

@@ -323,6 +323,11 @@ document and question you already have. A line then says what Build holds, with 
 which puts your previous pipeline back exactly. **Keep my current pipeline** closes the
 cards and changes nothing.
 
+**Add as a category** is beside it once the pipeline has a document. It keeps the pipeline you
+have and adds the first card you picked as one more category, with the settings that card
+sets. Your categories and routes stay as they are. The web pages card has no sample, so it
+asks you to add your own document. **Undo** puts the earlier pipeline back, categories and routes included.
+
 ### Saved pipelines
 
 Changing a step marks the pipeline **edited**. A saved pipeline then offers **Save**, which
@@ -360,6 +365,12 @@ Evaluate**, and saving there goes back to Evaluate with the new pipeline selecte
 Pipelines live in your browser, up to 20. Saving a 21st removes the oldest, and the page
 says which. One saved by an older version that cannot be opened here is never removed
 this way.
+
+A pipeline with several categories is saved, linked and exported whole: every category, the
+routes, and the category each document was put in. A link or an exported file that uses a
+check this server does not list is shown in the list but not opened, the same as one that
+uses a strategy it lacks. A pipeline with one category is saved exactly as before, and every
+older pipeline, link and file opens as it always did.
 
 **How your browser holds a pipeline.** Build keeps one working pipeline: the copy you
 edit, which Compare and Evaluate use too. Your saved pipelines are separate, named
@@ -474,6 +485,11 @@ the question box.
 Compare runs up to ten recipes of one step and puts them side by side. The server holds
 to the same cap.
 
+When the pipeline has categories, Compare sends all of them, with their routes and each
+document's pin, so it runs the same pipeline Build does. Beside each file name it says
+which category the file is pinned to. Compare works on the first category: it sweeps that category's steps, and putting a
+recipe on Build changes that category and leaves the others as they are.
+
 1. **Pick a step:** Parse, Chunk or Retrieve.
 2. **Set up the recipes.** Each recipe is a card that reads as a sentence. Tap a value to
    change it in a small editor under it. Add a recipe from a few suggestions or from
@@ -546,6 +562,11 @@ another removes the oldest.
 Evaluate scores a pipeline on its documents. It asks the pipeline every question in the
 question set and says how many found their answer, at what rank and in which piece. It
 needs no key.
+
+When the pipeline has categories, Evaluate sends all of them, with their routes and each
+document's pin, and says beside each file name, and beside each question's file, which
+category the file is pinned to. A saved pipeline keeps its categories when you open it
+on Build from here.
 
 Evaluate sends the whole question set in one request (`POST /api/v2/evaluations`). Pandion
 scores every question; the page shows its numbers: the hit rate, mean reciprocal rank,
@@ -790,6 +811,8 @@ Export one item, the ones you tick, or everything, as one
 - **With the document:** **Include the document** puts the PDF in the file, so the items
   still work after the upload expires. On the demo it is on for uploads. Every upload an
   item uses goes in, not only its first document.
+- **Categories:** each saved pipeline in the file lists its documents, and each document
+  carries its category. The categories and routes are part of the pipeline's settings.
 - **Without the document:** the file holds only the settings. A sample is always there, so
   items on a sample need nothing more. Items on an upload ask for the PDF again when opened.
 

@@ -10,6 +10,8 @@ import { BUILD_SESSION_KEY } from "@/state/buildSession"
 import { chooseDocument, documentOf, resetDocumentForTests } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, signature, storeGraph } from "@/state/graph"
 import { GUIDE_FIX, GUIDE_RULE, GUIDE_STEPS, resetGuideForTests } from "@/state/guide"
+import { graphToConfig, intoOf, withCategory, type PipelineConfig } from "@/state/config"
+import { storeWorking } from "@/state/working"
 import { readCurrentId, readPipelines, resetPipelinesForTests, savePipeline } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
@@ -281,6 +283,39 @@ describe("the guided run on Build", () => {
       fireEvent.click(screen.getByRole("button", { name: "Continue" }))
       await waitFor(() => expect(within(coach()).getByText(/step 4 of 7/)).toBeTruthy())
       await waitFor(() => expect(posts).toHaveLength(1))
+    })
+
+    describe("with a categories pipeline", () => {
+      const doc = { sha: "ee".repeat(32), filename: "mine.pdf" }
+      /** A saved pipeline with two categories, and the same one as the working pipeline, edited by `edit`. */
+      function saveTwo(edit: (c: PipelineConfig) => PipelineConfig) {
+        const mine = sampleGraph(TEST_REGISTRY, doc, "Mine?")
+        const made = graphToConfig(mine)
+        if (!made.ok) throw new Error(made.problem)
+        const { parse, chunk } = made.pipeline.config.index
+        const config: PipelineConfig = {
+          ...withCategory(made.pipeline.config, "scans", { name: "Scans", parse: parse!, chunk: chunk! }),
+          route: [{ category: "default" }],
+        }
+        const documents = [{ ...doc, category: "default" }]
+        savePipeline("Mine", mine, { documents, into: intoOf(config) })
+        storeWorking({ ...made.pipeline, config: edit(config), documents })
+      }
+
+      it("does not count a working pipeline that matches the saved one as edited", async () => {
+        saveTwo((c) => c)
+        link("chunk")
+        await open()
+        await waitFor(() => expect(within(coach()).getByText(/step 4 of 7/)).toBeTruthy())
+        expect(screen.queryByText(/This replaces the pipeline you are working on/)).toBeNull()
+      })
+
+      it("counts a real edit", async () => {
+        saveTwo((c) => ({ ...c, categories: { ...c.categories!, scans: { ...c.categories!.scans, name: "Scanned" } } }))
+        link("chunk")
+        await open()
+        await waitFor(() => expect(screen.getByText(/This replaces the pipeline you are working on/)).toBeTruthy())
+      })
     })
   })
 

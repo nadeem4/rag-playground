@@ -23,6 +23,7 @@ import { MissTrace } from "@/components/evaluate/MissTrace"
 import { QuestionSetPanel } from "@/components/evaluate/QuestionSetPanel"
 import { QuestionSetAcross } from "@/components/evaluate/QuestionSetAcross"
 import { ByDocument, NoDocument } from "@/components/evaluate/ByDocument"
+import { CategoryNote } from "@/components/CategoryNote"
 import { FileDot, FileTag } from "@/components/FileTag"
 import { fileOf, filesOf, type FileInfo } from "@/lib/files"
 import { CONTROL } from "@/components/fields/types"
@@ -33,7 +34,7 @@ import type { InspectorStatus } from "@/components/inspectors/status"
 import { Button } from "@/components/ui/button"
 import { Picker, type PickerOption } from "@/components/ui/Picker"
 import { cn } from "@/lib/utils"
-import { cardOfStepIn, graphToConfig } from "@/state/config"
+import { cardOfStepIn, graphToConfig, type Into } from "@/state/config"
 import {
   changeFor,
   changeText,
@@ -57,7 +58,7 @@ import {
   type RowChange,
 } from "@/state/evaluate"
 import { inUse, questionsFromSample, questionsFromSet, sampleFor, type Question } from "@/state/goldSet"
-import { columnOrder, storeGraph, useStoredGraph, type PipelineGraph } from "@/state/graph"
+import { columnOrder, storeGraph, storeGraphInto, useStoredGraph, useStoredInto, type PipelineGraph } from "@/state/graph"
 import { evalStripLine, evidenceCells, indexSteps, progressLine, runSummary, searchSteps, slowReadNote, staleLine } from "@/state/evaluateView"
 import { sameDocuments, useDocStatus, withDocuments, type DocRef } from "@/state/document"
 import { MonoNumbers } from "@/components/pipeline/WhatItDid"
@@ -143,12 +144,14 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
   const [explaining, setExplaining] = useState(false)
   const explain = useCallback(() => setExplaining(true), [])
   const working = useStoredGraph(registry)
-  const choices = pipelineChoices({ starter, saved: pipelines, registry, working, currentId })
+  const workingInto = useStoredInto()
+  const choices = pipelineChoices({ starter, saved: pipelines, registry, working, into: workingInto, currentId })
   const chosenId = choice ?? defaultChoice(choices, currentId, wanted)
   const chosen = choices.find((c) => c.id === chosenId && c.graph) ?? null
   const documents = trial && trial.id === chosen?.id ? trial.documents : (chosen?.documents ?? [])
   // With several documents each has its colour, and the page speaks of all of them; with one, none.
   const files = filesOf(documents)
+  const into = chosen?.into
   const several = files.length > 1
   const graph = chosen?.graph ? withDocuments(chosen.graph, documents) : null
   const doc = documents[0] ?? null
@@ -181,7 +184,7 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
         : null
 
   function saveOwn(name: string, g: PipelineGraph): string | null {
-    const result = savePipeline(name, g, { documents, select: false })
+    const result = savePipeline(name, g, { documents, select: false, ...(into ? { into } : {}) })
     if (!result) return fullOfKept() ? FULL_OF_KEPT : "The pipeline could not be saved in this browser."
     setChoice(result.saved.id)
     setTrial(null)
@@ -193,14 +196,14 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
   function openSelected() {
     if (!chosen?.graph) return
     if (chosen.id !== ON_BUILD) {
-      storeGraph(withDocuments(chosen.graph, documents))
+      storeGraphInto(withDocuments(chosen.graph, documents), into)
       setCurrentId(chosen.kind === "build" ? null : chosen.id)
     }
     navigate("/build?from=evaluate")
   }
 
   function openOnBuild(g: PipelineGraph) {
-    storeGraph(withDocuments(g, documents))
+    storeGraphInto(withDocuments(g, documents), into)
     setCurrentId(null)
     navigate("/build?from=evaluate")
   }
@@ -279,7 +282,10 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
                   {several ? (
                     <div className="flex flex-wrap gap-2">
                       {files.map((f) => (
-                        <FileTag key={f.sha} file={f} />
+                        <span key={f.sha} className="inline-flex items-baseline gap-1">
+                          <FileTag file={f} />
+                          <CategoryNote category={f.category} into={into} />
+                        </span>
                       ))}
                     </div>
                   ) : documents.length ? (
@@ -320,6 +326,7 @@ function EvaluatePage({ registry, navigate }: { registry: Registry; navigate: (h
           <EvaluateBody
             key={`${chosen!.id}:${documents.map((d) => d.sha).join(",")}`}
             graph={graph}
+            into={into}
             files={files}
             pipelineKey={chosen!.key}
             pipelineName={chosen!.name}
@@ -367,6 +374,7 @@ const NOT_SAVED_TAG = { label: "Not saved", tone: "soft" as const }
  */
 function EvaluateBody({
   graph,
+  into,
   files,
   pipelineKey,
   pipelineName,
@@ -380,6 +388,7 @@ function EvaluateBody({
   replacesUnsaved,
 }: {
   graph: PipelineGraph | null
+  into?: Into
   /** The pipeline's documents with their colours when there are several; none with one. */
   files: FileInfo[]
   pipelineKey: string
@@ -427,6 +436,7 @@ function EvaluateBody({
     <Evaluation
       registry={registry}
       graph={graph}
+      into={into}
       sourceSha={sourceSha}
       files={files}
       pipelineKey={pipelineKey}
@@ -498,6 +508,7 @@ const totalsOf = (r: EvaluationResult): Totals => ({
 function Evaluation({
   registry,
   graph,
+  into,
   sourceSha,
   files,
   pipelineKey,
@@ -512,6 +523,7 @@ function Evaluation({
 }: {
   registry: Registry
   graph: PipelineGraph
+  into?: Into
   sourceSha: string
   files: FileInfo[]
   pipelineKey: string
@@ -734,7 +746,7 @@ function Evaluation({
     }
   }, [done, startedAt])
   // The pipeline and the set it was scored with, so Take it home offers these scores only for the same pair.
-  const scoredMade = graphToConfig(graph)
+  const scoredMade = graphToConfig(graph, into)
   const scoredConfig = scoredMade.ok ? (scoredMade.pipeline.config as unknown as Record<string, unknown>) : null
   const finishedRun: PreviousEvaluation | null =
     done && result && !result.cancelled
@@ -798,7 +810,7 @@ function Evaluation({
     setStartedAt(Date.now())
     setTookMs(null)
     try {
-      const c = graphToConfig(graph)
+      const c = graphToConfig(graph, into)
       if (!c.ok) throw new Error(c.problem)
       const { run_id } = await v2.createEvaluation(evaluationRequest(c.pipeline, questions, topK), { keys })
       if (before) setPrevious(before)
@@ -1134,6 +1146,7 @@ function Evaluation({
                 key={row.question.id}
                 row={row}
                 file={several ? (fileOf(files, row.question.document) ?? null) : undefined}
+                into={into}
                 ran={ran}
                 over={over}
                 before={compared?.byId[row.question.id]}
@@ -1335,6 +1348,7 @@ function Evidence({ gold }: { gold: string }) {
 function QuestionRow({
   row,
   file,
+  into,
   ran,
   over,
   before,
@@ -1345,6 +1359,7 @@ function QuestionRow({
   row: Row
   /** With several documents, the file the question names, or null for any document. Undefined with one. */
   file?: FileInfo | null
+  into?: Into
   ran: boolean
   /** The run has ended, so a question it never got to reads Not run. */
   over: boolean
@@ -1376,7 +1391,7 @@ function QuestionRow({
           {row.question.question}
         </span>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">
-          {file !== undefined ? <span data-question-file="">{file ? <FileTag file={file} /> : <NoDocument text="any document" />}</span> : null}
+          {file !== undefined ? <span data-question-file="">{file ? <span className="inline-flex items-baseline gap-1"><FileTag file={file} /><CategoryNote category={file.category} into={into} /></span> : <NoDocument text="any document" />}</span> : null}
           <span className="font-mono">{row.question.id}</span>
           {row.question.tags.map((t) => (
             <span key={t} className="rounded-swatch bg-surface-elevated px-2">

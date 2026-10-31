@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react"
 
 import type { Registry } from "@/api/types"
 
-import { columnOf, goldsOf, graphToConfig, isConfigShape, otherSource, sameConfig, servedConfig, unknownStrategy, type AskQuestion, type PipelineConfig } from "./config"
+import { columnOf, goldsOf, graphToConfig, isConfigShape, otherSource, sameConfig, servedConfig, unknownStrategy, type AskQuestion, type Into, type PipelineConfig } from "./config"
 import { documentsOf, sameDocuments, withDocuments, type DocRef } from "./document"
 import type { PipelineGraph } from "./graph"
 import { docsOfSource } from "./sourceDocs"
@@ -83,8 +83,11 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "obj
 const isDocRef = (d: unknown): d is DocRef =>
   typeof d === "object" && d !== null && typeof (d as DocRef).sha === "string" && (d as DocRef).sha !== "" && typeof (d as DocRef).filename === "string"
 
+/** A document keeps its category only when it is text: that is its pin. */
 const docList = (listed: unknown): DocRef[] | null =>
-  Array.isArray(listed) && listed.every(isDocRef) ? listed.map(({ sha, filename }) => ({ sha, filename })) : null
+  Array.isArray(listed) && listed.every(isDocRef)
+    ? listed.map(({ sha, filename, category }) => ({ sha, filename, ...(typeof category === "string" && category ? { category } : {}) }))
+    : null
 
 /** One item of the old list or of an old export file, converted, or kept with the reason. Never null. */
 export function fromOld(raw: unknown, place: number): SavedPipeline {
@@ -180,17 +183,18 @@ function newId(): string {
 /**
  * The new pipeline, and the oldest one if keeping twenty meant dropping it (I3), so the page can say so.
  * `documents` defaults to the graph's own, and the graph is pointed at them. `select: false`
- * leaves Build's selection alone (a pipeline saved on Evaluate).
+ * leaves Build's selection alone (a pipeline saved on Evaluate). `into`: when the pipeline has
+ * categories, the graph is one category's cards and goes into it (state/config.ts `intoOf`).
  */
 export function savePipeline(
   name: string,
   graph: PipelineGraph,
-  opts: { documents?: DocRef[]; select?: boolean } = {},
+  opts: { documents?: DocRef[]; select?: boolean; into?: Into } = {},
 ): { saved: SavedPipeline; dropped: SavedPipeline | null } | null {
   const clean = cleanName(name)
   if (!clean) return null
   const documents = opts.documents ?? documentsOf(graph)
-  const c = graphToConfig(withDocuments(graph, documents))
+  const c = graphToConfig(withDocuments(graph, documents), opts.into)
   if (!c.ok) return null
   const p: SavedPipeline = {
     id: newId(),
@@ -255,9 +259,9 @@ export function notHere(config: PipelineConfig, registry: Registry): string | nu
   return missing === null ? null : `It uses a step this server does not have: ${missing}.`
 }
 
-export function updatePipeline(id: string, graph: PipelineGraph, documents: DocRef[] = documentsOf(graph)): boolean {
+export function updatePipeline(id: string, graph: PipelineGraph, documents: DocRef[] = documentsOf(graph), into?: Into): boolean {
   const list = freshPipelines()
-  const c = graphToConfig(withDocuments(graph, documents))
+  const c = graphToConfig(withDocuments(graph, documents), into)
   if (!c.ok || !list.some((p) => p.id === id && !p.kept)) return false
   const next = {
     config: structuredClone(c.pipeline.config),
@@ -426,8 +430,8 @@ type Comparable = { id: string; documents: DocRef[]; config: PipelineConfig | nu
  * changed step, or another document, the Starter included. Evaluate lists such
  * a copy as the pipeline on Build, and nothing replaces it without a word.
  */
-export function isUnsaved(p: Comparable | null, working: PipelineGraph): boolean {
-  return !p || isEdited(p, working) || !sameDocuments(p.documents, documentsOf(working))
+export function isUnsaved(p: Comparable | null, working: PipelineGraph, into?: Into): boolean {
+  return !p || isEdited(p, working, into) || !sameDocuments(p.documents, documentsOf(working))
 }
 
 const toBase64Url = (s: string) =>
@@ -442,14 +446,16 @@ const fromBase64Url = (s: string) => {
  * 2 carried a graph and still open: they are converted once on the way in.
  * Throws for a graph that is not a column, which the app never makes.
  */
-export function encodePipeline(name: string, graph: PipelineGraph, documents: DocRef[] = documentsOf(graph)): string {
-  const c = graphToConfig(withDocuments(graph, documents))
+export function encodePipeline(name: string, graph: PipelineGraph, documents: DocRef[] = documentsOf(graph), into?: Into): string {
+  const c = graphToConfig(withDocuments(graph, documents), into)
   if (!c.ok) throw new Error(c.problem)
   return toBase64Url(JSON.stringify({ v: 3, name, config: c.pipeline.config, documents, question: c.pipeline.question }))
 }
 
 /** `removed` names the settings the link carried that this server does not allow, which were dropped. */
-export type Decoded = { ok: true; name: string; graph: PipelineGraph; documents: DocRef[]; removed?: string[] } | { ok: false; problem: string }
+export type Decoded =
+  | { ok: true; name: string; graph: PipelineGraph; documents: DocRef[]; config: PipelineConfig; question: AskQuestion; removed?: string[] }
+  | { ok: false; problem: string }
 
 /** Null when the code is not a pipeline link; otherwise the pipeline, or why it cannot open here. */
 export function decodePipeline(code: string, registry: Registry): Decoded | null {
@@ -474,8 +480,8 @@ export function decodePipeline(code: string, registry: Registry): Decoded | null
     const graph = usableGraph(p, registry)
     if (!graph || !p.config) return null
     // Drawn without the settings the server does not allow; the page says which went.
-    const { removed } = servedConfig(p.config, registry)
-    return { ok: true, name: parsed.name, graph, documents: p.documents, ...(removed.length ? { removed } : {}) }
+    const { config, removed } = servedConfig(p.config, registry)
+    return { ok: true, name: parsed.name, graph, documents: p.documents, config, question: p.question, ...(removed.length ? { removed } : {}) }
   } catch {
     // A backstop: whatever a crafted link holds, it is not a link, never a crash.
     return null
@@ -495,11 +501,14 @@ export function sameSteps(a: PipelineGraph, b: PipelineGraph): boolean {
  * because it owns its documents and Save keeps the new ones. The Starter is
  * ready-made and runs on any sample, so only its steps count.
  */
-export function isEdited(p: Comparable, working: PipelineGraph): boolean {
-  const c = graphToConfig(working)
+export function isEdited(p: Comparable, working: PipelineGraph, into?: Into): boolean {
+  const c = graphToConfig(working, into)
   if (!p.config || !c.ok || !sameConfig(p.config, c.pipeline.config)) return true
-  return p.id !== STARTER_ID && !sameDocuments(p.documents, c.pipeline.documents)
+  return p.id !== STARTER_ID && !(sameDocuments(p.documents, c.pipeline.documents) && samePins(p.documents, c.pipeline.documents))
 }
+
+/** Every pin the saved list holds is still there. A document not pinned yet may be pinned by the first sort. */
+const samePins = (saved: readonly DocRef[], now: readonly DocRef[]) => saved.every((d, i) => d.category === undefined || d.category === now[i]?.category)
 
 export function resetPipelinesForTests(): void {
   cache = null

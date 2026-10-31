@@ -20,11 +20,13 @@ export interface FileInfo {
   filename: string
   /** Its colour: `var(--file-<slot>)`. */
   slot: number
+  /** The category it is pinned to, when a pipeline pins it. */
+  category?: string
 }
 
 /** The pipeline's files with their colours, in order; none with fewer than two documents. */
-export function filesOf(docs: readonly { sha: string; filename: string }[]): FileInfo[] {
-  return docs.length < 2 ? [] : docs.map((d, i) => ({ sha: d.sha, filename: d.filename, slot: fileSlot(i) }))
+export function filesOf(docs: readonly { sha: string; filename: string; category?: string }[]): FileInfo[] {
+  return docs.length < 2 ? [] : docs.map((d, i) => ({ sha: d.sha, filename: d.filename, slot: fileSlot(i), ...(d.category ? { category: d.category } : {}) }))
 }
 
 /** The file with this sha, when there are several files and it is one of them. */

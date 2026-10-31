@@ -24,6 +24,7 @@ import { DocumentControl } from "@/components/DocumentControl"
 import { DocumentItem } from "@/components/DocumentItem"
 import { DocumentNote, needsDocument } from "@/components/DocumentNote"
 import { EmptyState } from "@/components/EmptyState"
+import { CategoryNote } from "@/components/CategoryNote"
 import { FileTag } from "@/components/FileTag"
 import { CONTROL } from "@/components/fields/types"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
@@ -51,6 +52,7 @@ import {
   upstreamFor,
   upstreamOfStage,
   useStoredGraph,
+  useStoredInto,
   type PipelineGraph,
 } from "@/state/graph"
 import { chooseDocuments, documentsOf, sameDocuments, useDocument, type DocRef } from "@/state/document"
@@ -539,6 +541,7 @@ function Sweep({
   const docs = documentsOf(graph)
   const files = filesOf(docs)
   const several = files.length > 1
+  const into = useStoredInto()
   const docsKey = docs.map((d) => d.sha).join(",")
   // The document is the working pipeline's, changed on the Document line. Missing or none blocks a run; a new one leaves the results on the old.
   const { status: docStatus, missing: missingDoc } = useDocument()
@@ -613,7 +616,7 @@ function Sweep({
   const sampleGolds = asked ? goldsOf([asked.gold_answer, ...(asked.gold_answers ?? [])]) : []
   // The question's own gold passages, else the sample's when the question is one of its own.
   const configGolds = useMemo(() => {
-    const c = graphToConfig(graph)
+    const c = graphToConfig(graph, into)
     return c.ok ? c.pipeline.question.gold_answers : []
   }, [graph])
   const golds = configGolds.length ? configGolds : sampleGolds
@@ -694,7 +697,7 @@ function Sweep({
     setEditing(null)
     setSubmitting(true)
     try {
-      const c = graphToConfig(graph)
+      const c = graphToConfig(graph, into)
       if (!c.ok) throw new Error(c.problem)
       const p = comparePipeline({ ...c.pipeline, question: { ...c.pipeline.question, gold_answers: golds } }, graph, through)
       const req = compareRequest(p, target, variants, throughOf(graph, target, through), topK, stepOfCardIn(graph, through), graph)
@@ -774,8 +777,8 @@ function Sweep({
   /** Put a finished recipe on Build: the target node takes its strategy and settings. */
   const putOnBuild = (i: number) => {
     const v = submitted.variants[i]
-    if (v.transform === ENRICH_OFF && target.stage === "enrich") return void storeGraph(removeNode(graph, target.id))
-    storeGraph(setConfig(setTransform(graph, target.id, v.transform, registry), target.id, v.config))
+    if (v.transform === ENRICH_OFF && target.stage === "enrich") return void storeGraph(removeNode(graph, target.id), into?.category)
+    storeGraph(setConfig(setTransform(graph, target.id, v.transform, registry), target.id, v.config), into?.category)
   }
 
   // Experiments: the step, the recipes and the document, saved by name in this browser.
@@ -1068,7 +1071,10 @@ function Sweep({
               <>
                 <span className="text-xs text-fg-muted">Every page uses these documents</span>
                 {files.map((f) => (
-                  <FileTag key={f.sha} file={f} />
+                  <span key={f.sha} className="inline-flex items-baseline gap-1">
+                    <FileTag file={f} />
+                    <CategoryNote category={f.category} into={into} />
+                  </span>
                 ))}
               </>
             ) : (

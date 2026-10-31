@@ -5,10 +5,11 @@ import type { Registry } from "@/api/types"
 import { SideSheet } from "@/components/SideSheet"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { AskQuestion } from "@/state/config"
+import { columnOf, unknownStrategy, type AskQuestion, type PipelineConfig, type WorkingPipeline } from "@/state/config"
 import { useDocument, type DocRef } from "@/state/document"
 import type { PipelineGraph } from "@/state/graph"
 import {
+  addTemplateAsCategory,
   appliedLine,
   COMING_NEXT,
   composeConfig,
@@ -21,8 +22,11 @@ import {
   type PipelineTemplates,
 } from "@/state/templates"
 
-/** What "Use this pipeline" hands Build: the column, any dropped settings, and the status line. */
-export type UsedTemplate = { graph: PipelineGraph; note?: string; line: string }
+/**
+ * What "Use this pipeline" hands Build: the column, any dropped settings, and the status line.
+ * "Add as a category" also hands the `whole` pipeline, with the new category in it.
+ */
+export type UsedTemplate = { graph: PipelineGraph; note?: string; line: string; whole?: WorkingPipeline }
 
 /**
  * Start from a template, on Build: pick what the documents are like and what
@@ -38,7 +42,8 @@ export function TemplatePicker({
   onClose,
 }: {
   registry: Registry
-  current: { documents: DocRef[]; question: AskQuestion }
+  /** `config` is the pipeline now: with a document in it, a template can be added to it as a category. */
+  current: { documents: DocRef[]; question: AskQuestion; config?: PipelineConfig }
   onUse: (used: UsedTemplate) => void
   onClose: () => void
 }) {
@@ -68,11 +73,24 @@ export function TemplatePicker({
   const made = index && query ? templatePipeline(index, query, templates!.shared, current, registry) : null
   const sample = index?.sample ? (samples?.find((s) => s.name === index.sample)?.title ?? null) : null
 
+  const odd = index && current.config ? unknownStrategy(addTemplateAsCategory(current.config, index).config, registry) : null
+  function addAsCategory() {
+    if (!index || !current.config || odd !== null) return
+    const added = addTemplateAsCategory(current.config, index)
+    const whole = { config: added.config, documents: current.documents, question: current.question }
+    onUse({ graph: columnOf(whole, registry), line: `Added ${index.name} as a category.`, whole })
+  }
+
   const footer = (
     <>
       <Button variant="ghost" onClick={onClose}>
         Keep my current pipeline
       </Button>
+      {current.config && current.documents.length > 0 ? (
+        <Button variant="outline" disabled={!index || odd !== null} onClick={addAsCategory}>
+          Add as a category
+        </Button>
+      ) : null}
       <Button
         disabled={!made?.ok}
         onClick={() => {

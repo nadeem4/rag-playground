@@ -5,6 +5,7 @@ import registryFixture from "@/api/fixtures/registry.json"
 import templates from "@/api/fixtures/templates.json"
 import type { Registry } from "@/api/types"
 import { columnOrder } from "@/state/graph"
+import { composeConfig } from "@/state/templates"
 
 import { TemplatePicker } from "./TemplatePicker"
 
@@ -84,6 +85,32 @@ describe("TemplatePicker", () => {
     expect(order.find((n) => n.stage === "parse")?.config.table_mode).toBe("accurate")
     expect(order.find((n) => n.stage === "source")?.config.filename).toBe("report.pdf")
     expect(made.line).toBe("Build now holds Reports with tables with Balanced: 8 steps.")
+  })
+
+  it("Add as a category hands Build the whole pipeline with the template as one more category", async () => {
+    const config = composeConfig(templates.index[0] as never, templates.query[0] as never, templates.shared as never)
+    const onUse = vi.fn()
+    render(<TemplatePicker registry={registry} current={{ ...CURRENT, config }} onUse={onUse} onClose={vi.fn()} />)
+    await screen.findByRole("group", { name: "1. What are your documents like?" })
+    fireEvent.click(card("1. What are your documents like?", /Reports with tables/))
+    fireEvent.click(screen.getByRole("button", { name: "Add as a category" }))
+    const [made] = onUse.mock.calls[0]
+    expect(Object.keys(made.whole.config.categories)).toEqual(["default", "reports-with-tables"])
+    expect(made.whole.documents).toEqual(CURRENT.documents)
+    expect(made.line).toBe("Added Reports with tables as a category.")
+  })
+
+  it("Use this pipeline still replaces the pipeline, and Add as a category needs a document", async () => {
+    const config = composeConfig(templates.index[0] as never, templates.query[0] as never, templates.shared as never)
+    const onUse = vi.fn()
+    render(<TemplatePicker registry={registry} current={{ ...CURRENT, config }} onUse={onUse} onClose={vi.fn()} />)
+    await screen.findByRole("group", { name: "1. What are your documents like?" })
+    fireEvent.click(screen.getByRole("button", { name: "Use this pipeline" }))
+    expect(onUse.mock.calls[0][0].whole).toBeUndefined()
+    cleanup()
+    render(<TemplatePicker registry={registry} current={{ documents: [], question: CURRENT.question, config }} onUse={vi.fn()} onClose={vi.fn()} />)
+    await screen.findByRole("group", { name: "1. What are your documents like?" })
+    expect(screen.queryByRole("button", { name: "Add as a category" })).toBeNull()
   })
 
   it("leaves without a change from Keep my current pipeline", async () => {

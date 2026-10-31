@@ -1185,7 +1185,7 @@ describe("saved pipelines on Build", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
     const url = new URL(writeText.mock.calls[0][0] as string)
     expect(url.pathname).toBe("/build")
-    expect(decodePipeline(url.searchParams.get("pipeline")!, TEST_REGISTRY)).toEqual({ ok: true, name: "Token chunks", graph: usableGraph(saved, TEST_REGISTRY), documents: saved.documents })
+    expect(decodePipeline(url.searchParams.get("pipeline")!, TEST_REGISTRY)).toMatchObject({ ok: true, name: "Token chunks", graph: usableGraph(saved, TEST_REGISTRY), documents: saved.documents })
     expect(await within(bar()).findByText("Link copied")).toBeTruthy()
   })
 

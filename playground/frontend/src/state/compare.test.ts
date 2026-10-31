@@ -586,9 +586,9 @@ describe("what a comparison runs and shows", () => {
 
 describe("pins in a comparison", () => {
   const variants = [{ transform: "token_based", config: { max_tokens: 64, overlap: 8 } }]
-  it("sends pins only when the config has categories", () => {
+  it("sends the pins the documents carry, as Build does", () => {
     const docs = [{ sha: "a".repeat(64), filename: "r.pdf", category: "reports" }]
-    expect("categories" in compareRequest({ ...working(), documents: docs }, node("chunk"), variants, "step")).toBe(false)
+    expect(compareRequest({ ...working(), documents: docs }, node("chunk"), variants, "step")).toMatchObject({ categories: { [docs[0].sha]: "reports" } })
     const cat = { parse: { use: "pdfium" }, chunk: { use: "token_based" } }
     const config = { index: { store: { use: "lancedb" } }, categories: { reports: cat }, route: [{ category: "reports" }] }
     expect(compareRequest({ ...working(), config, documents: docs }, node("chunk"), variants, "step")).toMatchObject({ categories: { [docs[0].sha]: "reports" } })

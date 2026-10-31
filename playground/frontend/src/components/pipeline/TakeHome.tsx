@@ -39,7 +39,7 @@ const shownName = (path: string) => (path === DOCS ? "docs/" : path)
 
 /**
  * Take it home: Build's pipeline as a small Python project, as a zip. The
- * button sits next to Copy as YAML and opens a side sheet: the files in the
+ * button opens a side sheet: the files in the
  * zip, each with the server's own text; what stays behind (the documents, the
  * key, the index); the question set and the scores to beat, when Evaluate has
  * them for this pipeline; and the settings the demo capped. The server writes

@@ -4,7 +4,6 @@
  * nowhere else: not a body, not a URL.
  */
 
-import type { PipelineConfig } from "@/state/config"
 
 import { jsonInit, keyHeaders, requestFrom, type KeyOpts } from "./client"
 import type {
@@ -32,7 +31,6 @@ import type {
   Strategies,
   V2AskRequest,
   V2RunRequest,
-  Validated,
 } from "./types"
 
 export const V2_BASE = "/api/v2"
@@ -50,7 +48,6 @@ export const v2 = {
   explain: (body: { stage: string; use: string; settings: Record<string, unknown> }, signal?: AbortSignal) =>
     request<Explanation>("/explain", { ...jsonInit(body), signal }),
   /** 200 either way: `{ok, problems}`; a site rule's refusal keeps its status (403). */
-  validate: (config: PipelineConfig | Record<string, unknown>) => request<Validated>("/pipelines/validate", jsonInit({ config })),
 
   documents: () => request<Source[]>("/documents"),
   uploadDocument: (file: File) => request<Source>("/documents", { method: "POST", body: form(file) }),

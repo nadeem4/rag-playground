@@ -119,11 +119,10 @@ describe("PipelineBar: Start from a template", () => {
 })
 
 describe("PipelineBar: Take it home", () => {
-  it("sits next to Copy as YAML and opens the Take it home sheet", async () => {
+  it("has no Copy as YAML button, and Take it home opens its sheet", async () => {
     render(<Bar onLoad={() => {}} />)
-    const copy = screen.getByRole("button", { name: "Copy as YAML" })
+    expect(screen.queryByRole("button", { name: "Copy as YAML" })).toBeNull()
     const home = screen.getByRole("button", { name: "Take it home" })
-    expect(copy.closest("div")).toBe(home.closest("div"))
 
     fireEvent.click(home)
 

@@ -38,7 +38,7 @@ router = APIRouter()
 MAX_BODY_BYTES = 2 * MAX_SET_BYTES
 TOO_BIG = "The request is larger than 2 MB. Take home a smaller question set."
 #: The 400 for a pipeline whose parts are not in the file's shape, such as a list where a mapping goes.
-MALFORMED = "The pipeline is not in the pipeline file's shape, so it cannot be packed. Check it with Copy as YAML."
+MALFORMED = "The pipeline is not in the pipeline file's shape, so it cannot be packed."
 #: The scores line is display text: it is cut to this many characters.
 MAX_SCORES_CHARS = 200
 #: The zip's name when the pipeline has none that makes a file name.

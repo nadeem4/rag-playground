@@ -759,17 +759,9 @@ Choose the file, or drop it on the Library page, in any browser.
 
 ## Take your pipeline with you
 
-**Copy as YAML** on Build puts your pipeline on the clipboard as a Pandion pipeline file.
-Save it as `pipeline.yaml` and run it with the `pandion` command, such as
-`pandion index pipeline.yaml report.pdf`, or with `Pipeline.from_yaml` (see
-[the pandion command](pandion.md#the-pandion-command)).
-The prompts and the reranker revision are Pandion's own, as in the playground. If the
-pipeline has a problem, the page says what it is and copies nothing. If the browser refuses
-the clipboard, the page says so.
-
 ### Take it home
 
-**Take it home**, next to Copy as YAML, gives you the pipeline as a small Python project
+**Take it home** on Build gives you the pipeline as a small Python project
 in a zip. It opens a sheet that shows what the zip holds:
 
 - `README.md`: how to set it up and run it. It names the environment variable for the

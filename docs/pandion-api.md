@@ -37,6 +37,17 @@ app = create_app(ApiSettings(data_dir=Path("./pandion-data")))
 uvicorn serve:app
 ```
 
+Start it, then make a first call. With no `prefix`, the routes sit at the root:
+
+```bash
+curl http://127.0.0.1:8000/health
+# {"status":"ok","pandion":"...","pandion_api":"..."}
+```
+
+If you set `prefix="/api/v2"`, as the example below does, every route moves under it:
+`curl http://127.0.0.1:8000/api/v2/health`. The interactive docs FastAPI builds are at
+`/docs` (they are under the prefix only if you mount the routes there yourself).
+
 `ApiSettings` takes `data_dir` (the one folder every request runs under), `models` (a
 `pandion.ModelSettings`: the model folder, `download` and the device), `prefix` (where the
 routes are mounted, for example `/api/v2`) and `title`.
@@ -44,6 +55,32 @@ routes are mounted, for example `/api/v2`) and `title`.
 [examples/pandion-api/](../examples/pandion-api) runs a server like this one and a client
 that validates a pipeline, uploads a document, indexes it, asks a question and evaluates,
 in Python and as curl commands.
+
+### A first run, step by step
+
+Every long job is a run: you start it, follow its events, then read its result. This is
+the shortest path from nothing to an answer. `PIPELINE` is a pipeline as JSON, as in
+[examples/pandion-api/](../examples/pandion-api); the pipeline below uses the fake
+embedder, so nothing downloads.
+
+```bash
+API=http://127.0.0.1:8000
+# 1. Check the pipeline. A bad one gives "ok": false and a sentence for each problem.
+curl -s -X POST $API/pipelines/validate -H "Content-Type: application/json" \
+  -d "{\"config\": $PIPELINE}"
+# 2. Upload a document. The reply holds its "sha", which is its id from now on.
+curl -s -F "file=@report.pdf" $API/documents
+# 3. Start an index run. The reply is 202 with a "run_id".
+curl -s -X POST $API/runs -H "Content-Type: application/json" \
+  -d "{\"config\": $PIPELINE, \"documents\": [\"$SHA\"]}"
+# 4. Follow its events until "stream_end", then read the result.
+curl -s -N $API/runs/$RUN/events
+curl -s $API/runs/$RUN
+```
+
+In Python the same steps are `httpx.post(...)` calls with `json=` and `files=`;
+[run_pipeline.py](../examples/pandion-api/run_pipeline.py) is a full client. `POST /ask`
+and `POST /evaluations` work the same way: 202, a `run_id`, events, then `GET /runs/{id}`.
 
 ## Where it keeps files
 
@@ -65,7 +102,7 @@ with a 400, because a stored file with that suffix would look half-written.
 | `POST /explain` | `{"stage", "use", "settings"}` gives what that strategy will do with those settings, in plain words (`pandion.explain`). Nothing runs. |
 | `POST /pipelines/validate` | `{"config": <pipeline>}` gives `{"ok": true, "problems": [], "details": [], "config": <the pipeline in the file's shape>, "yaml": <text>}` or `{"ok": false, "problems": [<sentence>], "details": [...]}` (see [Errors](#errors)), where `yaml` is the pipeline as a file Pandion reads, with `path: ./pandion-index`. The file holds the pipeline as it ran; a site rule may refuse changed prompts before any file is made |
 | `GET /documents` | the documents this caller may read, by name: `sha`, `filename`, `size`, `content_type`, `origin_url` for a URL document, plus what the Policy's `describe` adds. Never cached. |
-| `POST /documents` | multipart `file`: keeps it by its fingerprint and returns its record. The same bytes twice are one document. A file whose extension no parser here reads (such as `.xlsx`) is a 415 before anything is kept; the formats are the ones the parsers declare (`provides["formats"]`): PDF, Word, PowerPoint, HTML, Markdown, text, PNG and JPG. |
+| `POST /documents` | multipart `file`: keeps it by its fingerprint and returns its record, `{"sha", "filename", "size", "content_type"}` (200). The same bytes twice are one document. A file whose extension no parser here reads (such as `.xlsx`) is a 415 before anything is kept; the formats are the ones the parsers declare (`provides["formats"]`): PDF, Word, PowerPoint, HTML, Markdown, text, PNG and JPG. |
 | `POST /documents/url` | `{"url"}` (at most 2,000 characters): fetches the page once (`pandion.extend.fetch_url`), then keeps it exactly like an upload and returns the same record plus `origin_url`. See [URL documents](#url-documents). |
 | `DELETE /documents/{id}` | `{"sha", "deleted"}`: deletes the file, its record and its question set, if the Policy agrees |
 | `GET /documents/{id}/file` | the file's own bytes. Never cached. |
@@ -82,9 +119,9 @@ with a 400, because a stored file with that suffix would look half-written.
 | `POST /evaluations/against` | `{"report", "baseline"}`, each an evaluation's result or the part of it a comparison reads (`top_k`, the totals, the fingerprint, the documents, `nondeterministic`, and each question's `id`, `question`, `found` and `error`): the run compared with the baseline as `report.against(baseline)` compares them (`pandion.evaluation.regression`), with `best`, `pandion.evaluation.best` of `[baseline, report]`. Each text is held to the caps the other routes use (a question at most 2,000 characters, an `error` at most 10,000 so a long failure line still compares, each gold passage at most 10,000, all of a run's gold passages together at most 1 MB, an `id`, the fingerprint, each document sha and each `nondeterministic` step at most 500, at most 500 documents and 50 steps): a 422 past them. Nothing runs. |
 | `POST /pipelines/sort` | `{"config", "documents": [id, ...], "categories"?, "metadata"?}` gives `{"documents": {id: {"category", "reason"}}}`: the category each document would go to now and why. Nothing runs and no step file is written. The pins and labels count as in a run, and the same site rules apply as for `POST /runs`. A URL document is named and read as in a run, with the link it was fetched from as its `path`. A pipeline whose source is not `upload` is a 422. |
 | `POST /runs` | `{"config", "documents": [id, ...], "through"?, "force"?}`: index the documents, or stop each after one step (`parse`, `clean`, `clean.N`, `chunk`; `index` is the whole run). 202 `{"run_id"}`. A pipeline with categories sends each document through its category's steps, and `through` can name any step that some category has. The result says which category each document went to and why (see [Categories](#categories)). A PDF or an image behind a Word, PowerPoint, HTML, Markdown or text file's name is 415 before anything runs ("this file is named .md but holds a PDF, so it cannot be indexed"). |
-| `GET /runs/{run_id}` | the run's status, its whole event log, and once it ended its `result` |
+| `GET /runs/{run_id}` | `{"run_id", "kind", "status", "ok", "cancel_requested", "last_event_id", "events", "result"}`. `kind` is `index`, `ask`, `retrieve`, `evaluation`, `comparison` or `questions`. `status` is `running`, `finished`, `cancelled` or `error`. `result` is `null` until the run ends. |
 | `GET /runs/{run_id}/events` | the events as server-sent events; reconnect with `Last-Event-ID` or `?last_event_id=N` |
-| `POST /runs/{run_id}/cancel` | stop the run between steps: 202, or 409 when it already ended |
+| `POST /runs/{run_id}/cancel` | stop the run between steps: 202 `{"run_id", "cancel_requested": true, "detail"}`, or 409 when it already ended |
 | `POST /ask` | `{"config", "documents", "question", "k"?, "answer"?, "force"?, "where"?}`: search the documents for the question (at most 2,000 characters; `k` 1 to 100), and answer it unless `answer` is false. `where` narrows the search, as `where=` does in the package: `{"document"?: [id, ...], "pages"?: [first, last], "section"?: "Installing"}`. Its documents are ids, and each must be one of `documents`. Pages are whole numbers from 1 to 2,147,483,647, first not after last, and a piece matches when its pages overlap them. A piece with no pages never matches. `section` is a heading matched exactly; on an index without headings (pdfium) the search fails and says why. An unknown key, a wrong type or a bad page pair is a 422. A run: 202 `{"run_id"}`. |
 | `POST /evaluations` | `{"config", "documents", "questions"?, "top_k"?}`: search for every question and say whether its answer came back, and for a miss the step that lost it (`pandion.evaluate`). Without `questions`, the sets kept against the documents. A run; its result is the report's `to_dict()` plus its `cost`. |
 | `POST /comparisons` | `{"config", "stage", "variants", "documents", "questions"?, "top_k"?, "through"?, "question"?, "answer"?}`: run the pipeline once per variant of one stage (at most the Policy's `max_variants`, ten by default) and evaluate each with the questions sent (`pandion.compare`). Without `questions` it is index only, and `through` can stop each variant after a step, as for `POST /runs`. A run; its result names the best. `question` (one question, no gold passage, at most 2,000 characters) instead of `questions` runs each variant's search (or, with `answer: true`, its answer) and returns the results unscored, as `{"comparisons": [{"stage", "variant", "ok", "cancelled", "retrieval" or "answer", "cost", "varied_cost"}], "best": [], "cancelled", "varied_from", "shared_cost", "cost"}`; `best` is then empty. Both kinds carry `varied_from`, `varied_cost` and `shared_cost` (see [Speed and cost](#speed-and-cost)). Sending both `question` and `questions` is a 400, and so is `through` with `question` (a comparison on one question searches, so it cannot stop after an index step) or `answer: true` without `question`. |
@@ -487,6 +524,23 @@ variant stops after the card it shows. These are still open:
   thread.
 
 ## Errors
+
+An error is JSON: `{"detail": <sentence>}`, or for a pipeline Pandion refuses a `detail`
+object with `problems` and `details`. These are the statuses a client meets:
+
+| Status | When |
+|---|---|
+| 202 | a run started (`POST /runs`, `/ask`, `/evaluations`, `/comparisons`, the question generator), or a cancel was noted |
+| 400 | a request that is well formed but cannot be used: a bad `through`, `stage` or question set, a missing key, a `.part` file name, an empty page |
+| 403 | a site rule refused it, or a run names a document this caller may not read |
+| 404 | an unknown or unreadable document, run, result or strategy (the same sentence, so the answer never tells which) |
+| 409 | a cancel on a run that already ended, or `DELETE /cache` while a run works |
+| 413 | a file, page or question set over its cap |
+| 415 | a file type no parser reads, or a page route on a file that is not a PDF |
+| 422 | the body has the wrong shape (FastAPI's own check), or the pipeline has problems |
+| 429 | the Policy's limit on runs or fetches |
+
+The first rows are the general rule; the lists below say which route gives which.
 
 - A pipeline Pandion refuses is a 422 whose detail is `{"problems": [<sentence>],
   "details": [{"message", "step", "use", "settings"}]}`: the `ConfigError`'s one-line

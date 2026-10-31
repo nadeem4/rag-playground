@@ -23,6 +23,7 @@ import { FirstRun } from "@/components/pipeline/FirstRun"
 import { KeptNotice } from "@/components/pipeline/KeptNotice"
 import { fmtMs, plainName } from "@/components/pipeline/NodeCard"
 import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
+import { IndexDocuments } from "@/components/inspectors/IndexByDocument"
 import { DocumentTabs } from "@/components/pipeline/DocumentTabs"
 import { PipelineBar } from "@/components/pipeline/PipelineBar"
 import { RunStrip, stripSegments, type LiveRun, type StripLine } from "@/components/pipeline/RunStrip"
@@ -904,6 +905,9 @@ function CardInspector({
   const docResult = docNode ? results[docNode.id] : undefined
   const docId = artifactId && docResult && !stale.has(docNode!.id) ? docResult.artifact_id : undefined
 
+  // The Index pane counts the chunks each document made, from the Chunk step's own results.
+  const chunkNode = node.stage === "index" ? upstreamOfStage(graph, node.id, "chunk") : undefined
+
   const payload = useArtifactPayload(artifactId)
   const before = useArtifactPayload(relatedId)
   const parsed = useArtifactPayload(docId)
@@ -944,6 +948,7 @@ function CardInspector({
           status={waitingBefore ? { kind: "loading" } : payload.status}
           context={context}
         />
+        {node.stage === "index" ? <IndexDocuments files={tabs.files} documents={chunkNode ? results[chunkNode.id]?.documents : undefined} /> : null}
       </>
     )
   }

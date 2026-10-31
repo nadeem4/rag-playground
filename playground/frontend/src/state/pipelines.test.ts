@@ -53,7 +53,7 @@ describe("saved pipelines", () => {
     expect(a.name).toBe("First")
     expect(a.id).toMatch(/^[A-Za-z0-9_-]{8}$/)
     expect(readCurrentId()).toBe(b.id)
-    expect(readPipelines()[0].config?.index.chunk.use).toBe("token_based")
+    expect(readPipelines()[0].config?.index.chunk!.use).toBe("token_based")
   })
 
   it("keeps an Enrich step through a save, a share link and a library export", () => {
@@ -88,7 +88,7 @@ describe("saved pipelines", () => {
   it("updates, renames and deletes by id, and deleting the current one clears the selection", () => {
     const p = savePipeline("Mine", g())!.saved
     expect(updatePipeline(p.id, setTransform(g(), "chunk", "markdown_header", R))).toBe(true)
-    expect(readPipelines()[0].config?.index.chunk.use).toBe("markdown_header")
+    expect(readPipelines()[0].config?.index.chunk!.use).toBe("markdown_header")
     expect(renamePipeline(p.id, "Renamed")).toBe(true)
     expect(renamePipeline(p.id, "")).toBe(false)
     expect(readPipelines()[0].name).toBe("Renamed")
@@ -343,7 +343,7 @@ describe("the Library list as configs", () => {
     expect(p.config?.index.chunk).toEqual({ use: "recursive_character", chunk_size: 400, chunk_overlap: 80 })
     expect(p.documents).toEqual([DOC])
     expect(p.kept).toBeUndefined()
-    expect(JSON.parse(window.localStorage.getItem(LIST_KEY)!)[0].config.index.parse.use).toBe("pdfium")
+    expect(JSON.parse(window.localStorage.getItem(LIST_KEY)!)[0].config.index.parse!.use).toBe("pdfium")
     expect(window.localStorage.getItem(OLD_LIST_KEY)).toBe(old)
   })
 
@@ -379,7 +379,7 @@ describe("the Library list as configs", () => {
   it("saves a config, never a graph", () => {
     savePipeline("Mine", g())
     const stored = JSON.parse(window.localStorage.getItem(LIST_KEY)!)[0]
-    expect(stored.config.index.parse.use).toBe("pdfium")
+    expect(stored.config.index.parse!.use).toBe("pdfium")
     expect(stored).not.toHaveProperty("graph")
   })
 
@@ -494,7 +494,7 @@ describe("share links", () => {
     const code = encodePipeline("Mine", sampleGraph(R, DOC, "Why?"))
     const body = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(code.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0))))
     expect(body).toMatchObject({ v: 3, name: "Mine", documents: [DOC], question: { text: "Why?" } })
-    expect(body.config.index.parse.use).toBe("pdfium")
+    expect(body.config.index.parse!.use).toBe("pdfium")
     expect(body).not.toHaveProperty("graph")
     const d = decodePipeline(code, R)
     expect(d?.ok && sameGraph(d.graph, sampleGraph(R, DOC, "Why?"))).toBe(true)

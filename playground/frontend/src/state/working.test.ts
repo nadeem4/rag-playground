@@ -74,7 +74,7 @@ describe("the working pipeline", () => {
     const c = graphToConfig(setConfig(sampleGraph(R, DOC), "chunk", { chunk_size: 900, chunk_overlap: 0 }))
     if (!c.ok) throw new Error(c.problem)
     storeWorking(c.pipeline)
-    expect(readWorking()!.config.index.chunk.chunk_size).toBe(900)
+    expect(readWorking()!.config.index.chunk!.chunk_size).toBe(900)
   })
 
   it("storeGraph stores the config, and the column comes back the same", () => {
@@ -134,5 +134,12 @@ describe("reading a stored working pipeline", () => {
     if (!c.ok) throw new Error(c.problem)
     const json = JSON.stringify({ ...c.pipeline, question: { text: "Q?", gold_answers: ["yes", 5, null] } })
     expect(parseWorking(json)?.question).toEqual({ text: "Q?", gold_answers: ["yes"] })
+  })
+  it("keeps a document's category only when it is text", () => {
+    const c = graphToConfig(sampleGraph(R, DOC))
+    if (!c.ok) throw new Error(c.problem)
+    const docs = [{ ...DOC, category: "reports" }, { sha: "b".repeat(64), filename: "b.pdf", category: 3 }]
+    const read = parseWorking(JSON.stringify({ ...c.pipeline, documents: docs }))
+    expect(read?.documents).toEqual([{ ...DOC, category: "reports" }, { sha: "b".repeat(64), filename: "b.pdf" }])
   })
 })

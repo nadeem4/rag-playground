@@ -17,8 +17,29 @@ import { columnOrder, completeGraph, COLUMN_STAGES, defaultConfig, STAGE_VERB, s
 /** One step of a pipeline file: the strategy it uses, then its settings. */
 export type Step = { use: string } & Record<string, unknown>
 
+/** One kind of document: its own Parse, Clean and Chunk. `template` only records where it was copied from. */
+export interface CategoryDef {
+  name?: string
+  template?: string
+  parse: Step
+  clean?: Step[]
+  chunk: Step
+}
+
+/** One rule of the route list: the first whose checks all pass picks the category. The last has no `when`. */
+export interface RouteRule {
+  when?: Step | Step[]
+  category: string
+}
+
+/**
+ * Parse, Clean and Chunk are under `index` in the old shape and under
+ * `categories` in the new one; a config has them in one place only.
+ */
 export interface PipelineConfig {
-  index: { source?: Step; parse: Step; clean?: Step[]; chunk: Step; enrich?: Step; embed?: Step; store: Step }
+  index: { source?: Step; parse?: Step; clean?: Step[]; chunk?: Step; enrich?: Step; embed?: Step; store: Step }
+  categories?: Record<string, CategoryDef>
+  route?: RouteRule[]
   retrieve?: { rewrite?: Step; search: Step; rerank?: Step[] }
   answer?: Step
 }
@@ -90,7 +111,9 @@ export function cardOfStepIn(graph: PipelineGraph, step: string): string | null 
 
 /** A step's place as Pandion names it (`index.clean.2`, `retrieve.search`) as the step a card runs as (`clean.2`, `search`). */
 function stepOfPlace(place: string): string {
-  const [section, name, n] = place.split(".")
+  const parts = place.split(".")
+  // `categories.reports.clean.2` is `clean.2` of the category `reports`.
+  const [section, name, n] = parts[0] === "categories" ? ["index", ...parts.slice(2)] : parts
   if (section === "answer") return "answer"
   if (name === "embed" || name === "store") return "index"
   return n ? `${name}.${n}` : name
@@ -103,6 +126,9 @@ function stepOfPlace(place: string): string {
  */
 export function cardOfProblem(problem: Pick<ProblemDetail, "step">, graph?: PipelineGraph): string | null {
   if (!problem.step) return null
+  // A category or the routes as a whole are no card's.
+  const place = problem.step.split(".")
+  if (place[0] === "route" || (place[0] === "categories" && place.length < 3)) return null
   const step = stepOfPlace(problem.step)
   return graph ? cardOfStepIn(graph, step) : cardOfStep(step)
 }
@@ -117,6 +143,72 @@ export const otherSource = (use: string) => `Its documents come from ${clip(use)
 const isStep = (v: unknown): v is Step => isRecord(v) && typeof v.use === "string" && v.use !== "" && !(v.use in Object.prototype)
 const isStepList = (v: unknown): v is Step[] => Array.isArray(v) && v.every(isStep)
 const optional = (v: unknown, check: (x: unknown) => boolean) => v === undefined || check(v)
+const isText = (v: unknown) => typeof v === "string"
+const isCategory = (v: unknown): v is CategoryDef =>
+  isRecord(v) && isStep(v.parse) && isStep(v.chunk) && optional(v.clean, isStepList) && optional(v.name, isText) && optional(v.template, isText)
+const isRule = (v: unknown): v is RouteRule =>
+  isRecord(v) && typeof v.category === "string" && optional(v.when, (x) => isStep(x) || isStepList(x))
+
+/** The one category an old config holds. */
+export const DEFAULT_CATEGORY = "default"
+
+/** The config's categories. An old config is one category, `default`, named "Default". */
+export function categoriesOf(config: PipelineConfig): Record<string, CategoryDef> {
+  if (config.categories) return config.categories
+  const { parse, clean, chunk } = config.index
+  return { [DEFAULT_CATEGORY]: { name: "Default", parse: parse!, ...(clean ? { clean } : {}), chunk: chunk! } }
+}
+
+/**
+ * `edited`, a config read from one column of cards, written into category `id`
+ * of `base`: the column's Parse, Clean and Chunk become that category's, and
+ * everything else (embed, store, retrieve, answer) is the column's. Other
+ * categories and the routes stay as `base` has them.
+ */
+function intoCategory(base: PipelineConfig, id: string, edited: PipelineConfig): PipelineConfig {
+  const { parse, clean, chunk, ...shared } = edited.index
+  const prev = categoriesOf(base)[id]
+  const def: CategoryDef = {
+    ...(prev?.name ? { name: prev.name } : {}),
+    ...(prev?.template ? { template: prev.template } : {}),
+    parse: parse!,
+    ...(clean ? { clean } : {}),
+    chunk: chunk!,
+  }
+  const { retrieve, answer } = edited
+  const stem: PipelineConfig = {
+    index: shared,
+    categories: categoriesOf(base),
+    route: base.route ?? [{ category: DEFAULT_CATEGORY }],
+    ...(retrieve ? { retrieve } : {}),
+    ...(answer ? { answer } : {}),
+  }
+  return withCategory(stem, id, def)
+}
+
+/**
+ * The config with category `id` set to `def`. An old config stays old while it
+ * has only a plain `default`, so it is saved, hashed and served as it was; a
+ * second category moves it to the new shape, every document going to `default`
+ * until the routes say otherwise. A config left with only a plain `default`
+ * under the one catch-all rule goes back to the old shape.
+ */
+export function withCategory(config: PipelineConfig, id: string, def: CategoryDef): PipelineConfig {
+  const { parse: _p, clean: _c, chunk: _k, ...shared } = config.index
+  const categories = { ...categoriesOf(config), [id]: def }
+  const route = config.route ?? [{ category: DEFAULT_CATEGORY }]
+  const catchAll = route.length === 1 && !route[0].when && route[0].category === DEFAULT_CATEGORY
+  const plain = !def.template && (def.name ?? "Default") === "Default"
+  if (id === DEFAULT_CATEGORY && Object.keys(categories).length === 1 && catchAll && plain) {
+    const { retrieve, answer } = config
+    return {
+      index: { ...shared, parse: def.parse, ...(def.clean ? { clean: def.clean } : {}), chunk: def.chunk },
+      ...(retrieve ? { retrieve } : {}),
+      ...(answer ? { answer } : {}),
+    }
+  }
+  return { ...config, index: shared, categories, route }
+}
 
 /**
  * Whether a config from outside (a share link, an export file, storage) has a
@@ -126,10 +218,18 @@ const optional = (v: unknown, check: (x: unknown) => boolean) => v === undefined
  * fails it is never held.
  */
 export function isConfigShape(v: unknown): v is PipelineConfig {
-  if (!isRecord(v) || !Object.keys(v).every((k) => k === "index" || k === "retrieve" || k === "answer")) return false
-  const { index, retrieve, answer } = v
-  if (!isRecord(index) || !isStep(index.parse) || !isStep(index.chunk) || !isStep(index.store)) return false
+  if (!isRecord(v) || !Object.keys(v).every((k) => ["index", "retrieve", "answer", "categories", "route"].includes(k))) return false
+  const { index, retrieve, answer, categories, route } = v
+  if (!isRecord(index) || !isStep(index.store)) return false
   if (!optional(index.source, isStep) || !optional(index.embed, isStep) || !optional(index.clean, isStepList) || !optional(index.enrich, isStep)) return false
+  if (categories === undefined) {
+    if (route !== undefined || !isStep(index.parse) || !isStep(index.chunk)) return false
+  } else {
+    // Steps are in the categories, never beside them.
+    if (index.parse !== undefined || index.clean !== undefined || index.chunk !== undefined) return false
+    if (!isRecord(categories) || Object.keys(categories).length === 0 || !Object.values(categories).every(isCategory)) return false
+    if (!Array.isArray(route) || route.length === 0 || !route.every(isRule)) return false
+  }
   if (retrieve !== undefined) {
     if (!isRecord(retrieve) || !isStep(retrieve.search) || !optional(retrieve.rewrite, isStep) || !optional(retrieve.rerank, isStepList)) return false
   }
@@ -142,7 +242,7 @@ export function isConfigShape(v: unknown): v is PipelineConfig {
  * its cards are the column's (one of each stage but Clean and Rerank) and each
  * card is fed by the one above it.
  */
-export function graphToConfig(graph: unknown): Converted {
+export function graphToConfig(graph: unknown, into?: { config: PipelineConfig; category: string }): Converted {
   if (!isRecord(graph) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return no("It is not a pipeline: it has no steps.")
   const g = graph as unknown as PipelineGraph
   if (!g.nodes.every((n) => isRecord(n) && typeof n.id === "string" && typeof n.stage === "string" && typeof n.transform === "string")) {
@@ -212,7 +312,7 @@ export function graphToConfig(graph: unknown): Converted {
       : []
   return {
     ok: true,
-    pipeline: { config, documents: documentsOf(g), question: { text: typeof q.text === "string" ? q.text : "", gold_answers: golds } },
+    pipeline: { config: into ? intoCategory(into.config, into.category, config) : config, documents: documentsOf(g), question: { text: typeof q.text === "string" ? q.text : "", gold_answers: golds } },
   }
 }
 
@@ -234,12 +334,19 @@ export function servedConfig(config: PipelineConfig, registry: Registry): { conf
   }
   const each = (stage: Stage, list: Step[], name: string) => list.map((s, i) => keep(stage, s, list.length > 1 ? `${name} ${i + 1}` : name))
   const { index, retrieve, answer } = config
+  // Parse, Clean and Chunk of one place; `name` is empty for the old shape, else the category.
+  const stepsOf = (c: { parse?: Step; clean?: Step[]; chunk?: Step }, name: string) => {
+    const at = (w: string) => (name ? `${name} ${w}` : w)
+    return {
+      ...(c.parse ? { parse: keep("parse", c.parse, at("parse")) } : {}),
+      ...(c.clean ? { clean: each("clean", c.clean, at("clean")) } : {}),
+      ...(c.chunk ? { chunk: keep("chunk", c.chunk, at("chunk")) } : {}),
+    }
+  }
   const out: PipelineConfig = {
     index: {
       ...(index.source ? { source: index.source } : {}),
-      parse: keep("parse", index.parse, "parse"),
-      ...(index.clean ? { clean: each("clean", index.clean, "clean") } : {}),
-      chunk: keep("chunk", index.chunk, "chunk"),
+      ...stepsOf(index, ""),
       ...(index.enrich ? { enrich: keep("enrich", index.enrich, "enrich") } : {}),
       // The embedder's settings are the Index card's: they are checked against the store's schema.
       ...(index.embed ? { embed: keep("index", index.embed, "embed", index.store.use) } : {}),
@@ -252,6 +359,10 @@ export function servedConfig(config: PipelineConfig, registry: Registry): { conf
       search: keep("retrieve", retrieve.search, "search"),
       ...(retrieve.rerank ? { rerank: each("rerank", retrieve.rerank, "rerank") } : {}),
     }
+  }
+  if (config.categories) {
+    out.categories = Object.fromEntries(Object.entries(config.categories).map(([id, c]) => [id, { ...c, ...stepsOf(c, id) } as CategoryDef]))
+    if (config.route) out.route = config.route
   }
   if (answer) out.answer = keep("use_case", answer, "answer")
   return removed.length ? { config: out, removed } : { config, removed }
@@ -271,8 +382,12 @@ export function removedText(removed: readonly string[]): string | null {
  * shows Ask, Retrieve and Search). Only the settings `servedConfig` keeps are
  * drawn, so the browser never holds one the server does not list.
  */
-export function columnOf(p: WorkingPipeline, registry: Registry): PipelineGraph {
-  const { index, retrieve, answer } = servedConfig(p.config, registry).config
+export function columnOf(p: WorkingPipeline, registry: Registry, category?: string): PipelineGraph {
+  const served = servedConfig(p.config, registry).config
+  const { index, retrieve, answer } = served
+  const cats = categoriesOf(served)
+  // The chosen category, or the first; a name it does not have draws the first.
+  const shown = cats[category ?? ""] ?? Object.values(cats)[0]
   const nodes: GraphNode[] = []
   const add = (id: string, stage: Stage, s: Step | undefined, extra: Record<string, unknown> = {}) => {
     if (!s) return
@@ -281,9 +396,9 @@ export function columnOf(p: WorkingPipeline, registry: Registry): PipelineGraph 
     nodes.push({ id, stage, transform: use, config: { ...(info ? defaultConfig(info) : {}), ...settings, ...extra } })
   }
   nodes.push({ id: "source", stage: "source", transform: index.source?.use ?? "upload", config: sourceConfigWith({}, docsOfSource({ documents: p.documents })) })
-  add("parse", "parse", index.parse)
-  index.clean?.forEach((s, i) => add(`clean_${i + 1}`, "clean", s))
-  add("chunk", "chunk", index.chunk)
+  add("parse", "parse", shown.parse)
+  shown.clean?.forEach((s, i) => add(`clean_${i + 1}`, "clean", s))
+  add("chunk", "chunk", shown.chunk)
   add("enrich", "enrich", index.enrich)
   const embed = index.embed ? { embedder: index.embed.use, ...without(index.embed, ["use"]) } : {}
   add("index", "index", index.store, embed)
@@ -306,9 +421,11 @@ export function knownSteps(config: PipelineConfig, registry: Registry): boolean 
 export function unknownStrategy(config: PipelineConfig, registry: Registry): string | null {
   const { index, retrieve, answer } = config
   const steps: [Stage, Step | undefined][] = [
-    ["parse", index.parse],
-    ...(index.clean ?? []).map((s): [Stage, Step] => ["clean", s]),
-    ["chunk", index.chunk],
+    ...Object.values(categoriesOf(config)).flatMap((c): [Stage, Step | undefined][] => [
+      ["parse", c.parse],
+      ...(c.clean ?? []).map((s): [Stage, Step] => ["clean", s]),
+      ["chunk", c.chunk],
+    ]),
     ["enrich", index.enrich],
     ["index", index.store],
     ["query", retrieve?.rewrite],

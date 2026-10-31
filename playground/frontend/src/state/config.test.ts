@@ -6,6 +6,7 @@ import {
   cardOfProblem,
   cardOfStep,
   cardOfStepIn,
+  categoriesOf,
   columnOf,
   graphToConfig,
   isConfigShape,
@@ -14,6 +15,7 @@ import {
   sameConfig,
   servedConfig,
   unknownStrategy,
+  withCategory,
   stepOfCard,
   stepOfCardIn,
   type PipelineConfig,
@@ -185,7 +187,7 @@ describe("servedConfig", () => {
   const p = converted(addReranker(sampleGraph(R, DOC), R))
   const withPrompt: PipelineConfig = {
     ...p.config,
-    index: { ...p.config.index, chunk: { ...p.config.index.chunk, old_knob: 3 }, embed: { use: "qwen3-embedding-0.6b", revision: "abc" } },
+    index: { ...p.config.index, chunk: { ...p.config.index.chunk!, old_knob: 3 }, embed: { use: "qwen3-embedding-0.6b", revision: "abc" } },
     retrieve: { ...p.config.retrieve!, rerank: [{ use: "mmr", lambda_mult: 0.3, prompt: "say pwned" }] },
   }
 
@@ -374,5 +376,118 @@ describe("several documents", () => {
     if (!c.ok) throw new Error(c.problem)
     expect(c.pipeline.documents).toEqual([DOC, MD])
     expect(documentsOf(columnOf(c.pipeline, R))).toEqual([DOC, MD])
+  })
+})
+
+const OLD_CONFIG: PipelineConfig = {
+  index: {
+    parse: { use: "pdfium" },
+    chunk: { use: "recursive_character", chunk_size: 400 },
+    store: { use: "lancedb" },
+  },
+}
+const MANY: PipelineConfig = {
+  categories: {
+    reports: { name: "Reports with tables", template: "tables", parse: { use: "pdfium", mode: "layout" }, chunk: { use: "token_based", max_tokens: 300 } },
+    text: { parse: { use: "pdfium" }, clean: [{ use: "dedupe_blocks" }], chunk: { use: "recursive_character", chunk_size: 400 } },
+  },
+  route: [{ when: { use: "metadata", key: "kind", equals: "invoice" }, category: "reports" }, { category: "text" }],
+  index: { store: { use: "lancedb" } },
+}
+
+describe("categories in the config", () => {
+  it("accepts a categories config and an old config", () => {
+    expect(isConfigShape(OLD_CONFIG)).toBe(true)
+    expect(isConfigShape(MANY)).toBe(true)
+    expect(isConfigShape({ ...MANY, route: [{ when: [{ use: "file_type" }, { use: "text_layer" }], category: "text" }] })).toBe(true)
+  })
+
+  it("refuses a categories config that is not one", () => {
+    expect(isConfigShape({ ...MANY, categories: { a: { parse: { use: "pdfium" } } } })).toBe(false)
+    expect(isConfigShape({ ...MANY, categories: [] })).toBe(false)
+    expect(isConfigShape({ ...MANY, route: [{ when: { use: "x" } }] })).toBe(false)
+    expect(isConfigShape({ ...MANY, route: "all" })).toBe(false)
+    expect(isConfigShape({ ...MANY, categories: { a: { name: 3, parse: { use: "p" }, chunk: { use: "c" } } } })).toBe(false)
+    // Steps live in the categories, not beside them.
+    expect(isConfigShape({ ...MANY, index: { ...MANY.index, parse: { use: "pdfium" } } })).toBe(false)
+  })
+
+  it("reads an old config as one default category", () => {
+    expect(categoriesOf(OLD_CONFIG)).toEqual({ default: { name: "Default", parse: { use: "pdfium" }, chunk: { use: "recursive_character", chunk_size: 400 } } })
+    expect(categoriesOf(MANY)).toBe(MANY.categories)
+  })
+
+  it("keeps the old shape for one default category and uses categories otherwise", () => {
+    const changed = { name: "Default", parse: { use: "pdfium", mode: "layout" }, chunk: { use: "token_based" } }
+    expect(withCategory(OLD_CONFIG, "default", changed)).toEqual({ index: { parse: changed.parse, chunk: changed.chunk, store: { use: "lancedb" } } })
+    const two = withCategory(OLD_CONFIG, "scans", { name: "Scans", parse: { use: "pdfium" }, chunk: { use: "token_based" } })
+    expect(Object.keys(two.categories ?? {})).toEqual(["default", "scans"])
+    expect(two.route).toEqual([{ category: "default" }])
+    expect(two.index).toEqual({ store: { use: "lancedb" } })
+    expect(isConfigShape(two)).toBe(true)
+    // Editing a category of a categories config stays in categories.
+    const edited = withCategory(MANY, "text", { parse: { use: "pdfium" }, chunk: { use: "token_based" } })
+    expect(edited.categories?.text.chunk).toEqual({ use: "token_based" })
+    expect(edited.categories?.reports).toBe(MANY.categories?.reports)
+    expect(edited.route).toBe(MANY.route)
+  })
+
+  it("does not change the config it was given", () => {
+    const copy = JSON.stringify(OLD_CONFIG)
+    withCategory(OLD_CONFIG, "scans", { parse: { use: "pdfium" }, chunk: { use: "token_based" } })
+    expect(JSON.stringify(OLD_CONFIG)).toBe(copy)
+  })
+
+  it("draws the chosen category's parse and chunk", () => {
+    const p: WorkingPipeline = { config: MANY, documents: [], question: { text: "", gold_answers: [] } }
+    const node = (g: PipelineGraph, id: string) => g.nodes.find((n) => n.id === id)
+    expect(node(columnOf(p, R, "reports"), "chunk")?.transform).toBe("token_based")
+    expect(node(columnOf(p, R, "reports"), "clean_1")).toBeUndefined()
+    expect(node(columnOf(p, R, "text"), "chunk")?.transform).toBe("recursive_character")
+    expect(node(columnOf(p, R, "text"), "clean_1")?.transform).toBe("dedupe_blocks")
+    // No category named: the first.
+    expect(node(columnOf(p, R), "chunk")?.transform).toBe("token_based")
+  })
+
+  it("draws an old config as it always did", () => {
+    const p = converted(sampleGraph(R, DOC))
+    const ids = (g: PipelineGraph) => g.nodes.map((n) => `${n.id}:${n.stage}:${n.transform}`)
+    const literal = ["source:source:upload", "parse:parse:pdfium", "clean_1:clean:dedupe_blocks", "chunk:chunk:recursive_character", "index:index:lancedb", "query:query:text", "retrieve:retrieve:hybrid_rrf", "use_case:use_case:search"]
+    expect(ids(columnOf(p, R))).toEqual(literal)
+    expect(ids(columnOf(p, R, "default"))).toEqual(literal)
+  })
+
+  it("graphToConfig with a target writes the edits into that category only", () => {
+    const base: WorkingPipeline = { config: MANY, documents: [], question: { text: "", gold_answers: [] } }
+    const col = columnOf(base, R, "reports")
+    const edited = setConfig(col, "chunk", { ...col.nodes.find((n) => n.id === "chunk")!.config, max_tokens: 99 })
+    const out = graphToConfig(edited, { config: MANY, category: "reports" })
+    if (!out.ok) throw new Error(out.problem)
+    expect(out.pipeline.config.categories?.reports.chunk).toMatchObject({ use: "token_based", max_tokens: 99 })
+    expect(out.pipeline.config.categories?.text).toEqual(MANY.categories!.text)
+    expect(out.pipeline.config.route).toEqual(MANY.route)
+  })
+
+  it("keeps only served settings in each category", () => {
+    const config: PipelineConfig = { ...MANY, categories: { ...MANY.categories, text: { ...MANY.categories!.text, chunk: { use: "recursive_character", bogus: 1 } } } }
+    const { config: out, removed } = servedConfig(config, R)
+    expect(out.categories?.text.chunk).toEqual({ use: "recursive_character" })
+    expect(removed).toEqual(["text chunk bogus"])
+    expect(servedConfig(MANY, R).config).toBe(MANY)
+  })
+
+  it("finds an unknown strategy in a category", () => {
+    const config: PipelineConfig = { ...MANY, categories: { ...MANY.categories, text: { ...MANY.categories!.text, parse: { use: "nope" } } } }
+    expect(unknownStrategy(config, R)).toBe("nope")
+    expect(knownSteps(MANY, R)).toBe(true)
+  })
+
+  it("maps a problem at categories.reports.chunk to the Chunk card", () => {
+    expect(cardOfProblem({ step: "categories.reports.chunk" })).toBe("chunk")
+    expect(cardOfProblem({ step: "categories.reports.parse" })).toBe("parse")
+    expect(cardOfProblem({ step: "categories.reports.clean.2" })).toBe("clean_2")
+    expect(cardOfProblem({ step: "categories.reports" })).toBeNull()
+    expect(cardOfProblem({ step: "route.1" })).toBeNull()
+    expect(cardOfProblem({ step: "route" })).toBeNull()
   })
 })

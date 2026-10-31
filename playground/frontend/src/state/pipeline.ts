@@ -5,6 +5,7 @@ import { errorsFromPydantic, type FieldErrors, type PydanticError } from "@/comp
 
 import { cardOfProblem, stepOfCardIn, type WorkingPipeline } from "./config"
 import type { PipelineGraph } from "./graph"
+import { pinsOf } from "./sourceDocs"
 
 /**
  * The Build page's run plumbing, kept pure so it is testable without a
@@ -20,7 +21,7 @@ import type { PipelineGraph } from "./graph"
  */
 export function cardRun(p: WorkingPipeline, card: string, force: boolean, graph: PipelineGraph): V2RunRequest {
   const through = card === "source" ? "parse" : stepOfCardIn(graph, card)
-  return { config: p.config, documents: p.documents.map((d) => d.sha), through, ...(force ? { force: true } : {}) }
+  return { config: p.config, documents: p.documents.map((d) => d.sha), ...pinsOf(p.documents), through, ...(force ? { force: true } : {}) }
 }
 
 /**
@@ -31,6 +32,7 @@ export function askRun(p: WorkingPipeline, opts: { answer: boolean; force: boole
   return {
     config: p.config,
     documents: p.documents.map((d) => d.sha),
+    ...pinsOf(p.documents),
     question: p.question.text,
     answer: opts.answer,
     ...(opts.force ? { force: true } : {}),

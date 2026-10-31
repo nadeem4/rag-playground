@@ -21,9 +21,9 @@ const one = (s: Step | undefined): Step[] => (s ? [s] : [])
 
 /** Each step of a pipeline file, top to bottom, by the name Build's card gives it. Embed and Store share the Index card, so they keep the file's names. */
 const SLOTS: { step: string; stage: Stage; of: (c: PipelineConfig) => Step[] }[] = [
-  { step: STAGE_VERB.parse!, stage: "parse", of: (c) => [c.index.parse] },
+  { step: STAGE_VERB.parse!, stage: "parse", of: (c) => one(c.index.parse) },
   { step: STAGE_VERB.clean!, stage: "clean", of: (c) => c.index.clean ?? [] },
-  { step: STAGE_VERB.chunk!, stage: "chunk", of: (c) => [c.index.chunk] },
+  { step: STAGE_VERB.chunk!, stage: "chunk", of: (c) => one(c.index.chunk) },
   { step: STAGE_VERB.enrich!, stage: "enrich", of: (c) => one(c.index.enrich) },
   { step: "Embed", stage: "index", of: (c) => one(c.index.embed) },
   { step: "Store", stage: "index", of: (c) => [c.index.store] },

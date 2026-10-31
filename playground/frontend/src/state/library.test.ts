@@ -287,7 +287,7 @@ describe("export and import with configs", () => {
     const r = parseImport(JSON.stringify(file))
     expect(r.ok).toBe(true)
     if (!r.ok) return
-    expect(r.pipelines[0].config?.index.parse.use).toBe("pdfium")
+    expect(r.pipelines[0].config?.index.parse!.use).toBe("pdfium")
     expect(r.pipelines[1]).toMatchObject({ name: "Odd", config: null, kept: { problem: expect.stringContaining("extract") } })
     expect(r.skipped).toBe(0)
   })

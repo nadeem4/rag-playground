@@ -8,6 +8,7 @@ import { strategyLabel } from "@/learn/challenges"
 import { QUESTION_KEYS, type Step, type WorkingPipeline } from "./config"
 import { columnOrder, defaultConfig, INDEX_STAGES, strategyIn, type PipelineGraph } from "./graph"
 import { errorHeadline } from "./pipeline"
+import { pinsOf } from "./sourceDocs"
 import { variantLabels } from "./sweep"
 
 /**
@@ -761,6 +762,7 @@ export function compareRequest(
     stage,
     variants: variants.map((v) => variantBlock(target, v, p, stage, graph)),
     documents: p.documents.map((d) => d.sha),
+    ...(p.config.categories ? pinsOf(p.documents) : {}),
   }
   const retrievalStage = stage === "rewrite" || stage === "search" || stage === "rerank"
   if (through === "step" && !retrievalStage) return stopAfter && stopAfter !== "index" ? { ...base, through: stopAfter } : base

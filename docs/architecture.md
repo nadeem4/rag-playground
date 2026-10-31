@@ -121,6 +121,7 @@ lists, and `columnOf` draws a config through it. So a link, an imported file, a 
 pipeline or Build's stored pipeline that carries a prompt, the revision or a setting
 Pandion no longer knows opens without it, the saved copy loses it too, and the page names
 what went in one sentence.
+**Categories in the browser.** The browser's config reads both pipeline file shapes. An old file keeps Parse, Clean and Chunk under `index` and is held, saved and sent exactly as before; `categoriesOf` reads it as one category, `default`. A file with `categories` and `route` is held in the new shape, and `columnOf(pipeline, registry, category)` draws one category's steps. A document's category is a pin on its `DocRef` (`category`), kept in the source node's `documents` list and sent as `categories` (sha to category id) on runs, asks, evaluations and comparisons. `v2.sortDocuments` calls `POST /pipelines/sort` for the category and reason of each document.
 **The package boundary.** The app imports only Pandion's public API and pandion-api;
 `tests/integration/test_package_boundary.py` fails on any other Pandion import, with no
 allow-list. The public API is `pandion`, the stage namespaces (`pandion.parse` to

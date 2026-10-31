@@ -14,6 +14,7 @@ import { ordinal, type HitRowData } from "@/components/inspectors/hits"
 import { strategyLabel } from "@/learn/challenges"
 
 import type { WorkingPipeline } from "./config"
+import { pinsOf } from "./sourceDocs"
 import { columnOrder, titleFor, type PipelineGraph } from "./graph"
 import type { Question } from "./goldSet"
 
@@ -50,6 +51,7 @@ export function evaluationRequest(
   return {
     config: p.config,
     documents: p.documents.map((d) => d.sha),
+    ...(p.config.categories ? pinsOf(p.documents) : {}),
     questions: questions.map((q) => ({
       id: q.id,
       question: q.question,

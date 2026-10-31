@@ -217,6 +217,26 @@ the card says which key it needs and Run waits. The hosted demo writes context f
 Compare with the step on against off. Fixed token count and By sentence also have a free
 **Heading in front** setting that puts the heading path in front of each chunk instead.
 
+### Categories
+
+A **Category** is a kind of document with its own Parse, Clean and Chunk steps. A pipeline
+can have several, for example one for reports with tables and one for plain notes. A list of
+rules, in order, decides which Category each document gets. The first rule that matches wins,
+and the last rule has no condition, so every document ends up somewhere.
+
+When a pipeline has several documents and several categories, each document tab has a line
+under its name. It names the Category and says how the document got there: `Reports with
+tables, by rule 2`, `Default, by default`, or `Default, chosen by hand`. The step cards show
+the steps of the Category of the document on show, and the Parse, Clean and Chunk cards name it
+beside the file. Choose another tab and the cards change with it. A pipeline with one Category
+looks exactly as it did before.
+
+To change where a document goes, use the **Category** menu. It sits below the tabs in the
+Parse, Clean and Chunk panes, and its tooltip reads "Move to another category". Pick another
+Category in it and the document is put there by hand, so its tab line says "chosen by hand".
+Moving it runs the steps again, and only the moved document does new work. Changing the rules
+later never moves a document that is already in a Category.
+
 ### The guided run
 
 When nothing has run yet on Build, an invite offers a guided run. It sits in the pane beside

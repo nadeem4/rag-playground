@@ -42,7 +42,7 @@ describe("composeConfig", () => {
 
   it("makes the legacy one-category shape from a category template", () => {
     const c = composeConfig(idx("tables"), q("balanced"), shared)
-    expect(c.index.parse.use).toBe("docling")
+    expect(c.index.parse!.use).toBe("docling")
     expect(c.index.store.use).toBe("lancedb")
   })
 

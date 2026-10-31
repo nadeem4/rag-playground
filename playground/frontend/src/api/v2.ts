@@ -5,6 +5,8 @@
  */
 
 
+import type { PipelineConfig } from "@/state/config"
+
 import { jsonInit, keyHeaders, requestFrom, type KeyOpts } from "./client"
 import type {
   Against,
@@ -26,6 +28,7 @@ import type {
   RunCreated,
   RunSnapshot,
   ScoredRun,
+  SortResult,
   Source,
   StoredQuestionSet,
   Strategies,
@@ -79,6 +82,13 @@ export const v2 = {
   /** A model writes a question set for the document, as a run of kind `questions`. The set is handed back, never kept. */
   generateQuestions: (sha: string, body: { model: string; count: number }, opts: KeyOpts = {}) =>
     request<RunCreated>(`/documents/${id(sha)}/questions/generate`, jsonInit(body, keyHeaders(opts.keys))),
+
+  /** Which category each document would get and why. Nothing runs. `pins` win over the routes. */
+  sortDocuments: (config: PipelineConfig, documents: string[], pins: Record<string, string> = {}, signal?: AbortSignal) =>
+    request<SortResult>("/pipelines/sort", {
+      ...jsonInit({ config, documents, ...(Object.keys(pins).length ? { categories: pins } : {}) }),
+      signal,
+    }),
 
   createRun: (body: V2RunRequest, opts: KeyOpts = {}) => request<RunCreated>("/runs", jsonInit(body, keyHeaders(opts.keys))),
   ask: (body: V2AskRequest, opts: KeyOpts = {}) => request<RunCreated>("/ask", jsonInit(body, keyHeaders(opts.keys))),

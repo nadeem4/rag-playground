@@ -597,7 +597,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     void start(undefined, false, false, true).then((id) => setAsked(id ? { ...snap, runId: id } : null))
   }
 
-  const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, columnError, busy, edit, start, ask: askNow, guideAsk, setGuideAsk, guideAfter, setGuideAfter, selectCard, inspect: (id) => !isPhone && setInspected(id) })
+  const guide = useGuideRun({ registry, graph, starter, samples, results: shown, stale, errors, columnError, busy, start, ask: askNow, guideAsk, setGuideAsk, guideAfter, setGuideAfter, selectCard, inspect: (id) => !isPhone && setInspected(id) })
   // The ending's "Try it on your own document": the saved pipeline stays the working copy, minus its file.
   const [savedName, setSavedName] = useState("")
   // After Try it, keyboard focus goes to the Document screen (empty document) or its card, not to the page.

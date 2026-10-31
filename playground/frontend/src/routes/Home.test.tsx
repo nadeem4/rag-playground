@@ -5,6 +5,8 @@ import liveRegistry from "@/api/fixtures/registry.json"
 import type { AppSettings, Registry, SampleCard, Source } from "@/api/types"
 import { resetAppSettingsForTests } from "@/api/useDemo"
 import { documentOf, resetDocumentForTests } from "@/state/document"
+import { readBuildSession, writeBuildSession } from "@/state/buildSession"
+import { readGuide, resetGuideForTests, setGuideStep } from "@/state/guide"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, storeGraph, storedGraphJson } from "@/state/graph"
 import { resetPipelinesForTests } from "@/state/pipelines"
 
@@ -97,6 +99,8 @@ beforeEach(() => {
   resetStoredGraphForTests()
   resetDocumentForTests()
   resetPipelinesForTests()
+  window.sessionStorage.clear()
+  resetGuideForTests()
   resetAppSettingsForTests()
   holdUpload = false
   refuseUpload = null
@@ -159,6 +163,18 @@ describe("Home's hero", () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith(`/build?starter=${FIRST.name}`))
     expect(posted).toEqual([])
     expect(storedGraphJson()).toBe(before)
+  })
+
+  it("Try a sample ends a guided run left partway", async () => {
+    serve({ sources: [OWN] })
+    setGuideStep(3)
+    const ask = { artifact: "a1", found: { rank: 3 }, shown: 5, candidates: 20 }
+    writeBuildSession({ tracked: { results: {}, history: {} }, sigs: {}, transcript: [], asked: null, comparisonHidden: null, guideAsk: ask, guideAfter: ask })
+    render(<Home navigate={vi.fn()} />)
+    fireEvent.click(screen.getByRole("button", { name: "Try a sample" }))
+    await waitFor(() => expect(readGuide().step).toBeNull())
+    expect(readBuildSession()?.guideAsk ?? null).toBeNull()
+    expect(readBuildSession()?.guideAfter ?? null).toBeNull()
   })
 })
 

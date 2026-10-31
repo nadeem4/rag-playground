@@ -53,6 +53,11 @@ describe("ruleSentence", () => {
     expect(ruleSentence(rule, CHECKS, "Scanned PDFs")).toBe("When the file type is pdf and the PDF has no text layer, use Scanned PDFs.")
   })
 
+  it("leaves out a blank entry the list field has just added", () => {
+    const rule: RouteRule = { when: { use: "file_type", types: ["pdf", "", "  "] }, category: "b" }
+    expect(ruleSentence(rule, CHECKS, "X")).toBe("When the file type is pdf, use X.")
+  })
+
   it("the last rule says anything else", () => {
     expect(ruleSentence({ category: "c" }, CHECKS, "Default")).toBe("Anything else uses Default.")
   })

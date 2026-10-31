@@ -11,7 +11,7 @@ import { chooseDocument, documentOf, resetDocumentForTests } from "@/state/docum
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, signature, storeGraph } from "@/state/graph"
 import { GUIDE_FIX, GUIDE_RULE, GUIDE_STEPS, resetGuideForTests } from "@/state/guide"
 import { graphToConfig, intoOf, withCategory, type PipelineConfig } from "@/state/config"
-import { storeWorking } from "@/state/working"
+import { readWorking, storeWorking } from "@/state/working"
 import { readCurrentId, readPipelines, resetPipelinesForTests, savePipeline } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 
@@ -288,15 +288,15 @@ describe("the guided run on Build", () => {
     describe("with a categories pipeline", () => {
       const doc = { sha: "ee".repeat(32), filename: "mine.pdf" }
       /** A saved pipeline with two categories, and the same one as the working pipeline, edited by `edit`. */
-      function saveTwo(edit: (c: PipelineConfig) => PipelineConfig) {
+      function saveTwo(edit: (c: PipelineConfig) => PipelineConfig, shape: (c: PipelineConfig) => PipelineConfig = (c) => c) {
         const mine = sampleGraph(TEST_REGISTRY, doc, "Mine?")
         const made = graphToConfig(mine)
         if (!made.ok) throw new Error(made.problem)
         const { parse, chunk } = made.pipeline.config.index
-        const config: PipelineConfig = {
+        const config: PipelineConfig = shape({
           ...withCategory(made.pipeline.config, "scans", { name: "Scans", parse: parse!, chunk: chunk! }),
           route: [{ category: "default" }],
-        }
+        })
         const documents = [{ ...doc, category: "default" }]
         savePipeline("Mine", mine, { documents, into: intoOf(config) })
         storeWorking({ ...made.pipeline, config: edit(config), documents })
@@ -308,6 +308,26 @@ describe("the guided run on Build", () => {
         await open()
         await waitFor(() => expect(within(coach()).getByText(/step 4 of 7/)).toBeTruthy())
         expect(screen.queryByText(/This replaces the pipeline you are working on/)).toBeNull()
+      })
+
+      it("starts a plain guided pipeline: no categories, no routes, the guide's own chunker", async () => {
+        saveTwo(
+          (c) => c,
+          (c) => ({
+            ...c,
+            categories: { ...c.categories!, scans: { ...c.categories!.scans, chunk: { use: "token_based" } } },
+            route: [{ when: { use: "name_matches", pattern: "pdf" }, category: "scans" }, { category: "default" }],
+          }),
+        )
+        await open()
+        await waitFor(() => expect(invite()).toBeTruthy())
+        fireEvent.click(screen.getByRole("button", { name: "Start the guided run" }))
+        await waitFor(() => expect(coach()).toBeTruthy())
+        const config = readWorking()!.config
+        expect(config.categories).toBeUndefined()
+        expect(config.route).toBeUndefined()
+        expect(node("chunk").transform).toBe("recursive_character")
+        expect(node("chunk").config.chunk_size).toBe(400)
       })
 
       it("counts a real edit", async () => {

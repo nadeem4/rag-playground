@@ -269,8 +269,9 @@ says which rule to fix.
 When nothing has run yet on Build, an invite offers a guided run. It sits in the pane beside
 the cards on a laptop or tablet, and above the cards on a phone. **Start the guided run**
 replaces the working pipeline with a small chunking pipeline and a question about what sets
-chunk size. It becomes a new working copy, so a saved pipeline you had selected is not
-changed. If you have unsaved work, it warns you first. A coach then walks the steps in
+chunk size. That pipeline is always the plain one, with no categories or routes, even when the
+pipeline you had open has them. It becomes a new working copy, so a saved pipeline you had
+selected is not changed. If you have unsaved work, it warns you first. A coach then walks the steps in
 order: Document, Parse, Clean, Chunk and Index. The first step only loads the document.
 Each later step is a real run, started with its **Run** button (for example **Run Parse**),
 and the coach reads the result back to you in plain words. The Inspector shows the card of
@@ -298,8 +299,9 @@ Document card, then press **Build the index**. **Keep playing here** ends the gu
 leaves everything as it is. The saved pipeline stays in your Library either way.
 
 While the guided run is on, the Ask panel is hidden, not closed. **Leave the guided run**
-ends it and the panel comes back as it was. The invite shows again only while nothing has
-run on Build. A reload keeps your step and results for as long as the tab is open.
+ends it and the panel comes back as it was. The invite shows again only while nothing has run
+on Build. A reload keeps your step and results for as long as the tab is open. **Try a
+sample** on Home also ends a guided run left partway.
 The Read page can also open the guided run at a chosen step; see [Read](#read).
 **I know RAG, hide this** hides the invite in this browser. The only way to bring a hidden
 invite back is to clear this site's data in the browser.

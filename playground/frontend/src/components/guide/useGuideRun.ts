@@ -10,6 +10,8 @@ import { rowsFromResult } from "@/components/inspectors/hits"
 import type { NodeErrors } from "@/components/pipeline/PipelineColumn"
 import { useOutcome } from "@/components/pipeline/useOutcome"
 import { Button } from "@/components/ui/button"
+import { intoOf } from "@/state/config"
+import { readWorking } from "@/state/working"
 import { documentOf } from "@/state/document"
 import type { GuideAsk } from "@/state/buildSession"
 import { askNodes, infoFor, type PipelineGraph } from "@/state/graph"
@@ -194,10 +196,11 @@ export function useGuideRun(a: GuideRunInput): GuideRun {
     setStartAt(at)
     const doc = documentOf(graph)
     if (!doc || step !== null) return begin(at)
+    const workingInto = intoOf(readWorking()?.config)
     const id = readCurrentId()
     const current = id === STARTER_ID ? a.starter : (readPipelines().find((p) => p.id === id) ?? null)
     const onSample = a.samples?.some((c) => c.sha === doc.sha) ?? false
-    const work = current?.id === STARTER_ID ? isEdited(current, graph) || !onSample : isUnsaved(current, graph)
+    const work = current?.id === STARTER_ID ? isEdited(current, graph, workingInto) || !onSample : isUnsaved(current, graph, workingInto)
     if (work) setConfirming(true)
     else begin(at)
   }

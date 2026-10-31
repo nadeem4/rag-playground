@@ -2239,3 +2239,16 @@ describe("a pipeline with two categories", () => {
     expect(evaluations[0].categories).toEqual({ [SOURCE.sha]: "default", [GUIDE.sha]: "scans" })
   })
 })
+
+describe("an old-shape pipeline with pinned documents", () => {
+  it("shows no category note", async () => {
+    vi.stubGlobal("EventSource", DrivenEventSource)
+    serve()
+    const GUIDE = { sha: "ef".repeat(32), filename: "field-guide.docx" }
+    storeGraph(withDocuments(sampleGraph(registry, SOURCE), [{ ...SOURCE, category: "default" }, { ...GUIDE, category: "scans" }]))
+    render(<Evaluate />)
+    const line = await screen.findByTestId("documents-line")
+    expect(line.querySelectorAll("[data-file-tag]").length).toBe(2)
+    expect(line.querySelector("[data-category-note]")).toBeNull()
+  })
+})

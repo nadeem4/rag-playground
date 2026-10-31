@@ -762,7 +762,7 @@ export function compareRequest(
     stage,
     variants: variants.map((v) => variantBlock(target, v, p, stage, graph)),
     documents: p.documents.map((d) => d.sha),
-    ...(p.config.categories ? pinsOf(p.documents) : {}),
+    ...pinsOf(p.documents),
   }
   const retrievalStage = stage === "rewrite" || stage === "search" || stage === "rerank"
   if (through === "step" && !retrievalStage) return stopAfter && stopAfter !== "index" ? { ...base, through: stopAfter } : base

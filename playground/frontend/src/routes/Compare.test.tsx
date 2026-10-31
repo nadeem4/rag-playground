@@ -1590,3 +1590,17 @@ describe("a pipeline with two categories", () => {
     expect(posted().categories).toEqual({ [SOURCE.sha]: "default", [OTHER.sha]: "scans" })
   })
 })
+
+describe("an old-shape pipeline with pinned documents", () => {
+  it("shows no category note", async () => {
+    vi.stubGlobal("EventSource", DrivenEventSource)
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver)
+    serve()
+    const OTHER = { sha: "ab".repeat(32), filename: "field-guide.docx" }
+    storeGraph(withDocuments(sampleGraph(registry, SOURCE), [{ ...SOURCE, category: "default" }, { ...OTHER, category: "scans" }]))
+    render(<Compare />)
+    const line = await screen.findByTestId("document-line")
+    expect(line.querySelectorAll("[data-file-tag]").length).toBe(2)
+    expect(line.querySelector("[data-category-note]")).toBeNull()
+  })
+})

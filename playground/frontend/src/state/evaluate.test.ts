@@ -551,11 +551,11 @@ describe("plainTrace", () => {
 })
 
 describe("pins in an evaluation", () => {
-  it("sends pins only when the config has categories", () => {
+  it("sends the pins the documents carry, as Build does", () => {
     const c = graphToConfig(sampleGraph(R, DOC))
     if (!c.ok) throw new Error(c.problem)
     const docs = [{ ...DOC, category: "reports" }]
-    expect("categories" in evaluationRequest({ ...c.pipeline, documents: docs }, QUESTIONS, 5)).toBe(false)
+    expect(evaluationRequest({ ...c.pipeline, documents: docs }, QUESTIONS, 5)).toMatchObject({ categories: { [DOC.sha]: "reports" } })
     const cat = { parse: { use: "pdfium" }, chunk: { use: "token_based" } }
     const config = { index: { store: { use: "lancedb" } }, categories: { reports: cat }, route: [{ category: "reports" }] }
     expect(evaluationRequest({ ...c.pipeline, config, documents: docs }, QUESTIONS, 5)).toMatchObject({ categories: { [DOC.sha]: "reports" } })

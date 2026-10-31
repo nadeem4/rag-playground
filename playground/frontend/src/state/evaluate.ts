@@ -51,7 +51,7 @@ export function evaluationRequest(
   return {
     config: p.config,
     documents: p.documents.map((d) => d.sha),
-    ...(p.config.categories ? pinsOf(p.documents) : {}),
+    ...pinsOf(p.documents),
     questions: questions.map((q) => ({
       id: q.id,
       question: q.question,

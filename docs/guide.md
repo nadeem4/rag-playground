@@ -487,8 +487,8 @@ to the same cap.
 
 When the pipeline has categories, Compare sends all of them, with their routes and each
 document's pin, so it runs the same pipeline Build does. Beside each file name it says
-which category the file is pinned to. Putting a recipe on Build changes the category you
-were editing and leaves the others as they are.
+which category the file is pinned to. Compare works on the first category: it sweeps that category's steps, and putting a
+recipe on Build changes that category and leaves the others as they are.
 
 1. **Pick a step:** Parse, Chunk or Retrieve.
 2. **Set up the recipes.** Each recipe is a card that reads as a sentence. Tap a value to

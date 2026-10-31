@@ -1391,7 +1391,7 @@ function QuestionRow({
           {row.question.question}
         </span>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted">
-          {file !== undefined ? <span data-question-file="">{file ? <><FileTag file={file} /> <CategoryNote category={file.category} into={into} /></> : <NoDocument text="any document" />}</span> : null}
+          {file !== undefined ? <span data-question-file="">{file ? <span className="inline-flex items-baseline gap-1"><FileTag file={file} /><CategoryNote category={file.category} into={into} /></span> : <NoDocument text="any document" />}</span> : null}
           <span className="font-mono">{row.question.id}</span>
           {row.question.tags.map((t) => (
             <span key={t} className="rounded-swatch bg-surface-elevated px-2">

@@ -168,7 +168,7 @@ runs on each document, and the index and Ask cover them all. With two or more do
 each has **Remove**. The Parse, Clean and Chunk panes then show one tab for each document,
 and the tab you pick is the document whose results all three panes and their cards show;
 each of those cards names that file. The Index pane then adds a small table of how many
-chunks each document made, with the total. To replace the only document, add the new one, then
+chunks each document made, with the total; a document with no result yet says Not run. To replace the only document, add the new one, then
 remove the old one. Two documents with the same name cannot run together, since the server
 tells them apart by their names: with several documents, adding one whose name is taken is
 refused, and you remove the old one first or upload the new one under another name. With

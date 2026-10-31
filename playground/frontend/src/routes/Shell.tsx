@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
 import { keyMissing, keyNeedFor, missingKeySteps, needsKey, useApiKey, withArticle } from "@/api/apiKey"
 import { v2 } from "@/api/v2"
@@ -24,7 +24,7 @@ import { KeptNotice } from "@/components/pipeline/KeptNotice"
 import { fmtMs, plainName } from "@/components/pipeline/NodeCard"
 import { blockingNode, PipelineColumn, type NodeErrors, type SweepPreset } from "@/components/pipeline/PipelineColumn"
 import { IndexDocuments } from "@/components/inspectors/IndexByDocument"
-import { DocumentTabs } from "@/components/pipeline/DocumentTabs"
+import { DocumentTabs, tabIdOf } from "@/components/pipeline/DocumentTabs"
 import { PipelineBar } from "@/components/pipeline/PipelineBar"
 import { RunStrip, stripSegments, type LiveRun, type StripLine } from "@/components/pipeline/RunStrip"
 import { GuideCoach } from "@/components/guide/GuideCoach"
@@ -912,6 +912,8 @@ function CardInspector({
   const before = useArtifactPayload(relatedId)
   const parsed = useArtifactPayload(docId)
   const verb = titleFor(node)
+  const tabbed = TAB_STAGES.includes(node.stage)
+  const panelId = `${useId()}-doc`
 
   let body: ReactNode
   if (!result) {
@@ -948,7 +950,9 @@ function CardInspector({
           status={waitingBefore ? { kind: "loading" } : payload.status}
           context={context}
         />
-        {node.stage === "index" ? <IndexDocuments files={tabs.files} documents={chunkNode ? results[chunkNode.id]?.documents : undefined} /> : null}
+        {node.stage === "index" ? (
+          <IndexDocuments files={tabs.files} documents={chunkNode && !stale.has(chunkNode.id) ? results[chunkNode.id]?.documents : undefined} />
+        ) : null}
       </>
     )
   }
@@ -980,12 +984,18 @@ function CardInspector({
       </div>
       {/* While Ask is closed, room at the foot so the round Ask button never covers the last line. */}
       <div data-testid="main-scroll" className={cn("p-3 md:min-h-0 md:flex-1 md:overflow-y-auto", roomForButton && "pb-[72px]")}>
-        {TAB_STAGES.includes(node.stage) ? (
+        {tabbed ? (
           <div className="mb-3 empty:hidden">
-            <DocumentTabs {...tabs} />
+            <DocumentTabs {...tabs} panelId={panelId} />
           </div>
         ) : null}
-        {body}
+        {tabbed && tabs.files.length > 1 ? (
+          <div role="tabpanel" id={panelId} aria-labelledby={tabIdOf(panelId, tabs.value)}>
+            {body}
+          </div>
+        ) : (
+          body
+        )}
       </div>
     </section>
   )

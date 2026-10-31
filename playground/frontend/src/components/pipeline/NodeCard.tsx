@@ -451,7 +451,7 @@ export function NodeCard(p: NodeCardProps) {
         {shown.look === "running" && !isSource ? (
           <span aria-hidden data-testid="running-bar" className="step-running-edge pointer-events-none absolute inset-x-0 top-0 h-[2px] rounded-t-panel bg-primary" />
         ) : null}
-        <div className="flex items-center gap-x-2">
+        <div className="flex min-w-0 items-center gap-x-2">
           <h3 className="text-sm font-semibold">
             <button
               type="button"
@@ -486,7 +486,7 @@ export function NodeCard(p: NodeCardProps) {
               </span>
             </button>
           </h3>
-          {p.file && FILE_STAGES.includes(p.node.stage) ? <FileTag file={p.file} className="max-w-[16ch]" /> : null}
+          {p.file && FILE_STAGES.includes(p.node.stage) ? <FileTag file={p.file} /> : null}
           {/* The gear opens and closes the settings, on the title line so it never wraps away.
               The Document card has nothing to open. */}
           {isSource ? null : (

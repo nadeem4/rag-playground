@@ -46,6 +46,28 @@ describe("DocumentTabs", () => {
     expect(screen.getByText("12 chunks")).toBeTruthy()
   })
 
+  it("links each tab to the pane it controls, and the pane back to the chosen tab", () => {
+    render(
+      <>
+        <DocumentTabs files={FILES} value="b" onChange={() => {}} panelId="pane" />
+        <div role="tabpanel" id="pane" />
+      </>,
+    )
+    const tab = screen.getByRole("tab", { name: "notes.md" })
+    expect(tab.getAttribute("aria-controls")).toBe("pane")
+    expect(tab.id).toBeTruthy()
+    expect(screen.getByRole("tab", { name: "report.pdf" }).id).not.toBe(tab.id)
+  })
+
+  it("jumps to the first and last tab with Home and End", () => {
+    const onChange = vi.fn()
+    render(<DocumentTabs files={FILES} value="b" onChange={onChange} />)
+    fireEvent.keyDown(screen.getByRole("tab", { name: "notes.md" }), { key: "End" })
+    expect(onChange).toHaveBeenLastCalledWith("c")
+    fireEvent.keyDown(screen.getByRole("tab", { name: "notes.md" }), { key: "Home" })
+    expect(onChange).toHaveBeenLastCalledWith("a")
+  })
+
   it("renders nothing for one file", () => {
     const { container } = render(<DocumentTabs files={FILES.slice(0, 1)} value="a" onChange={() => {}} />)
     expect(container.innerHTML).toBe("")

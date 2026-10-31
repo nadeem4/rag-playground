@@ -80,7 +80,7 @@ export function PipelineBar({
   const { pipelines, currentId } = usePipelines()
   const saved = pipelines.find((p) => p.id === currentId) ?? null
   const current = currentId === STARTER_ID ? starter : saved
-  const edited = current !== null && isEdited(current, graph, into)
+  const edited = current !== null && isEdited(current, graph, into, registry)
   const [naming, setNaming] = useState<"save" | "rename" | null>(null)
   const [name, setName] = useState("")
   const [nameError, setNameError] = useState<string | null>(null)

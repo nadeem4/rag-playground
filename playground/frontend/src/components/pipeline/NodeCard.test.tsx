@@ -798,3 +798,16 @@ describe("the file a step card shows", () => {
     expect(screen.getByRole("article").querySelector("[data-file-tag]")).toBeNull()
   })
 })
+
+describe("the category a step card shows", () => {
+  it("names the category on the Parse card when given one", () => {
+    const parse = initialGraph(R).nodes.find((n) => n.stage === "parse")!
+    renderCard({ node: parse, title: "Parse", transforms: transformsFor(R, "parse"), category: "Reports with tables" })
+    expect(screen.getByRole("article").querySelector("[data-category]")!.textContent).toBe("Reports with tables")
+  })
+  it("shows no category with one category", () => {
+    const parse = initialGraph(R).nodes.find((n) => n.stage === "parse")!
+    renderCard({ node: parse, title: "Parse", transforms: transformsFor(R, "parse") })
+    expect(screen.getByRole("article").querySelector("[data-category]")).toBeNull()
+  })
+})

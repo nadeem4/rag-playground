@@ -6,7 +6,7 @@ import { formatOf } from "@/lib/formats"
 
 import { columnOf, graphToConfig, unknownStrategy } from "./config"
 import { docsOfSource } from "./sourceDocs"
-import { keepUndrawn, parseWorking, resetWorkingForTests, storedWorkingJson, storeWorking, subscribeWorking } from "./working"
+import { keepUndrawn, parseWorking, readWorking, resetWorkingForTests, storedWorkingJson, storeWorking, subscribeWorking } from "./working"
 
 /**
  * The pipeline as a graph: nodes and port-typed edges, drawn from the
@@ -606,32 +606,37 @@ export function subscribeGraph(listener: () => void): () => void {
  * Every page then stores a Starter in its place, so such a pipeline is kept
  * first (`keepUndrawn`), as it was, and Build says why.
  */
-const columnFrom = (json: string | null, registry: Registry): PipelineGraph | null => {
+const columnFrom = (json: string | null, registry: Registry, category?: string): PipelineGraph | null => {
   const p = parseWorking(json)
   if (!p || !json) return null
   const odd = unknownStrategy(p.config, registry)
-  if (odd === null) return columnOf(p, registry)
+  if (odd === null) return columnOf(p, registry, category)
   keepUndrawn(json, `One of its steps uses ${odd}, which this server does not have.`)
   return null
 }
 
-export function readStoredGraph(registry: Registry): PipelineGraph | null {
-  return columnFrom(storedGraphJson(), registry)
+export function readStoredGraph(registry: Registry, category?: string): PipelineGraph | null {
+  return columnFrom(storedGraphJson(), registry, category)
 }
 
-/** Store the column as a config. False, and nothing stored, when it is not a column. */
-export function storeGraph(g: PipelineGraph): boolean {
-  const c = graphToConfig(g)
+/**
+ * Store the column as a config. False, and nothing stored, when it is not a
+ * column. With `category`, the column is that category's cards and goes into
+ * it, so the other categories and the routes stay as they are.
+ */
+export function storeGraph(g: PipelineGraph, category?: string): boolean {
+  const stored = category ? readWorking() : null
+  const c = graphToConfig(g, stored && category ? { config: stored.config, category } : undefined)
   if (!c.ok) return false
   storeWorking(c.pipeline)
   return true
 }
 
 export function useStoredGraph(registry: Registry): PipelineGraph | null
-export function useStoredGraph(registry: Registry, fallback: () => PipelineGraph): PipelineGraph
-export function useStoredGraph(registry: Registry, fallback?: () => PipelineGraph): PipelineGraph | null {
+export function useStoredGraph(registry: Registry, fallback: () => PipelineGraph, category?: string): PipelineGraph
+export function useStoredGraph(registry: Registry, fallback?: () => PipelineGraph, category?: string): PipelineGraph | null {
   const json = useSyncExternalStore(subscribeWorking, storedWorkingJson)
-  const stored = useMemo(() => columnFrom(json, registry), [json, registry])
+  const stored = useMemo(() => columnFrom(json, registry, category), [json, registry, category])
   const seed = useRef<PipelineGraph | null>(null)
   if (!stored && fallback && !seed.current) seed.current = fallback()
   const graph = stored ?? (fallback ? seed.current : null)

@@ -33,6 +33,8 @@ export interface PipelineColumnProps {
   stale: Set<string>
   /** The document the cards show, when the pipeline has several. */
   file?: { filename: string; slot: number }
+  /** The category whose steps the column shows, when the pipeline has several. */
+  category?: string
   selected: string | null
   busy: boolean
   errors: Record<string, NodeErrors>
@@ -125,6 +127,7 @@ export function PipelineColumn(p: PipelineColumnProps) {
             <NodeCard
               node={node}
               file={p.file}
+              category={p.category}
               title={title}
               transforms={transformsFor(p.registry, node.stage)}
               upstream={upstreamFor(p.graph, p.registry, node.id)}

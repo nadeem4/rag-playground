@@ -11,6 +11,7 @@ import { resetSampleQuestionsCache } from "@/api/samples"
 import { chooseDocument, clearDocument, documentsOf, loadSampleDocument, resetDocumentForTests, withDocuments } from "@/state/document"
 import { addCleaner, addEnrich, addReranker, chatSampleGraph, initialGraph, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
 import { graphToConfig } from "@/state/config"
+import { storeWorking } from "@/state/working"
 import { decodePipeline, encodePipeline, readCurrentId, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId, STARTER_ID, usableGraph } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 import { choose, optionNames, optionOf } from "@/components/ui/pickerTesting"
@@ -52,7 +53,7 @@ beforeEach(() => {
       if (RUN_ROUTES.includes(url) && init?.method === "POST") {
         const body = JSON.parse(String(init.body))
         posts.push({ path: url, body })
-        if (body.config?.index.chunk.chunk_size === 0) return ok({ detail: refusedDetail(CHUNK_PROBLEM, { step: "index.chunk" }) }, 422)
+        if (body.config?.index?.chunk?.chunk_size === 0) return ok({ detail: refusedDetail(CHUNK_PROBLEM, { step: "index.chunk" }) }, 422)
         return ok({ run_id: "r1" }, 202)
       }
       if (url === "/api/v2/explain") return ok({ settings: "s", tradeoff: null, warning: null, blocking: false })
@@ -2287,5 +2288,56 @@ describe("a pipeline on several documents", () => {
     fireEvent.click(within(card("source")).getByRole("button", { name: /^Remove .*notes.* from this pipeline$/i }))
     await waitFor(() => expect(document.querySelector("[data-file-tag]")).toBeNull())
     expect(documentsOf(readStoredGraph(TEST_REGISTRY))).toEqual([{ sha: SOURCE.sha, filename: SOURCE.filename }])
+  })
+})
+
+describe("a pipeline with categories", () => {
+  const NOTES = { sha: "cd".repeat(32), filename: "notes.md" }
+  const parse = { use: "pdfium" }
+  const keepWorking = () => {
+    const base = graphToConfig(withDocuments(initialGraph(TEST_REGISTRY), [{ sha: SOURCE.sha, filename: SOURCE.filename }, NOTES]))
+    if (!base.ok) throw new Error(base.problem)
+    const { store } = base.pipeline.config.index
+    storeWorking({
+      ...base.pipeline,
+      documents: [
+        { sha: SOURCE.sha, filename: SOURCE.filename, category: "default" },
+        { sha: NOTES.sha, filename: NOTES.filename, category: "tables" },
+      ],
+      config: {
+        index: { store },
+        categories: {
+          default: { name: "Default", parse, chunk: { use: "recursive_character" } },
+          tables: { name: "Reports with tables", parse, chunk: { use: "token_based" } },
+        },
+        route: [{ category: "default" }],
+      },
+    })
+  }
+
+  it("the cards show the steps of the shown document's category", async () => {
+    keepWorking()
+    render(<Shell />)
+    await waitFor(() => expect(card("chunk")).toBeTruthy())
+    expect(card("chunk").textContent).toMatch(/recursive_character/)
+    fireEvent.click(within(card("chunk")).getByRole("button", { name: "Chunk" }))
+    fireEvent.click((await screen.findAllByRole("tab"))[1])
+    expect(card("chunk").textContent).toMatch(/token_based/)
+    expect(card("chunk").querySelector("[data-category]")!.textContent).toBe("Reports with tables")
+    expect(screen.getAllByRole("tab")[1].textContent).toContain("Reports with tables, chosen by hand")
+  })
+
+  it("choosing a category for one document runs again with only that pin changed", async () => {
+    keepWorking()
+    render(<Shell />)
+    await waitFor(() => expect(card("chunk")).toBeTruthy())
+    fireEvent.click(screen.getByRole("button", { name: "Build the index" }))
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect((posts[0].body as { categories: unknown }).categories).toEqual({ [SOURCE.sha]: "default", [NOTES.sha]: "tables" })
+    fireEvent.click(within(card("chunk")).getByRole("button", { name: "Chunk" }))
+    fireEvent.click((await screen.findAllByRole("tab"))[1])
+    choose(screen.getByRole("button", { name: /Category/ }), "Default")
+    await waitFor(() => expect(posts).toHaveLength(2))
+    expect((posts[1].body as { categories: unknown }).categories).toEqual({ [SOURCE.sha]: "default", [NOTES.sha]: "default" })
   })
 })

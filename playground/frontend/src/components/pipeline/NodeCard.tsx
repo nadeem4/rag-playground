@@ -46,6 +46,8 @@ export interface NodeCardProps {
   node: GraphNode
   /** The document this card shows, when the pipeline has several (Parse, Clean and Chunk). */
   file?: { filename: string; slot: number }
+  /** The name of the category whose steps this column shows, when the pipeline has several. */
+  category?: string
   title: string
   transforms: TransformInfo[]
   result?: NodeState
@@ -487,6 +489,11 @@ export function NodeCard(p: NodeCardProps) {
             </button>
           </h3>
           {p.file && FILE_STAGES.includes(p.node.stage) ? <FileTag file={p.file} /> : null}
+          {p.category && FILE_STAGES.includes(p.node.stage) ? (
+            <span data-category="" className="min-w-0 truncate text-xs text-fg-muted">
+              {p.category}
+            </span>
+          ) : null}
           {/* The gear opens and closes the settings, on the title line so it never wraps away.
               The Document card has nothing to open. */}
           {isSource ? null : (

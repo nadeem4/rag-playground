@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react"
 
 import { keyMissing, keyNeedFor, missingKeySteps, needsKey, useApiKey, withArticle } from "@/api/apiKey"
 import { v2 } from "@/api/v2"
@@ -62,8 +62,10 @@ import { clearDocument, documentOf, documentsOf, useDocument } from "@/state/doc
 import { starterPipeline, useStarter } from "@/state/starter"
 import { GUIDE_RULE, readGuide } from "@/state/guide"
 import { goneResults, readBuildSession, writeBuildSession, type GuideAsk } from "@/state/buildSession"
-import { cardOfStepIn, graphToConfig, removedText, servedConfig, unknownStrategy } from "@/state/config"
-import { readWorking } from "@/state/working"
+import { cardOfStepIn, categoriesOf, graphToConfig, removedText, servedConfig, unknownStrategy } from "@/state/config"
+import { parseWorking, readWorking, storedWorkingJson, storeWorking, subscribeWorking } from "@/state/working"
+import { lineOf, pinSorted, useSorting } from "@/state/sorting"
+import { CategoryMenu } from "@/components/pipeline/CategoryMenu"
 import { askRun, cardRun, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
 import {
   cleanSavedPipeline,
@@ -138,11 +140,34 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   // whichever saved pipeline is selected (a session that starts with a
   // selection already made but no working-copy storage of its own yet), else
   // the default graph.
-  const graph = useStoredGraph(registry, () => {
-    const currentId = readCurrentId()
-    const current = currentId ? readPipelines().find((p) => p.id === currentId) : undefined
-    return (current ? usableGraph(current, registry) : null) ?? initialGraph(registry)
-  })
+  // Which category's cards are drawn: the one the document on show is in. Only a config with
+  // categories has more than one; every other pipeline is drawn as it always was.
+  const workingJson = useSyncExternalStore(subscribeWorking, storedWorkingJson)
+  const working = useMemo(() => parseWorking(workingJson), [workingJson])
+  const workDocs = working?.documents ?? []
+  const [shownSha, setShownSha] = useState<string | null>(null)
+  const sorted = useSorting(working?.config ?? { index: { store: { use: "" } } }, workDocs)
+  const categoried = Boolean(working?.config.categories)
+  const shownIn = workDocs.find((d) => d.sha === shownSha) ?? workDocs[0]
+  const shownCategory = categoried && shownIn ? sorted[shownIn.sha]?.category : undefined
+  const graph = useStoredGraph(
+    registry,
+    () => {
+      const currentId = readCurrentId()
+      const current = currentId ? readPipelines().find((p) => p.id === currentId) : undefined
+      return (current ? usableGraph(current, registry) : null) ?? initialGraph(registry)
+    },
+    shownCategory,
+  )
+  // The first sort is written into each document's pin, so a change to the routes never reshuffles them.
+  useEffect(() => {
+    if (!working) return
+    const next = pinSorted(working.documents, sorted)
+    if (next !== working.documents) storeWorking({ ...working, documents: next })
+  }, [sorted, working])
+  const categories = working ? Object.entries(categoriesOf(working.config)).map(([id, c]) => ({ id, name: c.name ?? id })) : []
+  const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? id
+  const into = categoried && shownCategory && working ? { config: working.config, category: shownCategory } : undefined
   // The document is the pipeline's, changed on its Documents line. Missing or none blocks a run.
   const { status: docStatus } = useDocument()
   const { starter, samples, unavailable: noStarter } = useStarter(registry)
@@ -188,11 +213,23 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   // A pipeline on several documents shows one document's results at a time: each step's card and
   // inspector read that document's run. The strip and the run's status count them all.
   const pipelineDocs = documentsOf(graph)
-  const [shownSha, setShownSha] = useState<string | null>(null)
   const shownDoc = pipelineDocs.find((d) => d.sha === shownSha) ?? pipelineDocs[0] ?? null
   const files = filesOf(pipelineDocs)
   const shownFile = fileOf(files, shownDoc?.sha)
-  const tabs: DocTabs = { files, value: shownDoc?.sha ?? "", onChange: setShownSha }
+  const shownLine = categoried ? sorted[shownDoc?.sha ?? ""] : undefined
+  const moveShown = (id: string) => {
+    if (!working || !shownDoc) return
+    storeWorking({ ...working, documents: working.documents.map((d) => (d.sha === shownDoc.sha ? { ...d, category: id } : d)) })
+    setMoved((n) => n + 1)
+  }
+  const tabs: DocTabs = {
+    files,
+    value: shownDoc?.sha ?? "",
+    onChange: setShownSha,
+    note: categoried ? (sha) => (sorted[sha] ? lineOf(categoryName(sorted[sha].category), sorted[sha].reason) : null) : undefined,
+    menu:
+      categoried && shownLine ? <CategoryMenu categories={categories} value={shownLine.category} onMove={moveShown} /> : undefined,
+  }
   const shownFilename = pipelineDocs.length > 1 ? (shownDoc?.filename ?? null) : null
   const shownRunSha = pipelineDocs.length > 1 ? shownDoc?.sha : undefined
   const shown = useMemo(() => forDocument(results, shownFilename, shownRunSha), [results, shownFilename, shownRunSha])
@@ -227,6 +264,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   const [fromAsk, setFromAsk] = useState(false)
   // The node the last run was started for: Build the index says Building only for its own run.
   const [runTarget, setRunTarget] = useState<string | undefined>(undefined)
+  // Moving a document to another category runs again, once the new pin is in the column.
+  const [moved, setMoved] = useState(0)
   // The steps the run in flight covers, and its id once it has one: the run strip
   // shows that run's own progress, not the last run's look.
   const [runSteps, setRunSteps] = useState<{ ids: Set<string>; runId: string | null } | null>(null)
@@ -295,7 +334,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   )
 
   const edit = useCallback((next: PipelineGraph, ...touched: string[]) => {
-    storeGraph(next)
+    storeGraph(next, into?.category)
     if (touched.length) {
       setErrors((e) => {
         if (!touched.some((id) => e[id])) return e
@@ -304,7 +343,16 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
         return rest
       })
     }
-  }, [])
+  }, [into?.category])
+
+  // A move re-runs the steps last run: the moved document is new work, the others are reused.
+  const movedSeen = useRef(0)
+  useEffect(() => {
+    if (moved === movedSeen.current) return
+    movedSeen.current = moved
+    if (runId !== null) void start(runTarget, false, false, fromAsk)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once for each move
+  }, [moved])
 
   // A step link from Evaluate's miss trace (`?step=<node id>`) opens that card.
   useEffect(() => {
@@ -325,7 +373,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   useEffect(() => {
     const stored = readWorking()
     const drawn = stored && unknownStrategy(stored.config, registry) === null ? servedConfig(stored.config, registry).removed : []
-    if (drawn.length) storeGraph(graph)
+    if (drawn.length) storeGraph(graph, into?.category)
     const id = readCurrentId()
     const saved = id && id !== STARTER_ID ? cleanSavedPipeline(id, registry) : []
     const note = removedText([...new Set([...drawn, ...saved])])
@@ -419,7 +467,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     setRunSteps({ ids: new Set(covered), runId: null })
     setSubmitting(true)
     try {
-      const c = graphToConfig(graph)
+      const c = graphToConfig(graph, into)
       if (!c.ok) throw new Error(c.problem)
       // An index card runs the pipeline through its own step. Anything else asks: all the way
       // to the answer from Ask (no target) or the answer card, and only the search when the
@@ -460,7 +508,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
    * so it rides along when known and Compare falls back to 1024 otherwise.
    */
   async function openSweep(id: string, preset?: SweepPreset) {
-    storeGraph(graph)
+    storeGraph(graph, into?.category)
     const q = new URLSearchParams({ node: id })
     if (preset) {
       q.set("preset", preset)
@@ -677,6 +725,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
               <PipelineColumn
                 graph={graph}
                 file={shownFile}
+                category={categories.length > 1 && shownCategory ? categoryName(shownCategory) : undefined}
                 registry={registry}
                 results={shown}
                 stale={stale}
@@ -817,6 +866,10 @@ interface DocTabs {
   files: FileInfo[]
   value: string
   onChange: (sha: string) => void
+  /** Each tab's category line, when the pipeline has categories. */
+  note?: (sha: string) => string | null
+  /** The Category menu for the document on show. */
+  menu?: ReactNode
 }
 
 /** The steps that run once for each document. */
@@ -986,7 +1039,8 @@ function CardInspector({
       <div data-testid="main-scroll" className={cn("p-3 md:min-h-0 md:flex-1 md:overflow-y-auto", roomForButton && "pb-[72px]")}>
         {tabbed ? (
           <div className="mb-3 empty:hidden">
-            <DocumentTabs {...tabs} panelId={panelId} />
+            <DocumentTabs files={tabs.files} value={tabs.value} onChange={tabs.onChange} note={tabs.note} panelId={panelId} />
+            {tabs.files.length > 1 ? tabs.menu : null}
           </div>
         ) : null}
         {tabbed && tabs.files.length > 1 ? (

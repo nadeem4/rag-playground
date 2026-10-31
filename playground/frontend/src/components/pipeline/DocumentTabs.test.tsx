@@ -73,3 +73,10 @@ describe("DocumentTabs", () => {
     expect(container.innerHTML).toBe("")
   })
 })
+
+describe("DocumentTabs category line", () => {
+  it("a tab shows the category name and its reason", () => {
+    render(<DocumentTabs files={FILES} value="a" onChange={() => {}} note={(sha) => (sha === "a" ? "Reports with tables, by rule 2" : null)} />)
+    expect(screen.getByRole("tab", { name: /report.pdf/ }).textContent).toContain("Reports with tables, by rule 2")
+  })
+})

@@ -430,8 +430,8 @@ type Comparable = { id: string; documents: DocRef[]; config: PipelineConfig | nu
  * changed step, or another document, the Starter included. Evaluate lists such
  * a copy as the pipeline on Build, and nothing replaces it without a word.
  */
-export function isUnsaved(p: Comparable | null, working: PipelineGraph, into?: Into): boolean {
-  return !p || isEdited(p, working, into) || !sameDocuments(p.documents, documentsOf(working))
+export function isUnsaved(p: Comparable | null, working: PipelineGraph, into?: Into, registry?: Registry): boolean {
+  return !p || isEdited(p, working, into, registry) || !sameDocuments(p.documents, documentsOf(working))
 }
 
 const toBase64Url = (s: string) =>
@@ -501,10 +501,18 @@ export function sameSteps(a: PipelineGraph, b: PipelineGraph): boolean {
  * because it owns its documents and Save keeps the new ones. The Starter is
  * ready-made and runs on any sample, so only its steps count.
  */
-export function isEdited(p: Comparable, working: PipelineGraph, into?: Into): boolean {
+export function isEdited(p: Comparable, working: PipelineGraph, into?: Into, registry?: Registry): boolean {
   const c = graphToConfig(working, into)
-  if (!p.config || !c.ok || !sameConfig(p.config, c.pipeline.config)) return true
+  // The category on show is drawn with every setting's default; the saved copy may lack them (a template's or a copy's), so draw it the same way.
+  const saved = p.config && into && registry ? drawn(p.config, into.category, registry) : p.config
+  if (!saved || !c.ok || !sameConfig(saved, c.pipeline.config)) return true
   return p.id !== STARTER_ID && !(sameDocuments(p.documents, c.pipeline.documents) && samePins(p.documents, c.pipeline.documents))
+}
+
+/** `config` with the settings of `category` filled in as Build draws them. */
+function drawn(config: PipelineConfig, category: string, registry: Registry): PipelineConfig {
+  const c = graphToConfig(columnOf({ config, documents: [], question: { text: "", gold_answers: [] } }, registry, category), { config, category })
+  return c.ok ? c.pipeline.config : config
 }
 
 /** Every pin the saved list holds is still there. A document not pinned yet may be pinned by the first sort. */

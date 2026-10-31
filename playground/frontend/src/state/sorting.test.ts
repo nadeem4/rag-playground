@@ -35,6 +35,8 @@ describe("useSorting", () => {
     const { result } = renderHook(() => useSorting(config(ROUTES), docs))
     await waitFor(() => expect(result.current.b).toBeTruthy())
     expect(sort.mock.calls[0][1]).toEqual(["b"])
+    // A pin for a document not sent is a 422 from the server.
+    expect(sort.mock.calls[0][2] ?? {}).toEqual({})
     expect(result.current.a).toEqual({ category: "default", reason: "Chosen when added" })
   })
 

@@ -398,6 +398,17 @@ describe("the Library list as configs", () => {
     expect(cleanSavedPipeline("nobody00", R)).toEqual([])
   })
 
+  it("a category with only the settings it was made with is not edited when the page draws it with defaults", () => {
+    const base = graphToConfig(withDocument(initialGraph(R), { sha: "a".repeat(64), filename: "a.pdf" }))
+    if (!base.ok) throw new Error(base.problem)
+    const { store, ...steps } = base.pipeline.config.index
+    const sparse = { parse: { use: steps.parse!.use }, chunk: { use: steps.chunk!.use } }
+    const config: PipelineConfig = { ...base.pipeline.config, index: { store }, categories: { default: { name: "Default", parse: steps.parse!, chunk: steps.chunk! }, tables: { name: "Tables", ...sparse } }, route: [{ category: "default" }] }
+    const working = { config, documents: base.pipeline.documents, question: base.pipeline.question }
+    const item = { id: "p1", name: "Two", savedAt: "", config, documents: working.documents, question: working.question }
+    expect(isEdited(item, columnOf(working, R, "tables"), { config, category: "tables" }, R)).toBe(false)
+  })
+
   it("a saved pipeline on a sample's old fingerprint follows the sample's current copy, and is not edited", () => {
     const old = { sha: "9".repeat(64), filename: "primer.pdf" }
     const now = { sha: "2".repeat(64), filename: "primer.pdf" }

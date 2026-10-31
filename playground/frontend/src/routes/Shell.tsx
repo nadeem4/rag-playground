@@ -62,10 +62,12 @@ import { clearDocument, documentOf, documentsOf, useDocument } from "@/state/doc
 import { starterPipeline, useStarter } from "@/state/starter"
 import { GUIDE_RULE, readGuide } from "@/state/guide"
 import { goneResults, readBuildSession, writeBuildSession, type GuideAsk } from "@/state/buildSession"
-import { cardOfStepIn, categoriesOf, graphToConfig, removedText, servedConfig, unknownStrategy } from "@/state/config"
+import { cardOfStepIn, categoriesOf, DEFAULT_CATEGORY, graphToConfig, removedText, servedConfig, unknownStrategy } from "@/state/config"
 import { parseWorking, readWorking, storedWorkingJson, storeWorking, subscribeWorking } from "@/state/working"
 import { lineOf, pinSorted, useSorting } from "@/state/sorting"
+import { CategoriesSection, NewCategoryForm } from "@/components/pipeline/CategoryEditor"
 import { CategoryMenu } from "@/components/pipeline/CategoryMenu"
+import { moveToNew, usedBy } from "@/state/categories"
 import { askRun, cardRun, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
 import {
   cleanSavedPipeline,
@@ -226,13 +228,24 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     storeWorking({ ...working, documents: working.documents.map((d) => (d.sha === shownDoc.sha ? { ...d, category: id } : d)) })
     setMoved((n) => n + 1)
   }
+  const [naming, setNaming] = useState(false)
+  // An old-shape pipeline has one category, default, and every document is in it.
+  const currentCategory = shownLine?.category ?? DEFAULT_CATEGORY
+  const moveToNewCategory = (name: string) => {
+    if (!working || !shownDoc) return
+    const made = moveToNew(working.config, working.documents, shownDoc.sha, currentCategory, name)
+    setByHand((h) => new Set(h).add(shownDoc.sha))
+    storeWorking({ ...working, config: made.config, documents: made.docs })
+    setNaming(false)
+    setMoved((n) => n + 1)
+  }
   const tabs: DocTabs = {
     files,
     value: shownDoc?.sha ?? "",
     onChange: setShownSha,
     note: categoried ? (sha) => (sorted[sha] ? lineOf(categoryName(sorted[sha].category), sorted[sha].reason) : null) : undefined,
     menu:
-      categoried && shownLine ? <CategoryMenu categories={categories} value={shownLine.category} onMove={moveShown} /> : undefined,
+      (categoried || pipelineDocs.length > 1) && shownDoc ? <CategoryMenu categories={categories} value={currentCategory} onMove={moveShown} onNew={() => setNaming(true)} /> : undefined,
   }
   const shownFilename = pipelineDocs.length > 1 ? (shownDoc?.filename ?? null) : null
   const shownRunSha = pipelineDocs.length > 1 ? shownDoc?.sha : undefined
@@ -726,6 +739,17 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
             <>
               {/* On a phone the Inspector is a sheet, so the invitation sits above the cards instead. */}
               {isPhone && guide.invite ? <div className="p-3">{guide.invite}</div> : null}
+              {working && (categoried || pipelineDocs.length > 1) ? (
+                <>
+                  {naming ? <NewCategoryForm onSubmit={moveToNewCategory} onCancel={() => setNaming(false)} /> : null}
+                  <CategoriesSection
+                    shown={shownCategory ?? DEFAULT_CATEGORY}
+                    config={working.config}
+                    usersOf={(cid) => (categoried ? usedBy(working.documents, sorted, cid) : working.documents)}
+                    onChange={(config) => storeWorking({ ...working, config })}
+                  />
+                </>
+              ) : null}
               <PipelineColumn
                 graph={graph}
                 file={shownFile}

@@ -4,19 +4,24 @@ import { Picker } from "@/components/ui/Picker"
 
 /**
  * "Category: Reports with tables": the menu that moves the document on show to
- * another category. With one category there is nothing to choose.
+ * another category, or, with `onNew`, to a new one. With one category and no
+ * `onNew` there is nothing to choose.
  */
+const NEW = "__new__"
+
 export function CategoryMenu({
   categories,
   value,
   onMove,
+  onNew,
 }: {
   categories: { id: string; name: string }[]
   value: string
   onMove: (id: string) => void
+  onNew?: () => void
 }) {
   const id = useId()
-  if (categories.length < 2) return null
+  if (categories.length < 2 && !onNew) return null
   return (
     <div className="flex items-center gap-2" title="Move to another category">
       <span id={`${id}-label`} className="text-xs text-fg-muted">
@@ -25,9 +30,9 @@ export function CategoryMenu({
       <Picker
         id={`${id}-menu`}
         labelledBy={`${id}-label`}
-        options={categories.map((c) => ({ value: c.id, name: c.name }))}
+        options={[...categories.map((c) => ({ value: c.id, name: c.name })), ...(onNew ? [{ value: NEW, name: "Move to a new category", action: true }] : [])]}
         value={value}
-        onChange={onMove}
+        onChange={(v) => (v === NEW ? onNew?.() : onMove(v))}
       />
     </div>
   )

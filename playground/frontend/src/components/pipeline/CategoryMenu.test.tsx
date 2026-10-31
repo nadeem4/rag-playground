@@ -37,4 +37,18 @@ describe("CategoryMenu", () => {
     const { container } = render(<CategoryMenu categories={[CATS[0]]} value="default" onMove={() => {}} />)
     expect(container.textContent).toBe("")
   })
+
+  it("offers Move to a new category when it can", () => {
+    const onNew = vi.fn()
+    render(<CategoryMenu categories={CATS} value="default" onMove={() => {}} onNew={onNew} />)
+    const trigger = screen.getByRole("button", { name: /Category/ })
+    expect(optionNames(trigger)).toEqual(["Default", "Reports with tables", "Move to a new category"])
+    choose(trigger, "Move to a new category")
+    expect(onNew).toHaveBeenCalled()
+  })
+
+  it("is shown with one category when it can move to a new one", () => {
+    render(<CategoryMenu categories={[CATS[0]]} value="default" onMove={() => {}} onNew={() => {}} />)
+    expect(screen.getByRole("button", { name: /Category/ })).toBeTruthy()
+  })
 })

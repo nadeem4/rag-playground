@@ -2345,6 +2345,20 @@ describe("a pipeline with categories", () => {
     expect(sent.route).toEqual([{ category: "default" }])
   })
 
+  it("Move to a new category copies the category and moves only the shown document", async () => {
+    keepWorking()
+    render(<Shell />)
+    await waitFor(() => expect(card("chunk")).toBeTruthy())
+    fireEvent.click(within(card("chunk")).getByRole("button", { name: "Chunk" }))
+    fireEvent.click((await screen.findAllByRole("tab"))[1])
+    choose(screen.getByRole("button", { name: /Category/ }), "Move to a new category")
+    fireEvent.change(screen.getByLabelText("Name of the new category"), { target: { value: "Big tables" } })
+    fireEvent.click(screen.getByRole("button", { name: "Move" }))
+    await waitFor(() => expect(readWorking()!.config.categories!["big-tables"]).toMatchObject({ name: "Big tables", chunk: { use: "token_based" } }))
+    expect(readWorking()!.documents.map((d) => d.category)).toEqual(["default", "big-tables"])
+    expect(readWorking()!.config.route).toEqual([{ category: "default" }])
+  })
+
   it("choosing a category for one document runs again with only that pin changed, and the others are reused", async () => {
     const streams: { onmessage: ((m: MessageEvent<string>) => void) | null }[] = []
     class OpenES {

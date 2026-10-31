@@ -65,7 +65,9 @@ import { goneResults, readBuildSession, writeBuildSession, type GuideAsk } from 
 import { cardOfStepIn, categoriesOf, graphToConfig, removedText, servedConfig, unknownStrategy } from "@/state/config"
 import { parseWorking, readWorking, storedWorkingJson, storeWorking, subscribeWorking } from "@/state/working"
 import { lineOf, pinSorted, useSorting } from "@/state/sorting"
+import { CategoriesSection, NewCategoryForm } from "@/components/pipeline/CategoryEditor"
 import { CategoryMenu } from "@/components/pipeline/CategoryMenu"
+import { moveToNew, usedBy } from "@/state/categories"
 import { askRun, cardRun, errorHeadline, foldRun, routeRunError, type Tracked } from "@/state/pipeline"
 import {
   cleanSavedPipeline,
@@ -226,13 +228,22 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     storeWorking({ ...working, documents: working.documents.map((d) => (d.sha === shownDoc.sha ? { ...d, category: id } : d)) })
     setMoved((n) => n + 1)
   }
+  const [naming, setNaming] = useState(false)
+  const moveToNewCategory = (name: string) => {
+    if (!working || !shownDoc || !shownLine) return
+    const made = moveToNew(working.config, working.documents, shownDoc.sha, shownLine.category, name)
+    setByHand((h) => new Set(h).add(shownDoc.sha))
+    storeWorking({ ...working, config: made.config, documents: made.docs })
+    setNaming(false)
+    setMoved((n) => n + 1)
+  }
   const tabs: DocTabs = {
     files,
     value: shownDoc?.sha ?? "",
     onChange: setShownSha,
     note: categoried ? (sha) => (sorted[sha] ? lineOf(categoryName(sorted[sha].category), sorted[sha].reason) : null) : undefined,
     menu:
-      categoried && shownLine ? <CategoryMenu categories={categories} value={shownLine.category} onMove={moveShown} /> : undefined,
+      categoried && shownLine ? <CategoryMenu categories={categories} value={shownLine.category} onMove={moveShown} onNew={() => setNaming(true)} /> : undefined,
   }
   const shownFilename = pipelineDocs.length > 1 ? (shownDoc?.filename ?? null) : null
   const shownRunSha = pipelineDocs.length > 1 ? shownDoc?.sha : undefined
@@ -726,6 +737,17 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
             <>
               {/* On a phone the Inspector is a sheet, so the invitation sits above the cards instead. */}
               {isPhone && guide.invite ? <div className="p-3">{guide.invite}</div> : null}
+              {working && (categoried || pipelineDocs.length > 1) ? (
+                <>
+                  {naming ? <NewCategoryForm onSubmit={moveToNewCategory} onCancel={() => setNaming(false)} /> : null}
+                  <CategoriesSection
+                    id={shownCategory ?? Object.keys(categoriesOf(working.config))[0]}
+                    config={working.config}
+                    users={usedBy(working.documents, sorted, shownCategory ?? Object.keys(categoriesOf(working.config))[0])}
+                    onChange={(config) => storeWorking({ ...working, config })}
+                  />
+                </>
+              ) : null}
               <PipelineColumn
                 graph={graph}
                 file={shownFile}

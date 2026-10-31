@@ -237,6 +237,17 @@ Category in it and the document is put there by hand, so its tab line says "chos
 Moving it runs the steps again, and only the moved document does new work. Changing the rules
 later never moves a document that is already in a Category.
 
+To move a document to a Category that does not exist yet, pick **Move to a new category** at the
+end of the **Category** menu and type a name. The Category the document was in is copied under
+the new name, and only that document moves to the copy.
+
+Open **Categories**, above the cards, to change a Category in one place. It shows the name, which
+template the Category started from, and a line such as "Used by 3 documents". Rename it there,
+or use **Add a category** to start a new one from a template. **Remove** is switched off while
+documents use the Category or a rule sends documents to it, and the line beside it says which.
+A pipeline always keeps at least one Category. The Parse, Clean and Chunk settings of the
+Category are the cards below.
+
 ### The guided run
 
 When nothing has run yet on Build, an invite offers a guided run. It sits in the pane beside

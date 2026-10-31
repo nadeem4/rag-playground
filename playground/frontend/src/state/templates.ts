@@ -20,8 +20,9 @@ interface TemplateBase {
 }
 
 export interface IndexTemplate extends TemplateBase {
-  sample: string
-  pipeline: { index: PipelineConfig["index"] }
+  /** The bundled sample that suits the template; the Web pages template has none. */
+  sample?: string
+  pipeline: { category: { parse: Step; clean?: Step[]; chunk: Step } }
 }
 
 /** `rewrite` is "none" or a step, as in a Pandion pipeline file. */
@@ -35,10 +36,12 @@ export interface QueryTemplate extends TemplateBase {
 export interface PipelineTemplates {
   index: IndexTemplate[]
   query: QueryTemplate[]
+  /** The embed and store every index template shares. */
+  shared: { index: { embed: Step; store: Step } }
 }
 
 /** The order the cards are shown in: the everyday case first. */
-export const INDEX_ORDER = ["text", "tables", "scanned", "manuals"]
+export const INDEX_ORDER = ["text", "tables", "scanned", "manuals", "web"]
 export const QUERY_ORDER = ["balanced", "exact", "precision", "vague", "chat"]
 
 /** The one card not from Pandion: shown disabled until it ships. */
@@ -57,25 +60,31 @@ export function orderTemplates<T extends { id: string }>(list: readonly T[], ord
 
 const isStep = (v: unknown): v is Step => typeof v === "object" && v !== null && typeof (v as Step).use === "string"
 
-/** The pipeline the two templates make, as Build holds it. A rewrite of "none" is left out. */
-export function composeConfig(index: IndexTemplate, query: QueryTemplate): PipelineConfig {
+/**
+ * The pipeline the two templates make, as Build holds it: the one-category
+ * shape, with the index template's category and the shared embed and store.
+ * A rewrite of "none" is left out.
+ */
+export function composeConfig(index: IndexTemplate, query: QueryTemplate, shared: PipelineTemplates["shared"]): PipelineConfig {
   const { rewrite, ...retrieve } = query.pipeline.retrieve
   return {
-    index: index.pipeline.index,
+    index: { ...index.pipeline.category, ...shared.index },
     retrieve: { ...(isStep(rewrite) ? { rewrite } : {}), ...retrieve },
     ...(query.pipeline.answer ? { answer: query.pipeline.answer } : {}),
   }
 }
 
-type Part = { index?: PipelineConfig["index"]; retrieve?: TemplateRetrieve; answer?: Step }
+type Part = { category?: IndexTemplate["pipeline"]["category"]; index?: PipelineConfig["index"]; retrieve?: TemplateRetrieve; answer?: Step }
 
 function stepsOf(p: Part): [string, Step[]][] {
   const one = (s: unknown): Step[] => (isStep(s) ? [s] : [])
-  const { index, retrieve, answer } = p
+  const { retrieve, answer } = p
+  const index = p.index
+  const first = p.category ?? index
   return [
-    ["Parse", one(index?.parse)],
-    ["Clean", index?.clean ?? []],
-    ["Chunk", one(index?.chunk)],
+    ["Parse", one(first?.parse)],
+    ["Clean", first?.clean ?? []],
+    ["Chunk", one(first?.chunk)],
     ["Embed", one(index?.embed)],
     ["Store", one(index?.store)],
     ["Rewrite", one(retrieve?.rewrite)],
@@ -108,10 +117,11 @@ export type MadePipeline = { ok: true; graph: PipelineGraph; note?: string } | {
 export function templatePipeline(
   index: IndexTemplate,
   query: QueryTemplate,
+  shared: PipelineTemplates["shared"],
   current: { documents: DocRef[]; question: AskQuestion },
   registry: Registry,
 ): MadePipeline {
-  const config = composeConfig(index, query)
+  const config = composeConfig(index, query, shared)
   const odd = unknownStrategy(config, registry)
   if (odd !== null) return { ok: false, problem: `This pipeline uses ${odd}, which this server does not have.` }
   const note = removedText(servedConfig(config, registry).removed) ?? undefined

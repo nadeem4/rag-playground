@@ -1,0 +1,22 @@
+template:
+  name: Web pages
+  summary: Reads a saved web page, drops menus, cookie banners and footers, and starts a new piece at each heading.
+  good_for: It suits articles, documentation pages and blog posts saved as HTML or fetched from a link.
+category:
+  parse:
+    use: docling                # reads HTML, and labels its headings, lists and tables
+    content_layers: [body]      # leaves page headers and footers out
+  clean:
+    - use: drop_matching        # removes a cookie banner line
+      mode: regex
+      pattern: '^\s*(we use cookies|this (web)?site uses cookies|accept (all )?cookies|manage (cookie|preferences))'
+    - use: drop_matching        # removes a menu line, such as Home | About | Contact
+      mode: regex
+      pattern: '^\s*((home|about|contact|menu|sign in|log in)\s*[|/·\s]\s*)+(home|about|contact|menu|sign in|log in)\s*$|^\s*skip to content\s*$'
+    - use: drop_matching        # removes a footer line, such as a copyright notice or a privacy link
+      mode: regex
+      pattern: '^\W*(copyright|©)|all rights reserved|^\W*(privacy policy|terms of (use|service))'
+    - use: dedupe_blocks        # removes a block repeated word for word
+  chunk:
+    use: markdown_header        # starts a new piece at each heading, so a section stays together
+    max_tokens: 400             # a section longer than this is cut between its blocks

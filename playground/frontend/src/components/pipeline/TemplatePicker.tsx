@@ -64,9 +64,9 @@ export function TemplatePicker({
   const queries = useMemo(() => orderTemplates(templates?.query ?? [], QUERY_ORDER), [templates])
   const index = indexes.find((t) => t.id === indexId) ?? indexes[0]
   const query = queries.find((t) => t.id === queryId) ?? queries[0]
-  const rows = index && query ? composedRows(composeConfig(index, query)) : []
-  const made = index && query ? templatePipeline(index, query, current, registry) : null
-  const sample = index ? (samples?.find((s) => s.name === index.sample)?.title ?? null) : null
+  const rows = index && query ? composedRows(composeConfig(index, query, templates!.shared)) : []
+  const made = index && query ? templatePipeline(index, query, templates!.shared, current, registry) : null
+  const sample = index?.sample ? (samples?.find((s) => s.name === index.sample)?.title ?? null) : null
 
   const footer = (
     <>
@@ -156,9 +156,13 @@ export function TemplatePicker({
                   This pipeline calls a language model. Add your key in Settings before you Ask.
                 </p>
               ) : null}
-              <p className="text-sm text-fg-muted">
-                Try it on the sample {sample ? <span className="text-fg">{sample}</span> : <span className="font-mono text-xs text-fg">{index.sample}</span>}, or add your own document.
-              </p>
+              {index.sample ? (
+                <p className="text-sm text-fg-muted">
+                  Try it on the sample {sample ? <span className="text-fg">{sample}</span> : <span className="font-mono text-xs text-fg">{index.sample}</span>}, or add your own document.
+                </p>
+              ) : (
+                <p className="text-sm text-fg-muted">Add your own document to try it.</p>
+              )}
               {made && !made.ok ? (
                 <p role="alert" className="text-sm text-danger">
                   {made.problem}

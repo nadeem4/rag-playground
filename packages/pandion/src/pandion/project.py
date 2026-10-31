@@ -232,7 +232,7 @@ HERE = Path(__file__).resolve().parent
 KEYS = {{
 {keys}}}
 
-#: The file types the pipeline's parse step reads; None reads every file.
+#: The file types every category's parse step reads; None reads every file.
 SUFFIXES = {suffixes!r}
 
 #: Asked when there is no questions.json.
@@ -297,6 +297,19 @@ if __name__ == "__main__":
 '''
 
 
+def _all_suffixes(data: dict[str, Any]) -> tuple[str, ...] | None:
+    """The file extensions any category's parser reads, or None when one of
+    them declares none (it reads every file, as far as run.py knows)."""
+    parsers = [c["parse"]["use"] for c in (data.get("categories") or {}).values()] or [data["index"]["parse"]["use"]]
+    found: list[str] = []
+    for parser in parsers:
+        suffixes = parse_suffixes(parser)
+        if suffixes is None:
+            return None
+        found.extend(s for s in suffixes if s not in found)
+    return tuple(found)
+
+
 def new_project(
     folder: str | Path,
     pipeline: Any,
@@ -334,7 +347,7 @@ def new_project(
         for q in [question_set, *question_set["questions"]]:
             if q.get("document") and q["document"] not in named:
                 named.append(q["document"])
-    suffixes = parse_suffixes(data["index"]["parse"]["use"])
+    suffixes = _all_suffixes(data)
 
     files = {
         "pipeline.yaml": yaml.safe_dump(data, sort_keys=False, allow_unicode=True),

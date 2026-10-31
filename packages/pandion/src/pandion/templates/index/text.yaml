@@ -3,7 +3,7 @@ template:
   summary: Reads the PDF's own text, removes running headers, footers and repeats, and cuts at sentence ends.
   good_for: It suits articles, policies and plain reports set in one column, with few tables.
   sample: chunking-primer
-index:
+category:
   parse:
     use: pdfium                 # reads the text layer as it is: fast, exact, and no layout model to load
     join_lines: true            # joins wrapped lines back into paragraphs, so no sentence breaks at a line end
@@ -15,9 +15,3 @@ index:
     use: sentence_window        # cuts only at sentence ends, so an answer sentence is never cut in half
     sentences_per_chunk: 5      # about one short paragraph: enough context to answer, small enough to rank well
     overlap_sentences: 1        # repeats one sentence, so a thought that runs across a cut is still found
-  embed:
-    use: qwen3-embedding-0.6b   # the strongest embedder in the catalog, and small enough to run on a CPU
-  store:
-    use: lancedb
-    metric: cosine              # Qwen3's vectors are compared by direction
-    build_fts: true             # the keyword index, which the hybrid search in every query template needs

@@ -12,18 +12,24 @@ A step in this pipeline calls a model through an API, so it needs a key. Set ANT
 
 === pipeline.yaml
 path: ./pandion-index
+categories:
+  text:
+    name: Text documents
+    template: text
+    parse:
+      use: pdfium
+      join_lines: true
+    clean:
+    - use: header_footer_strip
+      min_page_ratio: 0.5
+    - use: dedupe_blocks
+    chunk:
+      use: sentence_window
+      sentences_per_chunk: 5
+      overlap_sentences: 1
+route:
+- category: text
 index:
-  parse:
-    use: pdfium
-    join_lines: true
-  clean:
-  - use: header_footer_strip
-    min_page_ratio: 0.5
-  - use: dedupe_blocks
-  chunk:
-    use: sentence_window
-    sentences_per_chunk: 5
-    overlap_sentences: 1
   embed:
     use: qwen3-embedding-0.6b
   store:

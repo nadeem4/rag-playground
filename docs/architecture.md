@@ -374,8 +374,9 @@ function on the old client (`api.createRun`). It cannot see a path built up from
   sample, and is never stored as a saved pipeline. **Start from a template** on Build
   (`playground/frontend/src/components/pipeline/TemplatePicker.tsx`) reads `GET /api/templates`
   and composes an index template with a query template in the browser
-  (`playground/frontend/src/state/templates.ts`): the index template gives `index`, the
-  query template `retrieve` and `answer`, which is already the shape Build holds, so
+  (`playground/frontend/src/state/templates.ts`): the index template gives
+  one category and `GET /api/templates` gives the shared embed and store, which join into `index`, the
+  query template `retrieve` and `answer`, which is still the shape Build holds, so
   `columnOf` draws it with no server call. Using it replaces the working pipeline with an
   unsaved one, keeps the documents and question in use, and offers Undo. `playground/frontend/src/state/pipelineChoice.ts` lists
   what Evaluate can score and picks the one it opens on. A question in a question set may

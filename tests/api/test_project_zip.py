@@ -29,7 +29,10 @@ def config(query: str = "balanced") -> dict:
     """A pipeline as the page sends it: the file's shape without a path."""
     c = pandion.compose_template("text", query)
     c.pop("path")
-    return c
+    [category] = c.pop("categories").values()
+    c.pop("route")
+    parts = {key: category[key] for key in ("parse", "clean", "chunk")}
+    return {"index": {**parts, **c["index"]}, **{k: v for k, v in c.items() if k != "index"}}
 
 
 def questions(n: int = 2) -> dict:
@@ -81,6 +84,12 @@ def test_with_questions_the_zip_also_holds_them(client):
     assert set(files) == FILES | {"questions.json"}
     assert len(json.loads(files["questions.json"])["questions"]) == 3
     assert "primer.pdf" in files["README.md"]
+
+
+def test_a_composed_template_posted_as_it_is_makes_a_zip(client):
+    r = client.post(ROUTE, json={"config": pandion.compose_template("web", "balanced"), "name": "Web"})
+
+    assert "categories:" in unzip(r)["pipeline.yaml"]
 
 
 def test_a_pipeline_without_a_name_gets_a_plain_one(client):

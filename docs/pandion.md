@@ -1655,8 +1655,8 @@ missing stage, such as `chunk`, is an error that names it.
 A template is a real starting point for a pipeline, chosen for a kind of document or a
 kind of question. Pandion ships two families, `index` and `query`, and you pick one of each:
 
-- An **index template** sets the index side: how the document is parsed, cleaned, cut
-  into pieces, embedded and stored.
+- An **index template** sets one category: how a kind of document is parsed, cleaned and cut
+  into pieces. The embedder and the store are the same for every index template.
 - A **query template** sets the retrieval side and the answer: how the question is
   rewritten, how the index is searched, how the hits are reranked, and what the answer
   step does.
@@ -1676,9 +1676,9 @@ for t in pandion.list_templates()["query"]:
 ```
 
 Each template in the list has its `id`, `name`, `summary`, `good_for` and `pipeline` (the
-part it sets). An index template also names the RAG Playground `sample` that suits it,
-and a query template says whether it `needs_key`. The first run downloads the models
-a pair uses.
+part it sets: an index template's `category`, a query template's `retrieve` and `answer`).
+An index template may also name the RAG Playground `sample` that suits it (`web` has none),
+and a query template says whether it `needs_key`. The first run downloads the models a pair uses.
 
 ### Index templates
 
@@ -1688,6 +1688,7 @@ a pair uses.
 | Reports with tables | `tables` | Financial reports, data sheets and studies whose answers sit in table rows |
 | Scanned PDFs | `scanned` | Scanned paper, photographed pages and any PDF whose text cannot be selected |
 | Manuals and guides | `manuals` | Manuals, handbooks, guides and specifications with numbered or clearly styled headings |
+| Web pages | `web` | Articles, documentation pages and blog posts saved as HTML or fetched from a link |
 
 - **Text documents** reads the PDF's text layer with pdfium, removes running headers,
   footers and repeated blocks, and cuts pieces of five sentences that share one sentence.
@@ -1701,9 +1702,25 @@ a pair uses.
   2, so the template sets `section_level: 4`. Its sample, `station-manual`, has numbered
   headings four levels deep, and each piece holds one subsection such as 2.2.1, with a
   heading like 2.2.1.1 kept inside it.
+- **Web pages** reads HTML with Docling, drops cookie banners, menu lines and footer lines,
+  removes repeated blocks, and starts a new piece at each heading. It has no sample.
 
-Every index template embeds with `qwen3-embedding-0.6b` and stores in lancedb with its
+Every index template is one category, so it sets only `parse`, `clean` and `chunk`.
+The embedder and the store are the same for all of them and live in
+`pandion.pipeline_templates.SHARED_INDEX`: `qwen3-embedding-0.6b`, and lancedb with its
 keyword index, which the hybrid search in every query template needs.
+`list_templates()["shared"]` returns them as `{"index": {"embed": ..., "store": ...}}`.
+
+`compose_template(index, query)` makes a pipeline with one category, named by the
+index template's id, with `template` set to the same id, a single route rule that takes
+every document, and the shared `index`:
+
+```python
+config = pandion.compose_template("tables", "balanced")
+config["categories"]["tables"]["template"]  # "tables"
+config["route"]                              # [{"category": "tables"}]
+config["index"]["store"]["use"]              # "lancedb"
+```
 
 ### Query templates
 
@@ -1738,7 +1755,7 @@ keyword index, which the hybrid search in every query template needs.
 The files are in the package, under `pandion/templates/index/` and
 `pandion/templates/query/`. Each is part of a pipeline file plus a `template:` block,
 and most settings have a short comment that says why they were chosen. An index
-template holds `index`; a query template holds `retrieve` and `answer`:
+template holds `category`; a query template holds `retrieve` and `answer`:
 
 ```yaml
 template:
@@ -1784,7 +1801,7 @@ dict, as `pandion.evaluate` takes), and returns the paths it wrote:
   (absolute, a drive, a URL, `~` or `..`) keeps only its last part, so no folder of the
   computer that wrote it ends up in the file. Every other setting is copied as it is.
   `models.public_endpoints_only` is left out, so the default applies at home.
-- `run.py`: indexes the files in `docs/` that the parse step reads (`.pdf` for pdfium; every
+- `run.py`: indexes the files in `docs/` that any category's parse step reads (`.pdf` for pdfium; every
   format in [Documents other than PDFs](#documents-other-than-pdfs) for docling), says which
   other files it skipped, then evaluates the questions in
   `questions.json`, or asks one example question when there is no question set. It

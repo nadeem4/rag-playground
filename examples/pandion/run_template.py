@@ -67,7 +67,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("index", choices=[t["id"] for t in listed["index"]], help="the index template")
     parser.add_argument("query", choices=[t["id"] for t in listed["query"]], help="the query template")
-    parser.add_argument("pdf", type=Path, help="the PDF to index")
+    parser.add_argument("pdf", type=Path, help="the document file to index, such as a PDF or an HTML page")
     parser.add_argument("question_text", nargs="?", default=DEFAULT_QUESTION, help="the question to ask")
     parser.add_argument("--work", type=Path, default=Path("pandion-template-example"), help="where the index goes")
     args = parser.parse_args()

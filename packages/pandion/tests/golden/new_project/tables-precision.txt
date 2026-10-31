@@ -12,21 +12,27 @@ Every step in this pipeline runs on your computer, so it needs no API key.
 
 === pipeline.yaml
 path: ./pandion-index
+categories:
+  tables:
+    name: Reports with tables
+    template: tables
+    parse:
+      use: docling
+      do_table_structure: true
+      table_mode: accurate
+      do_ocr: false
+      content_layers:
+      - body
+    clean:
+    - use: dedupe_blocks
+    chunk:
+      use: layout_blocks
+      max_tokens: 400
+      keep_tables_whole: true
+      heading_context: true
+route:
+- category: tables
 index:
-  parse:
-    use: docling
-    do_table_structure: true
-    table_mode: accurate
-    do_ocr: false
-    content_layers:
-    - body
-  clean:
-  - use: dedupe_blocks
-  chunk:
-    use: layout_blocks
-    max_tokens: 400
-    keep_tables_whole: true
-    heading_context: true
   embed:
     use: qwen3-embedding-0.6b
   store:

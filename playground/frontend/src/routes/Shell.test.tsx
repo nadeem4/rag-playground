@@ -2369,7 +2369,8 @@ describe("a pipeline with categories", () => {
       </StrictMode>,
     )
     await waitFor(() => expect(card("chunk")).toBeTruthy())
-    await new Promise((r) => setTimeout(r, 500))
+    // The link is read and removed from the address once it has been saved and stored.
+    await waitFor(() => expect(window.location.search).toBe(""))
     expect(Object.keys(readWorking()!.config.categories ?? {})).toEqual(["default", "tables"])
     expect(readWorking()!.documents).toHaveLength(2)
   })

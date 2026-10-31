@@ -38,7 +38,7 @@ export function CategoryEditor({
       <label htmlFor={field} className="text-xs text-fg-muted">
         Category name
       </label>
-      <Input id={field} value={def.name ?? id} maxLength={60} onChange={(e) => onChange(renameCategory(config, id, e.target.value.trim() ? e.target.value : id))} />
+      <NameField key={id} id={field} name={def.name ?? (id === "default" ? "Default" : id)} onRename={(name) => onChange(renameCategory(config, id, name))} />
       {def.template ? <p className="text-fg-muted">{origin ? `Started from ${origin.name}` : `Started from ${def.template}`}</p> : null}
       <p>{`Used by ${users.length} ${users.length === 1 ? "document" : "documents"}`}</p>
       <div className="flex flex-wrap items-center gap-2">
@@ -71,6 +71,23 @@ export function CategoryEditor({
         </ul>
       ) : null}
     </div>
+  )
+}
+
+/** The name field keeps its own draft, so it can be cleared and retyped; the name is applied when the field loses focus, and an empty one keeps the previous name. */
+function NameField({ id, name, onRename }: { id: string; name: string; onRename: (name: string) => void }) {
+  const [draft, setDraft] = useState(name)
+  return (
+    <Input
+      id={id}
+      value={draft}
+      maxLength={60}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (!draft.trim()) setDraft(name)
+        else if (draft !== name) onRename(draft)
+      }}
+    />
   )
 }
 

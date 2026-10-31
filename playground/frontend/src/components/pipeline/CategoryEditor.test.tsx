@@ -47,15 +47,31 @@ describe("CategoryEditor", () => {
   it("renaming changes only this category", () => {
     const onChange = show("reports", [])
     fireEvent.change(screen.getByLabelText("Category name"), { target: { value: "Big reports" } })
+    expect(onChange).not.toHaveBeenCalled()
+    fireEvent.blur(screen.getByLabelText("Category name"))
     const next = onChange.mock.calls[0][0] as PipelineConfig
     expect(next.categories!.reports.name).toBe("Big reports")
     expect(next.categories!.default).toEqual(CONFIG.categories!.default)
   })
 
-  it("an empty name falls back to the id", () => {
+  it("can be cleared and retyped, and an empty name keeps the previous one", () => {
     const onChange = show("reports", [])
-    fireEvent.change(screen.getByLabelText("Category name"), { target: { value: "  " } })
-    expect((onChange.mock.calls[0][0] as PipelineConfig).categories!.reports.name).toBe("reports")
+    const field = screen.getByLabelText("Category name") as HTMLInputElement
+    fireEvent.change(field, { target: { value: "" } })
+    expect(field.value).toBe("")
+    fireEvent.blur(field)
+    expect(onChange).not.toHaveBeenCalled()
+    expect(field.value).toBe("Reports")
+  })
+
+  it("an empty name on the default category falls back to Default", () => {
+    const onChange = vi.fn()
+    render(<CategoryEditor id="default" config={{ ...CONFIG, categories: { ...CONFIG.categories!, default: { parse: { use: "pdfium" }, chunk: { use: "fixed" } } } }} users={[]} templates={TEMPLATES} onChange={onChange} />)
+    const field = screen.getByLabelText("Category name") as HTMLInputElement
+    expect(field.value).toBe("Default")
+    fireEvent.change(field, { target: { value: " " } })
+    fireEvent.blur(field)
+    expect(field.value).toBe("Default")
   })
 
   it("Remove explains which documents use the category", () => {

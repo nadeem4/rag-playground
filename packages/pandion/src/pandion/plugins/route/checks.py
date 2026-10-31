@@ -28,7 +28,7 @@ class FileTypeSettings(BaseModel):
     "file_type",
     summary="The file's type is one of the listed types, such as pdf or docx.",
     config=FileTypeSettings,
-    because=lambda s: f"type is {' or '.join(s.types)}",
+    because=lambda s: f"type is {' or '.join(t for t in s.types if t.strip())}",
 )
 def file_type(info: DocumentInfo, s: FileTypeSettings) -> bool:
     return info.type is not None and info.type in {t.lower() for t in s.types}

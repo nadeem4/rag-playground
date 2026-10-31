@@ -12,7 +12,7 @@ from pandion.docinfo import DocumentInfo
 from pandion.extend import route_check
 from pandion.plugins import discover
 from pandion.registry import DuplicateTransformError
-from pandion.routing import CHECKS, check_catalog, run_check
+from pandion.routing import CHECKS, _phrase, check_catalog, run_check
 
 discover()
 
@@ -161,3 +161,7 @@ def test_built_in_checks_are_the_seven_pandion_ships_not_a_plugins():
         assert "zz_plugin_check" in pandion.catalog()["route"]
     finally:
         CHECKS.pop("zz_plugin_check", None)
+
+
+def test_file_type_reason_leaves_out_blank_types():
+    assert _phrase("file_type", {"types": ["pdf", "", "  "]}) == "type is pdf"

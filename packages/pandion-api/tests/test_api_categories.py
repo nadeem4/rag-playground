@@ -64,6 +64,22 @@ def test_strategies_lists_the_seven_checks(client):
     }
 
 
+def test_strategies_lists_a_check_a_plugin_registered(client, monkeypatch):
+    from pydantic import BaseModel
+
+    from pandion.extend import route_check
+    from pandion.routing import CHECKS
+
+    class Prefix(BaseModel):
+        prefix: str = "INV"
+
+    monkeypatch.setattr("pandion.routing.CHECKS", dict(CHECKS))
+    route_check("is_invoice", summary="Starts with a prefix.", config=Prefix)(lambda info, s: True)
+    entry = client.get("/strategies").json()["stages"]["route"]["is_invoice"]
+    assert entry["summary"] == "Starts with a prefix."
+    assert entry["stage"] == "route" and "prefix" in entry["config_schema"]["properties"]
+
+
 def run(client, config, shas, **extra):
     return finish(client, client.post("/runs", json={"config": config, "documents": shas, **extra}))
 

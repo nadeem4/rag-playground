@@ -9,7 +9,7 @@ import { Picker, type PickerOption } from "@/components/ui/Picker"
 import { documentsOf, withDocuments } from "@/state/document"
 import { pipelineLine } from "@/state/evaluate"
 import { initialGraph, type PipelineGraph } from "@/state/graph"
-import { graphToConfig, removedText, sameConfig, type WorkingPipeline } from "@/state/config"
+import { graphToConfig, intoOf, removedText, sameConfig, servedConfig, type Into, type WorkingPipeline } from "@/state/config"
 import {
   cleanSavedPipeline,
   deletePipeline,
@@ -60,24 +60,27 @@ export function PipelineBar({
   notice,
   fromEvaluate = false,
   onSaved,
+  into,
 }: {
   graph: PipelineGraph
   registry: Registry
   /** The ready-made Starter, once the samples list has answered. */
   starter: StarterPipeline | null
-  /** `note` says which settings the server does not allow were dropped on the way in. */
-  onLoad: (g: PipelineGraph, note?: string) => void
+  /** `note` says which settings the server does not allow were dropped on the way in. `whole`: the pipeline with all its categories and routes, when it has them. */
+  onLoad: (g: PipelineGraph, note?: string, whole?: WorkingPipeline) => void
   notice?: string | null
   /** Opened from Evaluate: show Back to Evaluate. */
   fromEvaluate?: boolean
   /** A pipeline was saved, under this id. */
   onSaved?: (id: string) => void
+  /** The pipeline has categories: the cards are one of them, and a save keeps the rest and the routes. */
+  into?: Into
 }) {
   const id = useId()
   const { pipelines, currentId } = usePipelines()
   const saved = pipelines.find((p) => p.id === currentId) ?? null
   const current = currentId === STARTER_ID ? starter : saved
-  const edited = current !== null && isEdited(current, graph)
+  const edited = current !== null && isEdited(current, graph, into)
   const [naming, setNaming] = useState<"save" | "rename" | null>(null)
   const [name, setName] = useState("")
   const [nameError, setNameError] = useState<string | null>(null)
@@ -93,7 +96,7 @@ export function PipelineBar({
     window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""))
   }, [])
   const [applied, setApplied] = useState<{ line: string; graph: PipelineGraph; id: string | null; used: WorkingPipeline | null } | null>(null)
-  const working = graphToConfig(graph)
+  const working = graphToConfig(graph, into)
 
   // The pipeline is no longer the one the template made: the visitor changed it, so Undo goes.
   const now = working.ok ? working.pipeline : null
@@ -116,7 +119,7 @@ export function PipelineBar({
   }, [flash])
 
   function commitName() {
-    const made = naming === "rename" && saved ? null : savePipeline(name, graph)
+    const made = naming === "rename" && saved ? null : savePipeline(name, graph, { into })
     const ok = naming === "rename" && saved ? renamePipeline(saved.id, name) : made !== null
     if (!ok) {
       setNameError(saveRefusal(name, naming !== "rename"))
@@ -131,7 +134,7 @@ export function PipelineBar({
 
   function saveInPlace() {
     if (!saved) return
-    const ok = updatePipeline(saved.id, graph)
+    const ok = updatePipeline(saved.id, graph, documentsOf(graph), into)
     setFlash(ok ? "Saved" : "The pipeline could not be saved in this browser.")
     if (ok) onSaved?.(saved.id)
   }
@@ -140,7 +143,7 @@ export function PipelineBar({
     if (!saved) return
     const drawn = usableGraph(saved, registry)
     if (!drawn) return
-    const url = `${window.location.origin}/build?pipeline=${encodePipeline(saved.name, drawn, saved.documents)}`
+    const url = `${window.location.origin}/build?pipeline=${encodePipeline(saved.name, drawn, saved.documents, intoOf(saved.config))}`
     try {
       await navigator.clipboard.writeText(url)
       setFlash("Link copied")
@@ -218,7 +221,10 @@ export function PipelineBar({
     // Drawn without any setting the server does not allow; the saved copy loses it too.
     const removed = cleanSavedPipeline(picked.id, registry)
     setCurrentId(picked.id)
-    onLoad(loaded, removedText(removed) ?? undefined)
+    const whole = picked.config?.categories
+      ? { config: servedConfig(picked.config, registry).config, documents: picked.documents, question: picked.question }
+      : undefined
+    onLoad(loaded, removedText(removed) ?? undefined, whole)
   }
 
   return (

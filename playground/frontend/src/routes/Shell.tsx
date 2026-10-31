@@ -63,7 +63,7 @@ import { clearDocument, documentOf, documentsOf, useDocument } from "@/state/doc
 import { starterPipeline, useStarter } from "@/state/starter"
 import { GUIDE_RULE, readGuide } from "@/state/guide"
 import { goneResults, readBuildSession, writeBuildSession, type GuideAsk } from "@/state/buildSession"
-import { cardOfStepIn, categoriesOf, DEFAULT_CATEGORY, graphToConfig, removedText, servedConfig, unknownStrategy } from "@/state/config"
+import { cardOfStepIn, categoriesOf, DEFAULT_CATEGORY, graphToConfig, intoOf, removedText, servedConfig, unknownStrategy } from "@/state/config"
 import { parseWorking, readWorking, storedWorkingJson, storeWorking, subscribeWorking } from "@/state/working"
 import { lineOf, pinSorted, useSorting } from "@/state/sorting"
 import { CategoriesSection, NewCategoryForm } from "@/components/pipeline/CategoryEditor"
@@ -199,7 +199,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
       const id = readCurrentId()
       const current = id === STARTER_ID ? starter : (readPipelines().find((p) => p.id === id) ?? null)
       const onSample = samples?.some((c) => c.sha === doc.sha) ?? false
-      const kept = current?.id === STARTER_ID ? isEdited(current, stored) || !onSample : isUnsaved(current, stored)
+      const storedInto = intoOf(readWorking()?.config)
+      const kept = current?.id === STARTER_ID ? isEdited(current, stored, storedInto) || !onSample : isUnsaved(current, stored, storedInto)
       if (kept) return
     }
     const on = asked !== null ? starterPipeline(registry, samples, asked) : starter
@@ -414,14 +415,15 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     } else {
       // A link can carry any name; clamp it to what Save as accepts (M2).
       const name = decoded.name.trim().slice(0, 60).trim() || "Shared pipeline"
-      const existing = readPipelines().find((p) => p.name === name && !isUnsaved(p, decoded.graph))
+      const linkInto = intoOf(decoded.config)
+      const existing = readPipelines().find((p) => p.name === name && !isUnsaved(p, decoded.graph, linkInto))
       // The link's settings the server does not allow are already gone from the graph; say which.
       const removed = removedText(decoded.removed ?? [])
       setBarNotice(removed)
       if (existing) {
         setCurrentId(existing.id)
       } else {
-        const result = savePipeline(name, decoded.graph, { documents: decoded.documents })
+        const result = savePipeline(name, decoded.graph, { documents: decoded.documents, into: linkInto })
         if (result?.dropped) setBarNotice([removed, droppedText(result.dropped)].filter(Boolean).join(" "))
         if (!result) {
           // Keeping the old selection would let "Save changes" overwrite it with this graph.
@@ -432,7 +434,8 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
           setBarNotice([removed, why].filter(Boolean).join(" "))
         }
       }
-      edit(decoded.graph)
+      // The link's whole pipeline replaces the working one: every category, the routes and the pins.
+      storeWorking({ config: decoded.config, documents: decoded.documents, question: decoded.question })
     }
     params.delete("pipeline")
     const rest = params.toString()
@@ -674,14 +677,17 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
           registry={registry}
           starter={starter}
           fromEvaluate={fromEvaluate}
+          into={into}
           onSaved={fromEvaluate ? (id) => navigate(`/evaluate?pipeline=${encodeURIComponent(id)}`) : undefined}
-          onLoad={(g, note) => {
+          onLoad={(g, note, whole) => {
             // Errors from the last run belong to the graph being replaced (M4).
             setErrors({})
             setColumnError(null)
             setKeyNotice(null)
             setBarNotice(note ?? null)
-            edit(g)
+            // A pipeline loaded replaces the whole working one, categories and routes with it.
+            if (whole) storeWorking(whole)
+            else storeGraph(g)
           }}
           notice={barNotice}
         />

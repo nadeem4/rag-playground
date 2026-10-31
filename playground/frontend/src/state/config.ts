@@ -1,4 +1,4 @@
-import type { GraphNode, ProblemDetail, Registry, Stage } from "@/api/types"
+import { routeChecksOf, type GraphNode, type ProblemDetail, type Registry, type Stage } from "@/api/types"
 
 import { documentsOf, type DocRef } from "./document"
 import { docsOfSource, sourceConfigWith } from "./sourceDocs"
@@ -159,6 +159,13 @@ export function categoriesOf(config: PipelineConfig): Record<string, CategoryDef
   return { [DEFAULT_CATEGORY]: { name: "Default", parse: parse!, ...(clean ? { clean } : {}), chunk: chunk! } }
 }
 
+/** Where a column of cards is written back into a categories config: the config and the category the cards are. None for an old-shape config. */
+export type Into = { config: PipelineConfig; category: string }
+
+/** `Into` for a config, on `category` or its first one. Undefined when the config has no categories. */
+export const intoOf = (config: PipelineConfig | null | undefined, category?: string): Into | undefined =>
+  config?.categories ? { config, category: category && category in config.categories ? category : Object.keys(config.categories)[0] } : undefined
+
 /**
  * `edited`, a config read from one column of cards, written into category `id`
  * of `base`: the column's Parse, Clean and Chunk become that category's, and
@@ -242,7 +249,7 @@ export function isConfigShape(v: unknown): v is PipelineConfig {
  * its cards are the column's (one of each stage but Clean and Rerank) and each
  * card is fed by the one above it.
  */
-export function graphToConfig(graph: unknown, into?: { config: PipelineConfig; category: string }): Converted {
+export function graphToConfig(graph: unknown, into?: Into): Converted {
   if (!isRecord(graph) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return no("It is not a pipeline: it has no steps.")
   const g = graph as unknown as PipelineGraph
   if (!g.nodes.every((n) => isRecord(n) && typeof n.id === "string" && typeof n.stage === "string" && typeof n.transform === "string")) {
@@ -435,7 +442,12 @@ export function unknownStrategy(config: PipelineConfig, registry: Registry): str
   ]
   // A step whose `use` is not a name is unknown, never taken as known.
   const odd = steps.find(([stage, s]) => s && !strategyIn(registry, stage, s.use))
-  if (!odd) return null
+  if (!odd) {
+    // A rule's check that this server does not list is unknown too.
+    const checks = routeChecksOf(registry)
+    const check = (config.route ?? []).flatMap((r) => (r.when === undefined ? [] : Array.isArray(r.when) ? r.when : [r.when])).find((c) => !(typeof c.use === "string" && Object.hasOwn(checks, c.use)))
+    return check ? (typeof check.use === "string" ? check.use : "a check with no name") : null
+  }
   return typeof odd[1]?.use === "string" ? odd[1].use : "a step with no name"
 }
 

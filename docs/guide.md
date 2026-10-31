@@ -361,6 +361,12 @@ Pipelines live in your browser, up to 20. Saving a 21st removes the oldest, and 
 says which. One saved by an older version that cannot be opened here is never removed
 this way.
 
+A pipeline with several categories is saved, linked and exported whole: every category, the
+routes, and the category each document was put in. A link or an exported file that uses a
+check this server does not list is shown in the list but not opened, the same as one that
+uses a strategy it lacks. A pipeline with one category is saved exactly as before, and every
+older pipeline, link and file opens as it always did.
+
 **How your browser holds a pipeline.** Build keeps one working pipeline: the copy you
 edit, which Compare and Evaluate use too. Your saved pipelines are separate, named
 copies. **Save** copies the working pipeline into your list, and opening a saved pipeline
@@ -790,6 +796,8 @@ Export one item, the ones you tick, or everything, as one
 - **With the document:** **Include the document** puts the PDF in the file, so the items
   still work after the upload expires. On the demo it is on for uploads. Every upload an
   item uses goes in, not only its first document.
+- **Categories:** each saved pipeline in the file lists its documents, and each document
+  carries its category. The categories and routes are part of the pipeline's settings.
 - **Without the document:** the file holds only the settings. A sample is always there, so
   items on a sample need nothing more. Items on an upload ask for the PDF again when opened.
 

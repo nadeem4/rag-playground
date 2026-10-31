@@ -100,3 +100,9 @@ export const TEST_REGISTRY: Registry = {
     search: t("use_case", "search", "output", { result: port("retrieval_result") }, { max_snippet_chars: { type: "integer", default: 400, title: "Max Snippet Chars" } }),
   },
 }
+
+/** The route checks a server lists, by name; `name_matches` is the one most tests write rules with. */
+const check = (name: string) => ({ name, summary: "", config_schema: { type: "object", properties: {} } })
+;(TEST_REGISTRY as Record<string, unknown>).route = Object.fromEntries(
+  ["file_type", "name", "path", "metadata", "properties", "text_layer", "contains", "name_matches"].map((n) => [n, check(n)]),
+)

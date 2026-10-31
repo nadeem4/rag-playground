@@ -36,7 +36,7 @@ export function useSorting(config: PipelineConfig, docs: readonly DocRef[], byHa
   useEffect(() => {
     if (!sorts || !open.length) return
     const ctl = new AbortController()
-    v2.sortDocuments(config, open, pins, ctl.signal)
+    v2.sortDocuments(config, open, {}, ctl.signal)
       .then((r) => setGot((g) => ({ key, latest: r.documents, kept: { ...g.kept, ...r.documents } })))
       .catch(() => {})
     return () => ctl.abort()

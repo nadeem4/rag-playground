@@ -63,6 +63,14 @@ def route_check(
     return add
 
 
+def built_in_checks() -> frozenset[str]:
+    """The names of the checks Pandion ships; any other is a plugin's."""
+    from pandion.plugins import discover
+
+    discover()
+    return frozenset(n for n, c in CHECKS.items() if c.fn.__module__ == "pandion.plugins.route.checks")
+
+
 def check_catalog() -> dict[str, dict[str, Any]]:
     """Every check, in the shape `Registry.export_schema` gives a strategy."""
     return {

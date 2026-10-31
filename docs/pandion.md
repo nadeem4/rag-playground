@@ -505,7 +505,9 @@ Every document gets a reason, in `report.documents["a.pdf"].reason`:
 - `Chosen when added`: you chose the category by hand.
 
 `pandion.catalog()["route"]` lists the checks with their settings as a JSON schema, in
-the same shape as the strategies, so an app can draw their forms.
+the same shape as the strategies, so an app can draw their forms. `pandion.built_in_checks()`
+returns the names of the ones Pandion ships, so a site that does not run plugins can tell
+them from a plugin's.
 
 ### Write your own check
 

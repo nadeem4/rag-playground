@@ -1,4 +1,4 @@
-import { useId } from "react"
+import { useId, useRef } from "react"
 
 import { defaultsFor } from "@/components/fields/schema"
 import { SchemaForm } from "@/components/SchemaForm"
@@ -29,10 +29,25 @@ export function RoutesEditor({
   onChange: (route: RouteRule[]) => void
 }) {
   const id = useId()
+  // One id per rule, kept in step with the rules, so a rule's own form state
+  // (such as a JSON field's error) moves with it when it moves.
+  const next = useRef(0)
+  const ids = useRef<number[]>([])
+  while (ids.current.length < route.length) ids.current.push(next.current++)
+  ids.current.length = route.length
+  const change = (rules: RouteRule[], ruleIds = ids.current) => {
+    ids.current = ruleIds
+    onChange(rules)
+  }
   const names = Object.keys(checks)
   const last = route.length - 1
   const problem = routeProblem(route, categories)
   const nameOf = (c: string) => categories[c]?.name ?? c
+  const moved = (from: number, to: number) => {
+    const out = [...ids.current]
+    out.splice(to, 0, ...out.splice(from, 1))
+    return out
+  }
   const picker = (label: string, onPick: (use: string) => void) => (
     <select
       aria-label={label}
@@ -64,18 +79,18 @@ export function RoutesEditor({
           const n = i + 1
           const isLast = i === last
           return (
-            <li key={i} className="flex flex-col gap-2 rounded-md border border-hairline p-2">
+            <li key={ids.current[i]} className="flex flex-col gap-2 rounded-md border border-hairline p-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">{isLast ? "Anything else" : `Rule ${n}`}</span>
                 {isLast ? null : (
                   <>
-                    <Button size="sm" variant="ghost" aria-label={`Move rule ${n} up`} disabled={i === 0} onClick={() => onChange(moveRule(route, i, i - 1))}>
+                    <Button size="sm" variant="ghost" aria-label={`Move rule ${n} up`} disabled={i === 0} onClick={() => change(moveRule(route, i, i - 1), moved(i, i - 1))}>
                       Up
                     </Button>
-                    <Button size="sm" variant="ghost" aria-label={`Move rule ${n} down`} disabled={i === last - 1} onClick={() => onChange(moveRule(route, i, i + 1))}>
+                    <Button size="sm" variant="ghost" aria-label={`Move rule ${n} down`} disabled={i === last - 1} onClick={() => change(moveRule(route, i, i + 1), moved(i, i + 1))}>
                       Down
                     </Button>
-                    <Button size="sm" variant="ghost" aria-label={`Remove rule ${n}`} onClick={() => onChange(removeRule(route, i))}>
+                    <Button size="sm" variant="ghost" aria-label={`Remove rule ${n}`} onClick={() => change(removeRule(route, i), ids.current.filter((_, n) => n !== i))}>
                       Remove
                     </Button>
                   </>
@@ -115,7 +130,7 @@ export function RoutesEditor({
           )
         })}
       </ol>
-      {picker("Add a rule", (use) => onChange(addRule(route, last, newStep(use, checks))))}
+      {picker("Add a rule", (use) => change(addRule(route, last, newStep(use, checks)), [...ids.current.slice(0, last), next.current++, ...ids.current.slice(last)]))}
     </div>
   )
 }

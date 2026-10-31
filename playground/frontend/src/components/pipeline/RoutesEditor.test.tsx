@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
@@ -51,6 +52,26 @@ describe("RoutesEditor", () => {
     expect(screen.queryByRole("button", { name: "Remove rule 3" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Move rule 3 up" })).toBeNull()
     expect(screen.getByRole("button", { name: "Remove rule 1" })).toBeTruthy()
+    expect(screen.getAllByRole("listitem")[2].textContent).not.toMatch(/file_type|text_layer/)
+    expect(screen.queryByLabelText("Add a check to rule 3")).toBeNull()
+    expect(screen.getByLabelText("Add a check to rule 1")).toBeTruthy()
+  })
+
+  it("a JSON error stays with its rule when the rule moves", () => {
+    const checks: Record<string, CheckInfo> = { raw: { name: "raw", summary: "Raw.", config_schema: { type: "object", title: "Raw", properties: { x: { title: "X" } } } } }
+    const route: RouteRule[] = [{ when: { use: "raw" }, category: "a" }, { when: { use: "raw" }, category: "b" }, { category: "a" }]
+    function Harness() {
+      const [r, setR] = useState(route)
+      return <RoutesEditor route={r} categories={CATEGORIES} checks={checks} onChange={setR} />
+    }
+    render(<Harness />)
+    const box = () => screen.getAllByRole("textbox")
+    fireEvent.change(box()[0], { target: { value: "{oops" } })
+    expect(screen.getAllByText(/Not valid JSON/).length).toBe(1)
+    fireEvent.click(screen.getByRole("button", { name: "Move rule 1 down" }))
+    const second = screen.getAllByRole("listitem")[1]
+    expect(second.textContent).toContain("Not valid JSON")
+    expect(screen.getAllByRole("listitem")[0].textContent).not.toContain("Not valid JSON")
   })
 
   it("shows the new documents only note", () => {

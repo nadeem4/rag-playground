@@ -1,4 +1,5 @@
 import { goldsOf, graphToConfig, type WorkingPipeline } from "./config"
+import type { DocRef } from "./sourceDocs"
 
 /**
  * Form 1 of the owner's two: the pipeline on Build, saved or not, as a config.
@@ -54,7 +55,14 @@ export function parseWorking(json: string | null): WorkingPipeline | null {
   try {
     const v = JSON.parse(json) as unknown
     // Only the gold answers that are text are kept, as graphToConfig keeps them.
-    return isWorking(v) ? { ...v, question: { text: v.question.text, gold_answers: goldsOf(v.question.gold_answers) } } : null
+    if (!isWorking(v)) return null
+    // A document's category is a pin only when it is text.
+    const documents = v.documents.map((d) => {
+      if (!isRecord(d) || typeof d.category === "string" || !("category" in d)) return d
+      const { category: _category, ...rest } = d
+      return rest as unknown as DocRef
+    })
+    return { ...v, documents, question: { text: v.question.text, gold_answers: goldsOf(v.question.gold_answers) } }
   } catch {
     return null
   }

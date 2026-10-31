@@ -844,12 +844,16 @@ export interface ProblemDetail {
 }
 export interface V2RunRequest {
   config: PipelineConfig
+  /** Documents pinned to a category, by sha. Left out when none is. */
+  categories?: Record<string, string>
   documents: string[]
   through?: string
   force?: boolean
 }
 export interface V2AskRequest {
   config: PipelineConfig
+  /** Documents pinned to a category, by sha. Left out when none is. */
+  categories?: Record<string, string>
   documents: string[]
   question: string
   k?: number
@@ -868,6 +872,8 @@ export interface EvalQuestion {
 }
 export interface EvaluationRequest {
   config: PipelineConfig
+  /** Documents pinned to a category, by sha. Left out when none is. */
+  categories?: Record<string, string>
   documents: string[]
   questions: EvalQuestion[]
   top_k: number
@@ -876,6 +882,8 @@ export interface EvaluationRequest {
 export type CompareStage = "parse" | "clean" | "chunk" | "enrich" | "embed" | "store" | "rewrite" | "search" | "rerank"
 export interface ComparisonRequest {
   config: PipelineConfig
+  /** Documents pinned to a category, by sha. Left out when none is. */
+  categories?: Record<string, string>
   stage: CompareStage
   variants: (Step | Step[] | "none")[]
   documents: string[]
@@ -1046,4 +1054,9 @@ export interface ProjectPreview {
   keys: { variable: string; optional: boolean }[]
   /** The most questions a project may hold (the demo's cap); null for no cap. */
   max_questions: number | null
+}
+
+/** What `POST /pipelines/sort` says about each document, by sha: its category and why. */
+export interface SortResult {
+  documents: Record<string, { category: string; reason: string }>
 }

@@ -204,3 +204,14 @@ describe("problemDetails", () => {
     expect(problemDetails({ details: [{ step: "x" }] })).toBeNull()
   })
 })
+
+describe("pinned categories in a request", () => {
+  const pinned = (): WorkingPipeline => ({ ...working(), documents: [{ ...DOC, category: "reports" }] })
+
+  it("sends categories for pinned documents and omits the field otherwise", () => {
+    expect(cardRun(pinned(), "chunk", false, sampleGraph(R, DOC)).categories).toEqual({ [DOC.sha]: "reports" })
+    expect(askRun(pinned(), { answer: false, force: false }).categories).toEqual({ [DOC.sha]: "reports" })
+    expect("categories" in cardRun(working(), "chunk", false, sampleGraph(R, DOC))).toBe(false)
+    expect("categories" in askRun(working(), { answer: false, force: false })).toBe(false)
+  })
+})

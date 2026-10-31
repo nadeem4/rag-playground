@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { addedDocument, documentOf, documentsOf, removedDocument, withDocument, withDocuments } from "./document"
 import { initialGraph, signature } from "./graph"
-import { docsOfSource, sourceConfigWith } from "./sourceDocs"
+import { docsOfSource, pinsOf, sourceConfigWith } from "./sourceDocs"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
 const A = { sha: "a".repeat(64), filename: "manual.pdf" }
@@ -52,5 +52,26 @@ describe("a graph on several documents", () => {
     expect(addedDocument([A, B], A)).toEqual([A, B])
     expect(removedDocument([A, B, C], B.sha)).toEqual([A, C])
     expect(removedDocument([A], "nope")).toEqual([A])
+  })
+})
+
+describe("a document with a category", () => {
+  const pinned = { ...A, category: "reports" }
+
+  it("stores a category only when a document has one", () => {
+    expect(sourceConfigWith({}, [A, B])).toEqual({ sha: A.sha, filename: A.filename, documents: [A, B] })
+    expect(sourceConfigWith({}, [pinned, B])).toEqual({ sha: A.sha, filename: A.filename, documents: [pinned, B] })
+    // One pinned document needs the list, since sha and filename hold no category.
+    expect(sourceConfigWith({}, [pinned])).toEqual({ sha: A.sha, filename: A.filename, documents: [pinned] })
+  })
+
+  it("reads it back", () => {
+    expect(docsOfSource({ documents: [pinned, B] })).toEqual([pinned, B])
+    expect(docsOfSource({ documents: [{ ...A, category: 3 }] })).toEqual([A])
+  })
+
+  it("lists the pins by sha, or nothing when none is pinned", () => {
+    expect(pinsOf([pinned, B])).toEqual({ categories: { [A.sha]: "reports" } })
+    expect(pinsOf([A, B])).toEqual({})
   })
 })

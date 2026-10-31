@@ -86,9 +86,9 @@ describe("the Starter as a config", () => {
     const named = (s: Step, f: Step): Step => Object.fromEntries(Object.keys(f).map((k) => [k, s[k]])) as Step
     const picked: PipelineConfig = {
       index: {
-        parse: named(got.index.parse, file.index.parse),
+        parse: named(got.index.parse!, file.index.parse!),
         clean: got.index.clean!.map((s, i) => named(s, file.index.clean![i])),
-        chunk: named(got.index.chunk, file.index.chunk),
+        chunk: named(got.index.chunk!, file.index.chunk!),
         embed: named(got.index.embed!, file.index.embed!),
         store: named(got.index.store, file.index.store),
       },

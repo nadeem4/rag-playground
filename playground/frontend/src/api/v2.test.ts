@@ -48,4 +48,15 @@ describe("the /api/v2 client", () => {
     expect(calls[0].url).toBe("/api/v2/questions?documents=a&documents=b")
   })
 
+
+  it("asks which category each document would get, and sends pins only when there are some", async () => {
+    const calls = capture({ documents: { a: { category: "reports", reason: "Rule 1: path matches legal/**" } } })
+    const config = { index: { parse: { use: "pdfium" }, chunk: { use: "recursive_character" }, store: { use: "lancedb" } } }
+    const out = await v2.sortDocuments(config, ["a"], { a: "reports" })
+    expect(calls[0].url).toBe("/api/v2/pipelines/sort")
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ config, documents: ["a"], categories: { a: "reports" } })
+    expect(out.documents.a.reason).toBe("Rule 1: path matches legal/**")
+    await v2.sortDocuments(config, ["a"], {})
+    expect(JSON.parse(String(calls[1].init?.body))).toEqual({ config, documents: ["a"] })
+  })
 })

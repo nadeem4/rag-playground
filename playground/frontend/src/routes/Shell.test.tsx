@@ -91,7 +91,7 @@ describe("Build page", () => {
     expect(body.through).toBe("parse")
     expect(body.documents).toEqual([SOURCE.sha])
     expect(body.force).toBeUndefined()
-    expect(body.config.index.parse.use).toBe("pdfium")
+    expect(body.config.index.parse!.use).toBe("pdfium")
   })
 
   it("a 422 from the server lands on the card it names", async () => {
@@ -1034,7 +1034,7 @@ describe("Build is pipeline first", () => {
     expect(within(bar()).getByText("edited")).toBeTruthy()
     expect(within(bar()).getByRole("button", { name: "Save as new" })).toBeTruthy()
     fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
-    expect(readPipelines()[0].config?.index.chunk.use).toBe("markdown_header")
+    expect(readPipelines()[0].config?.index.chunk!.use).toBe("markdown_header")
     expect(within(bar()).queryByText("edited")).toBeNull()
   })
 
@@ -1146,10 +1146,10 @@ describe("saved pipelines on Build", () => {
     expect(within(bar()).getByText("edited")).toBeTruthy()
     expect(optionOf(picker(), "Token chunks").textContent).toContain("Edited since saved")
     fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" })
-    expect(readPipelines()[0].config?.index.chunk.use).toBe("token_based")
+    expect(readPipelines()[0].config?.index.chunk!.use).toBe("token_based")
     fireEvent.click(within(bar()).getByRole("button", { name: "Save" }))
     expect(within(bar()).queryByText("edited")).toBeNull()
-    expect(readPipelines()[0].config?.index.chunk.use).toBe("markdown_header")
+    expect(readPipelines()[0].config?.index.chunk!.use).toBe("markdown_header")
   })
 
   it("Delete returns to the working copy and keeps the graph on screen", async () => {

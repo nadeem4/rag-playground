@@ -21,7 +21,9 @@ import type {
   Totals,
 } from "@/api/types"
 import { afterRun, BEST_KEY, bestKey, readBest } from "@/state/best"
-import { graphToConfig, stepOfCardIn } from "@/state/config"
+import { graphToConfig, stepOfCardIn, withCategory } from "@/state/config"
+import type { WorkingPipeline } from "@/state/config"
+import { storeWorking } from "@/state/working"
 import { readPreviousEvaluation, storePreviousEvaluation } from "@/state/evaluate"
 import { chooseDocument, resetDocumentForTests, withDocument, withDocuments } from "@/state/document"
 import { readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setTransform, storeGraph } from "@/state/graph"
@@ -2174,5 +2176,66 @@ describe("with several documents", () => {
     expect(shown()).toEqual(["units"])
     // The first best names the documents.
     expect((await screen.findByTestId("best-so-far")).textContent).toMatch(/Your first run with these 2 documents and questions, so it is your best so far\./)
+  })
+})
+
+describe("a pipeline with two categories", () => {
+  const evaluateButton = () => screen.getByRole("button", { name: "Evaluate" }) as HTMLButtonElement
+  const GUIDE = { sha: "ef".repeat(32), filename: "field-guide.docx" }
+  const twoCategories = (pins: boolean) => {
+    const base = graphToConfig(sampleGraph(registry, SOURCE)) as { ok: true; pipeline: WorkingPipeline }
+    const { parse, chunk } = base.pipeline.config.index
+    storeWorking({
+      ...base.pipeline,
+      config: { ...withCategory(base.pipeline.config, "scans", { name: "Scans", parse: parse!, chunk: chunk! }), route: [{ category: "default" }] },
+      documents: [
+        { ...SOURCE, ...(pins ? { category: "default" } : {}) },
+        { ...GUIDE, ...(pins ? { category: "scans" } : {}) },
+      ],
+    })
+  }
+  const ACROSS: QuestionSetAcross = {
+    documents: [SOURCE.sha, GUIDE.sha],
+    count: 1,
+    filenames: ["golden-set.csv"],
+    questions: [question({ id: "units", question: "What unit are depths in?", gold_answers: ["Depths are in metres."], document: GUIDE.sha })],
+  }
+
+  beforeEach(() => {
+    DrivenEventSource.instances = []
+    vi.stubGlobal("EventSource", DrivenEventSource)
+  })
+
+  it("shows the category beside each file and each question's file", async () => {
+    serve({ across: ACROSS })
+    twoCategories(true)
+    render(<Evaluate />)
+    const line = await screen.findByTestId("documents-line")
+    expect([...line.querySelectorAll("[data-category-note]")].map((n) => n.textContent)).toEqual(["in Default", "in Scans"])
+    const file = await waitFor(() => {
+      const f = document.querySelector("[data-question-file]")
+      expect(f).toBeTruthy()
+      return f!
+    })
+    expect(file.querySelector("[data-category-note]")?.textContent).toBe("in Scans")
+  })
+
+  it("shows no category when the files are not pinned", async () => {
+    serve({ across: ACROSS })
+    twoCategories(false)
+    render(<Evaluate />)
+    const line = await screen.findByTestId("documents-line")
+    expect(line.querySelector("[data-category-note]")).toBeNull()
+  })
+
+  it("sends the categories and the pins", async () => {
+    const { evaluations } = serve({ across: ACROSS })
+    twoCategories(true)
+    render(<Evaluate />)
+    await waitFor(() => expect(evaluateButton().disabled).toBe(false))
+    fireEvent.click(evaluateButton())
+    await waitFor(() => expect(evaluations).toHaveLength(1))
+    expect(Object.keys(evaluations[0].config.categories!)).toEqual(["default", "scans"])
+    expect(evaluations[0].categories).toEqual({ [SOURCE.sha]: "default", [GUIDE.sha]: "scans" })
   })
 })

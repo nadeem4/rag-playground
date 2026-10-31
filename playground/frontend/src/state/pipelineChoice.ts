@@ -2,6 +2,7 @@ import type { Registry } from "@/api/types"
 
 import { documentOf, documentsOf, type DocRef } from "./document"
 import type { PipelineGraph } from "./graph"
+import { intoOf, type Into } from "./config"
 import { isUnsaved, STARTER_ID, usableGraph, type SavedPipeline } from "./pipelines"
 import type { StarterPipeline } from "./starter"
 
@@ -29,6 +30,8 @@ export interface PipelineChoice {
   /** Why a kept item, saved by an older version, cannot be opened. */
   problem?: string
   documents: DocRef[]
+  /** Where its cards sit in a categories config; none for the old shape. */
+  into?: Into
   /** Which last score this one is compared with: an edited pipeline compares with its own. */
   key: string
 }
@@ -38,23 +41,26 @@ export function pipelineChoices({
   saved,
   registry,
   working,
+  into,
   currentId,
 }: {
   starter: StarterPipeline | null
   saved: readonly SavedPipeline[]
   registry: Registry
   working: PipelineGraph | null
+  /** Where Build's cards sit in the working config. */
+  into?: Into
   currentId: string | null
 }): PipelineChoice[] {
   const out: PipelineChoice[] = []
   if (starter) out.push({ ...starter, label: starter.name, kind: "ready", key: STARTER_ID })
   for (const p of saved) {
-    out.push({ id: p.id, name: p.name, label: p.name, kind: "saved", graph: usableGraph(p, registry), documents: p.documents, key: p.id, ...(p.kept ? { problem: p.kept.problem } : {}) })
+    out.push({ id: p.id, name: p.name, label: p.name, kind: "saved", graph: usableGraph(p, registry), documents: p.documents, key: p.id, ...(intoOf(p.config) ? { into: intoOf(p.config) } : {}), ...(p.kept ? { problem: p.kept.problem } : {}) })
   }
   if (working && documentOf(working)) {
     const current = currentId === STARTER_ID ? starter : (saved.find((p) => p.id === currentId) ?? null)
     // The Starter on the visitor's own document is unsaved work too, even though Build does not call it edited.
-    if (isUnsaved(current, working)) {
+    if (isUnsaved(current, working, into)) {
       const own = current && current.id !== STARTER_ID ? current : null
       out.push({
         id: ON_BUILD,
@@ -63,6 +69,7 @@ export function pipelineChoices({
         kind: "build",
         graph: working,
         documents: documentsOf(working),
+        ...(into ? { into } : {}),
         key: own ? own.id : "working",
       })
     }

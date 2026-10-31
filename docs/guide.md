@@ -485,6 +485,11 @@ the question box.
 Compare runs up to ten recipes of one step and puts them side by side. The server holds
 to the same cap.
 
+When the pipeline has categories, Compare sends all of them, with their routes and each
+document's pin, so it runs the same pipeline Build does. Beside each file name it says
+which category the file is pinned to. Putting a recipe on Build changes the category you
+were editing and leaves the others as they are.
+
 1. **Pick a step:** Parse, Chunk or Retrieve.
 2. **Set up the recipes.** Each recipe is a card that reads as a sentence. Tap a value to
    change it in a small editor under it. Add a recipe from a few suggestions or from
@@ -557,6 +562,11 @@ another removes the oldest.
 Evaluate scores a pipeline on its documents. It asks the pipeline every question in the
 question set and says how many found their answer, at what rank and in which piece. It
 needs no key.
+
+When the pipeline has categories, Evaluate sends all of them, with their routes and each
+document's pin, and says beside each file name, and beside each question's file, which
+category the file is pinned to. A saved pipeline keeps its categories when you open it
+on Build from here.
 
 Evaluate sends the whole question set in one request (`POST /api/v2/evaluations`). Pandion
 scores every question; the page shows its numbers: the hit rate, mean reciprocal rank,

@@ -26,6 +26,10 @@ app = create_app(ApiSettings(data_dir=Path("./pandion-data"), prefix="/api/v2"))
 uvicorn serve:app
 ```
 
+With no `prefix` the routes sit at the root, so once it runs, `curl http://127.0.0.1:8000/health`
+(or `/api/v2/health` with the prefix above) is the first call. The reference has a
+[step by step first run](../../docs/pandion-api.md#a-first-run-step-by-step).
+
 `ApiSettings` takes `data_dir`, the one folder every request runs under. It also takes
 `models` (a `pandion.ModelSettings`), `prefix` (where the routes are mounted) and `title`.
 Pass a `Policy` as the second argument to `create_app` to set your site's rules.
@@ -46,6 +50,7 @@ Each path is under `prefix`.
 | `POST /pipelines/validate` | Checks a pipeline and returns it as a YAML file, or the problems. |
 | `GET /documents` | Lists the documents this caller may read. |
 | `POST /documents` | Stores an uploaded file by its fingerprint. |
+| `POST /documents/url` | Fetches one web page and stores it like an upload, with its link as `origin_url`. |
 | `DELETE /documents/{id}` | Deletes a document, its record and its question set. |
 | `GET /documents/{id}/file` | Returns the file's own bytes. |
 | `GET /documents/{id}/pages` | Returns each page's size. |
@@ -54,8 +59,12 @@ Each path is under `prefix`.
 | `POST /documents/{id}/questions` | Checks a question set against the document, and keeps it if the Policy says so. |
 | `GET /documents/{id}/questions` | Returns the question set kept for a document. |
 | `DELETE /documents/{id}/questions` | Removes that question set. |
+| `POST /documents/{id}/questions/generate` | Has a model write test questions for a document, as a run. |
+| `POST /questions` | Checks one question set against several documents, and keeps it if the Policy says so. |
+| `GET /questions` | Returns the question sets kept against several documents, as one. |
 | `POST /golds/find` | Says which piece first holds a gold passage, by the eval step's rule. |
 | `POST /evaluations/against` | Compares a run with a baseline: questions newly missed and newly found, and which run is better. |
+| `POST /pipelines/sort` | Shows which category each document would go to and why. Nothing runs. |
 | `POST /runs` | Starts a run that indexes documents, or stops after one step. |
 | `GET /runs/{run_id}` | Returns a run's status, its events and its result. |
 | `GET /runs/{run_id}/events` | Streams a run's events as server-sent events. |
@@ -83,6 +92,10 @@ by raising `fastapi.HTTPException`. These are the hooks, from `pandion_api/polic
 - `dependencies()`: FastAPI dependencies to run on every route, such as one that sets a cookie.
 - `can_read(sha, request)`: may this request read this document?
 - `check_upload(file, request)`: read an upload and return its bytes, or refuse it.
+- `check_document(data, filename, request)`: refuse a document's bytes, for an upload and a URL document alike.
+- `check_fetch(url, request)`: refuse a link before it is fetched.
+- `fetch_slot(request)`: a context manager the fetch runs inside, for example to limit fetches at once.
+- `max_url_bytes(request)`: the largest page a link may fetch (20 MB by default).
 - `on_uploaded(document, request)`: called right after an upload's record is written.
 - `on_delete(sha, document, request)`: refuse a delete, or say whether to delete the file now.
 - `describe(document, request)`: extra keys to add to a document in the list.

@@ -146,10 +146,13 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   const working = useMemo(() => parseWorking(workingJson), [workingJson])
   const workDocs = working?.documents ?? []
   const [shownSha, setShownSha] = useState<string | null>(null)
-  const sorted = useSorting(working?.config ?? { index: { store: { use: "" } } }, workDocs)
+  // The documents moved by hand in this tab: only these say "chosen by hand".
+  const [byHand, setByHand] = useState<ReadonlySet<string>>(() => new Set())
+  const sorted = useSorting(working?.config ?? { index: { store: { use: "" } } }, workDocs, byHand)
   const categoried = Boolean(working?.config.categories)
   const shownIn = workDocs.find((d) => d.sha === shownSha) ?? workDocs[0]
-  const shownCategory = categoried && shownIn ? sorted[shownIn.sha]?.category : undefined
+  // With categories there is always one: while the sort is pending or failed, the first, as the column draws.
+  const shownCategory = categoried ? (shownIn ? sorted[shownIn.sha]?.category : undefined) ?? Object.keys(working!.config.categories!)[0] : undefined
   const graph = useStoredGraph(
     registry,
     () => {
@@ -219,6 +222,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
   const shownLine = categoried ? sorted[shownDoc?.sha ?? ""] : undefined
   const moveShown = (id: string) => {
     if (!working || !shownDoc) return
+    setByHand((h) => new Set(h).add(shownDoc.sha))
     storeWorking({ ...working, documents: working.documents.map((d) => (d.sha === shownDoc.sha ? { ...d, category: id } : d)) })
     setMoved((n) => n + 1)
   }

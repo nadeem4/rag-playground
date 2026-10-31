@@ -11,7 +11,7 @@ import { resetSampleQuestionsCache } from "@/api/samples"
 import { chooseDocument, clearDocument, documentsOf, loadSampleDocument, resetDocumentForTests, withDocuments } from "@/state/document"
 import { addCleaner, addEnrich, addReranker, chatSampleGraph, initialGraph, readStoredGraph, resetStoredGraphForTests, sampleGraph, setConfig, setReranker, setTransform, storeGraph } from "@/state/graph"
 import { graphToConfig } from "@/state/config"
-import { storeWorking } from "@/state/working"
+import { readWorking, storeWorking } from "@/state/working"
 import { decodePipeline, encodePipeline, readCurrentId, readPipelines, resetPipelinesForTests, savePipeline, setCurrentId, STARTER_ID, usableGraph } from "@/state/pipelines"
 import { TEST_REGISTRY } from "@/state/testRegistry"
 import { choose, optionNames, optionOf } from "@/components/ui/pickerTesting"
@@ -2294,15 +2294,15 @@ describe("a pipeline on several documents", () => {
 describe("a pipeline with categories", () => {
   const NOTES = { sha: "cd".repeat(32), filename: "notes.md" }
   const parse = { use: "pdfium" }
-  const keepWorking = () => {
+  const keepWorking = (pinned = true) => {
     const base = graphToConfig(withDocuments(initialGraph(TEST_REGISTRY), [{ sha: SOURCE.sha, filename: SOURCE.filename }, NOTES]))
     if (!base.ok) throw new Error(base.problem)
     const { store } = base.pipeline.config.index
     storeWorking({
       ...base.pipeline,
       documents: [
-        { sha: SOURCE.sha, filename: SOURCE.filename, category: "default" },
-        { sha: NOTES.sha, filename: NOTES.filename, category: "tables" },
+        { sha: SOURCE.sha, filename: SOURCE.filename, ...(pinned ? { category: "default" } : {}) },
+        { sha: NOTES.sha, filename: NOTES.filename, ...(pinned ? { category: "tables" } : {}) },
       ],
       config: {
         index: { store },
@@ -2327,7 +2327,36 @@ describe("a pipeline with categories", () => {
     expect(screen.getAllByRole("tab")[1].textContent).toContain("Reports with tables, chosen by hand")
   })
 
-  it("choosing a category for one document runs again with only that pin changed", async () => {
+  it("editing a card before the sort answers keeps every category and the routes", async () => {
+    keepWorking(false)
+    render(<Shell />)
+    await waitFor(() => expect(card("chunk")).toBeTruthy())
+    fireEvent.change(within(card("chunk")).getByLabelText("Chunk Size"), { target: { value: "300" } })
+    await waitFor(() => expect(readWorking()!.config.categories!.default.chunk).toMatchObject({ chunk_size: 300 }))
+    const saved = readWorking()!.config
+    expect(Object.keys(saved.categories!)).toEqual(["default", "tables"])
+    expect(saved.categories!.tables.chunk).toEqual({ use: "token_based" })
+    expect(saved.route).toEqual([{ category: "default" }])
+    expect(saved.index.chunk).toBeUndefined()
+    fireEvent.click(within(card("chunk")).getByRole("button", { name: "Run" }))
+    await waitFor(() => expect(posts).toHaveLength(1))
+    const sent = (posts[0].body as { config: { categories?: unknown; route?: unknown } }).config
+    expect(Object.keys(sent.categories as object)).toEqual(["default", "tables"])
+    expect(sent.route).toEqual([{ category: "default" }])
+  })
+
+  it("choosing a category for one document runs again with only that pin changed, and the others are reused", async () => {
+    const streams: { onmessage: ((m: MessageEvent<string>) => void) | null }[] = []
+    class OpenES {
+      onmessage: ((m: MessageEvent<string>) => void) | null = null
+      onerror = null
+      onopen = null
+      constructor() {
+        streams.push(this)
+      }
+      close() {}
+    }
+    vi.stubGlobal("EventSource", OpenES)
     keepWorking()
     render(<Shell />)
     await waitFor(() => expect(card("chunk")).toBeTruthy())
@@ -2339,5 +2368,15 @@ describe("a pipeline with categories", () => {
     choose(screen.getByRole("button", { name: /Category/ }), "Default")
     await waitFor(() => expect(posts).toHaveLength(2))
     expect((posts[1].body as { categories: unknown }).categories).toEqual({ [SOURCE.sha]: "default", [NOTES.sha]: "default" })
+    // The server says report.pdf was reused and only notes.md was computed.
+    const send = (e: Record<string, unknown>, id: string) =>
+      act(() => streams[streams.length - 1].onmessage!(new MessageEvent("message", { data: JSON.stringify(e), lastEventId: id })))
+    send({ event: "node_finished", node_id: "chunk", document: "report.pdf", artifact_id: "c1", cache_hit: true, duration_ms: 1 }, "1")
+    send({ event: "node_finished", node_id: "chunk", document: "notes.md", artifact_id: "c2", cache_hit: false, duration_ms: 1 }, "2")
+    send({ event: "stream_end", status: "finished", ok: true }, "3")
+    fireEvent.click(screen.getAllByRole("tab")[0])
+    expect((await screen.findByTestId("inspector-timing")).textContent).toContain("reused from an earlier run")
+    fireEvent.click(screen.getAllByRole("tab")[1])
+    await waitFor(() => expect(screen.getByTestId("inspector-timing").textContent).toContain("computed"))
   })
 })

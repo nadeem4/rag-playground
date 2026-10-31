@@ -231,10 +231,11 @@ the steps of the Category of the document on show, and the Parse, Clean and Chun
 beside the file. Choose another tab and the cards change with it. A pipeline with one Category
 looks exactly as it did before.
 
-To change where a document goes, open the **Category** menu beside the tabs and pick another
-Category under **Move to another category**. The document is then put there by hand. Moving it
-runs the steps again, and only the moved document does new work. Changing the rules later never
-moves a document that is already in a Category.
+To change where a document goes, use the **Category** menu. It sits below the tabs in the
+Parse, Clean and Chunk panes, and its tooltip reads "Move to another category". Pick another
+Category in it and the document is put there by hand, so its tab line says "chosen by hand".
+Moving it runs the steps again, and only the moved document does new work. Changing the rules
+later never moves a document that is already in a Category.
 
 ### The guided run
 

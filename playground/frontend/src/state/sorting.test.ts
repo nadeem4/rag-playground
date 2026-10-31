@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { v2 } from "@/api/v2"
 import type { PipelineConfig } from "@/state/config"
+import type { DocRef } from "@/state/sourceDocs"
 
-import { lineOf, pinSorted, useSorting } from "./sorting"
+import { CHOSEN, lineOf, pinSorted, useSorting } from "./sorting"
 
 const step = { use: "x" }
 const cat = (name: string) => ({ name, parse: step, chunk: step })
@@ -43,6 +44,26 @@ describe("useSorting", () => {
     const { result, rerender } = renderHook(({ c }) => useSorting(c, docs), { initialProps: { c: config(ROUTES) } })
     rerender({ c: config([{ category: "reports" }]) })
     expect(result.current.a.category).toBe("default")
+  })
+
+  it("an auto-sorted document keeps its rule reason after it is pinned", async () => {
+    vi.spyOn(v2, "sortDocuments").mockResolvedValue({ documents: { b: { category: "reports", reason: "Rule 2: path matches x" } } })
+    const first = [{ sha: "b", filename: "b.pdf" }]
+    const { result, rerender } = renderHook(({ d }) => useSorting(config(ROUTES), d), { initialProps: { d: first } })
+    await waitFor(() => expect(result.current.b).toBeTruthy())
+    rerender({ d: pinSorted(first, result.current) })
+    expect(result.current.b).toEqual({ category: "reports", reason: "Rule 2: path matches x" })
+  })
+
+  it("a document moved by hand says chosen when added, even into the category the sort gave", async () => {
+    vi.spyOn(v2, "sortDocuments").mockResolvedValue({ documents: { b: { category: "reports", reason: "Rule 2: x" } } })
+    const first: DocRef[] = [{ sha: "b", filename: "b.pdf" }]
+    const { result, rerender } = renderHook(({ d, h }) => useSorting(config(ROUTES), d, h), { initialProps: { d: first, h: new Set<string>() } })
+    await waitFor(() => expect(result.current.b).toBeTruthy())
+    rerender({ d: [{ sha: "b", filename: "b.pdf", category: "default" }], h: new Set(["b"]) })
+    expect(result.current.b).toEqual({ category: "default", reason: CHOSEN })
+    rerender({ d: [{ sha: "b", filename: "b.pdf", category: "reports" }], h: new Set(["b"]) })
+    expect(result.current.b).toEqual({ category: "reports", reason: CHOSEN })
   })
 
   it("sorts nothing for a config with one default category", () => {

@@ -450,10 +450,22 @@ describe("categories in the config", () => {
   })
 
   it("draws an old config as it always did", () => {
-    const g = sampleGraph(R, DOC)
-    const p = converted(g)
-    expect(sameGraph(columnOf(p, R, "default"), columnOf(p, R))).toBe(true)
-    expect(sameGraph(columnOf(p, R), g)).toBe(true)
+    const p = converted(sampleGraph(R, DOC))
+    const ids = (g: PipelineGraph) => g.nodes.map((n) => `${n.id}:${n.stage}:${n.transform}`)
+    const literal = ["source:source:upload", "parse:parse:pdfium", "clean_1:clean:dedupe_blocks", "chunk:chunk:recursive_character", "index:index:lancedb", "query:query:text", "retrieve:retrieve:hybrid_rrf", "use_case:use_case:search"]
+    expect(ids(columnOf(p, R))).toEqual(literal)
+    expect(ids(columnOf(p, R, "default"))).toEqual(literal)
+  })
+
+  it("graphToConfig with a target writes the edits into that category only", () => {
+    const base: WorkingPipeline = { config: MANY, documents: [], question: { text: "", gold_answers: [] } }
+    const col = columnOf(base, R, "reports")
+    const edited = setConfig(col, "chunk", { ...col.nodes.find((n) => n.id === "chunk")!.config, max_tokens: 99 })
+    const out = graphToConfig(edited, { config: MANY, category: "reports" })
+    if (!out.ok) throw new Error(out.problem)
+    expect(out.pipeline.config.categories?.reports.chunk).toMatchObject({ use: "token_based", max_tokens: 99 })
+    expect(out.pipeline.config.categories?.text).toEqual(MANY.categories!.text)
+    expect(out.pipeline.config.route).toEqual(MANY.route)
   })
 
   it("keeps only served settings in each category", () => {

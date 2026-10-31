@@ -44,6 +44,7 @@ import type { Registry } from "@/api/types"
 
 import { compatibility } from "./compat"
 import { withDocuments } from "./document"
+import { readWorking, storeWorking } from "./working"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
 const edgeSet = (g: { edges: { src: string; dst: string; port: string }[] }) =>
@@ -551,6 +552,25 @@ describe("the stored working graph", () => {
     vi.restoreAllMocks()
     window.localStorage.clear()
     resetStoredGraphForTests()
+  })
+
+  it("storeGraph with a category writes the edit into that category only", () => {
+    const step = { use: "pdfium" }
+    const config = {
+      index: { store: { use: "lancedb" } },
+      categories: {
+        a: { name: "A", parse: step, chunk: { use: "recursive_character" } },
+        b: { name: "B", parse: step, chunk: { use: "token_based" } },
+      },
+      route: [{ when: { use: "metadata", key: "k" }, category: "b" }, { category: "a" }],
+    }
+    storeWorking({ config, documents: [], question: { text: "", gold_answers: [] } })
+    const col = readStoredGraph(R, "b")!
+    storeGraph(setConfig(col, "chunk", { ...col.nodes.find((n) => n.id === "chunk")!.config, max_tokens: 99 }), "b")
+    const out = readWorking()!.config
+    expect(out.categories!.b.chunk).toMatchObject({ use: "token_based", max_tokens: 99 })
+    expect(out.categories!.a).toEqual(config.categories.a)
+    expect(out.route).toEqual(config.route)
   })
 
   it("useStoredGraph follows storeGraph and keeps the graph's identity while the JSON is unchanged", () => {

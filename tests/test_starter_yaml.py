@@ -30,9 +30,9 @@ def test_the_starter_file_has_the_apps_starter_settings():
     discover()
     c = Pipeline.from_yaml(ROOT / "samples" / "starter.yaml").config
     got = [
-        _validated(Stage.PARSE, *c.index.parse),
-        *[_validated(Stage.CLEAN, *step) for step in c.index.clean],
-        _validated(Stage.CHUNK, *c.index.chunk),
+        _validated(Stage.PARSE, *c.index.default.parse),
+        *[_validated(Stage.CLEAN, *step) for step in c.index.default.clean],
+        _validated(Stage.CHUNK, *c.index.default.chunk),
         _validated(Stage.INDEX, c.index.store_use, c.index.store),
         _validated(Stage.RETRIEVE, *c.retrieve.search),
         _validated(Stage.USE_CASE, *c.answer),

@@ -23,6 +23,30 @@ answer:                     # optional: what p.ask runs after retrieval
   model: claude-haiku-4-5
 ```
 
+A file can sort its documents into categories, each with its own parse, clean
+and chunk steps, with `route` rules choosing the category (the first rule whose
+`when` checks all pass; the last rule has no `when`). `embed` and `store` stay
+under `index`, shared by every category. A file with `parse`, `clean` and
+`chunk` under `index` and no `categories` reads as one category named `default`.
+
+```yaml
+categories:
+  reports:
+    name: Reports with tables      # optional
+    template: tables               # optional
+    parse: {use: docling}
+    clean: [{use: dedupe_blocks}]  # optional
+    chunk: {use: layout_blocks}
+  text: {parse: {use: pdfium}, chunk: {use: recursive_character}}
+route:
+  - when: {use: metadata, key: cms_type, equals: invoice}   # one check, or a list
+    category: reports
+  - category: text
+index:
+  embed: {use: qwen3-embedding-0.6b}
+  store: {use: lancedb}
+```
+
 Every key under a step other than `use` is a setting of that step, with the
 same name as in its config model, so a file and the same pipeline built in the
 RAG Playground hash to the same artifact ids. `store` takes any index
@@ -66,7 +90,9 @@ from pandion.ports import Stage
 from pandion.registry import UnknownTransformError, registry
 from pandion.stages import _problems, _strategy
 
-TOP_KEYS = ("plugins", "path", "models", "index", "retrieve", "answer")
+TOP_KEYS = ("plugins", "path", "models", "categories", "route", "index", "retrieve", "answer")
+CATEGORY_KEYS = ("name", "template", "parse", "clean", "chunk")
+ROUTE_KEYS = ("when", "category")
 RETRIEVE_KEYS = ("rewrite", "search", "rerank")
 INDEX_KEYS = ("source", "parse", "clean", "chunk", "enrich", "embed", "store")
 #: The source step when the file has none: the files given to index.run.
@@ -133,15 +159,37 @@ def place(where: str) -> str | None:
 
 
 @dataclass
-class IndexConfig:
-    """The index steps, each as (strategy name, its settings)."""
+class CategoryConfig:
+    """How one kind of document is read: its parse, clean and chunk steps,
+    each as (strategy name, its settings)."""
 
     parse: tuple[str, dict[str, Any]]
     chunk: tuple[str, dict[str, Any]]
+    clean: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
+    name: str = ""
+    template: str | None = None
+
+
+@dataclass
+class RouteRule:
+    """Documents that pass every check in `when` go to `category`; no `when`
+    takes every document that reaches the rule. `when` is only shape-checked
+    here, as (check name, its settings)."""
+
+    category: str
+    when: list[tuple[str, dict[str, Any]]] | None = None
+
+
+@dataclass
+class IndexConfig:
+    """The index: its categories, the rules that choose between them, and the
+    steps every category shares."""
+
+    categories: dict[str, CategoryConfig]
+    route: list[RouteRule]
     #: The store's settings, with `embedder` taken from `embed.use` when the
     #: store has that setting.
     store: dict[str, Any]
-    clean: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     #: The index strategy that stores the pieces.
     store_use: str = "lancedb"
     #: Where each document comes from. `upload` reads the files given to
@@ -150,6 +198,14 @@ class IndexConfig:
     #: The step between the chunker and the store that changes what each
     #: piece is searched by, such as llm_context, or None.
     enrich: tuple[str, dict[str, Any]] | None = None
+    #: The file had parse, clean and chunk under `index`: one default category.
+    legacy: bool = False
+
+    @property
+    def default(self) -> CategoryConfig:
+        """The category of the last route rule, which takes every document no
+        other rule took."""
+        return self.categories[self.route[-1].category]
 
 
 @dataclass
@@ -202,6 +258,8 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
         raise ConfigError(f"models: {_problems(exc)}.") from None
     if "index" not in data:
         raise ConfigError("The pipeline file has no index section.")
+    if "route" in data and "categories" not in data:
+        raise ConfigError("The pipeline file has a route but no categories for it to choose between.", step="route")
     if "answer" in data and "retrieve" not in data:
         raise ConfigError(
             "The answer needs a retrieve section: the answer step reads what "
@@ -210,7 +268,7 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
     config = PipelineConfig(
         path=_resolve(data["path"], base),
         models=settings,
-        index=_index(data["index"]),
+        index=_index(data["index"], data),
         retrieve=_retrieve(data["retrieve"]) if "retrieve" in data else None,
         answer=_answer(data["answer"]) if "answer" in data else None,
         plugins=plugins,
@@ -271,6 +329,8 @@ def build(
     retrieve: dict[str, Any] | None = None,
     answer: Any = None,
     plugins: list[str] | None = None,
+    categories: dict[str, Any] | None = None,
+    route: list[Any] | None = None,
 ) -> PipelineConfig:
     """Check a pipeline written in code; relative paths are read from the
     current folder.
@@ -287,11 +347,32 @@ def build(
     data["index"] = {k: _block(v) for k, v in index.items() if v is not None}
     if isinstance(data["index"].get("clean"), dict):
         data["index"]["clean"] = [data["index"]["clean"]]
+    if categories is not None:
+        data["categories"] = {key: _category_block(value) for key, value in categories.items()}
+    if route is not None:
+        data["route"] = [_route_block(rule) for rule in route]
     if retrieve is not None and any(v is not None for v in retrieve.values()):
         data["retrieve"] = {k: _block(v) for k, v in retrieve.items() if v is not None}
     if answer is not None:
         data["answer"] = _block(answer)
     return from_dict(data, base=Path("."))
+
+
+def _category_block(value: Any) -> Any:
+    """One category written in code, as the file's block for it."""
+    if not isinstance(value, dict):
+        return value
+    block = {k: _block(v) for k, v in value.items() if k in ("parse", "clean", "chunk")}
+    if isinstance(block.get("clean"), dict):
+        block["clean"] = [block["clean"]]
+    return {**value, **block}
+
+
+def _route_block(rule: Any) -> Any:
+    """One route rule written in code, as the file's block for it."""
+    if isinstance(rule, dict) and rule.get("when") is not None:
+        return {**rule, "when": _block(rule["when"])}
+    return rule
 
 
 def _block(value: Any) -> Any:
@@ -320,18 +401,25 @@ def to_dict(config: PipelineConfig) -> dict[str, Any]:
     models = config.models.model_dump(mode="json", exclude_defaults=True)
     if models:
         data["models"] = models
+    if not index.legacy:
+        data["categories"] = {key: _category_out(category) for key, category in index.categories.items()}
+        data["route"] = [_rule_out(rule) for rule in index.route]
     data["index"] = {}
     if index.source != DEFAULT_SOURCE:
         data["index"]["source"] = _out(index.source)
-    data["index"]["parse"] = _out(index.parse)
-    if index.clean:
-        data["index"]["clean"] = [_out(step) for step in index.clean]
-    data["index"]["chunk"] = _out(index.chunk)
-    if index.enrich is not None:
-        data["index"]["enrich"] = _out(index.enrich)
+    if index.legacy:
+        default = index.default
+        data["index"]["parse"] = _out(default.parse)
+        if default.clean:
+            data["index"]["clean"] = [_out(step) for step in default.clean]
+        data["index"]["chunk"] = _out(default.chunk)
+        if index.enrich is not None:
+            data["index"]["enrich"] = _out(index.enrich)
     if embed is not None:
         data["index"]["embed"] = embed
     data["index"]["store"] = {"use": index.store_use, **store}
+    if index.enrich is not None and not index.legacy:
+        data["index"]["enrich"] = _out(index.enrich)
     if config.retrieve is not None:
         retrieve = config.retrieve
         data["retrieve"] = {}
@@ -348,6 +436,28 @@ def to_dict(config: PipelineConfig) -> dict[str, Any]:
 def _out(step: tuple[str, dict[str, Any]]) -> dict[str, Any]:
     use, settings = step
     return {"use": use, **settings}
+
+
+def _category_out(category: CategoryConfig) -> dict[str, Any]:
+    data: dict[str, Any] = {}
+    if category.name:
+        data["name"] = category.name
+    if category.template is not None:
+        data["template"] = category.template
+    data["parse"] = _out(category.parse)
+    if category.clean:
+        data["clean"] = [_out(step) for step in category.clean]
+    data["chunk"] = _out(category.chunk)
+    return data
+
+
+def _rule_out(rule: RouteRule) -> dict[str, Any]:
+    data: dict[str, Any] = {}
+    if rule.when is not None:
+        checks = [_out(check) for check in rule.when]
+        data["when"] = checks[0] if len(checks) == 1 else checks
+    data["category"] = rule.category
+    return data
 
 
 def step_class(stage: Stage, use: str, module: str) -> type[BaseModel]:
@@ -432,34 +542,150 @@ def _answer(answer: Any) -> tuple[str, dict[str, Any]]:
     return _step(Stage.USE_CASE, answer, "answer")
 
 
-def _index(index: Any) -> IndexConfig:
+def _index(index: Any, data: dict[str, Any]) -> IndexConfig:
+    """The index section, with the file's `categories` and `route` (or the one
+    default category that an older file's parse, clean and chunk make)."""
     _keys(index, INDEX_KEYS, "index")
-    for stage in ("parse", "chunk", "store"):
-        if stage not in index:
-            raise ConfigError(
-                f"The index has no {stage} step. An index needs parse, chunk "
-                "and store, and embed when the store takes an embedder; clean "
-                "may be left out."
-            )
     discover()
-    steps = index.get("clean") or []
-    if not isinstance(steps, list):
-        raise ConfigError("index.clean must be a list of cleaners, each with use.")
+    if "categories" in data:
+        taken = [key for key in ("parse", "clean", "chunk") if key in index]
+        if taken:
+            names = ", ".join(f"index.{key}" for key in taken)
+            raise ConfigError(
+                f"The file has categories and also {names}. Use one or the other: "
+                "put parse, clean and chunk under each category.",
+                step="index",
+            )
+        if "store" not in index:
+            raise ConfigError(
+                "The index has no store step. Every category shares the embed and store "
+                "under index; embed is needed when the store takes an embedder."
+            )
+        categories = _categories(data["categories"])
+        route = _route(data.get("route"), categories)
+        legacy = False
+    else:
+        for stage in ("parse", "chunk", "store"):
+            if stage not in index:
+                raise ConfigError(
+                    f"The index has no {stage} step. An index needs parse, chunk "
+                    "and store, and embed when the store takes an embedder; clean "
+                    "may be left out."
+                )
+        steps = index.get("clean") or []
+        if not isinstance(steps, list):
+            raise ConfigError("index.clean must be a list of cleaners, each with use.")
+        categories = {
+            "default": CategoryConfig(
+                parse=_step(Stage.PARSE, index["parse"], "index.parse"),
+                clean=[
+                    _step(Stage.CLEAN, step, f"index.clean step {n}")
+                    for n, step in enumerate(steps, start=1)
+                ],
+                chunk=_step(Stage.CHUNK, index["chunk"], "index.chunk"),
+                name="Default",
+            )
+        }
+        route = [RouteRule(category="default")]
+        legacy = True
     store_use, store = _store(index.get("embed"), index["store"])
     return IndexConfig(
-        parse=_step(Stage.PARSE, index["parse"], "index.parse"),
-        clean=[
-            _step(Stage.CLEAN, step, f"index.clean step {n}")
-            for n, step in enumerate(steps, start=1)
-        ],
-        chunk=_step(Stage.CHUNK, index["chunk"], "index.chunk"),
+        categories=categories,
+        route=route,
         store=store,
         store_use=store_use,
         source=_source(index["source"]) if "source" in index else DEFAULT_SOURCE,
         enrich=None
         if _none(index.get("enrich"))
         else _step(Stage.ENRICH, index["enrich"], "index.enrich"),
+        legacy=legacy,
     )
+
+
+def _categories(data: Any) -> dict[str, CategoryConfig]:
+    if not isinstance(data, dict) or not data:
+        raise ConfigError("categories must be a mapping of at least one category.", step="categories")
+    _named(data, "categories")
+    return {key: _category(key, value) for key, value in data.items()}
+
+
+def _category(key: str, data: Any) -> CategoryConfig:
+    where = f"categories.{key}"
+    if isinstance(data, dict) and "embed" in data:
+        raise ConfigError(
+            f"{where} sets embed, but embed belongs under index: every category shares one embed and store.",
+            step=where,
+        )
+    _keys(data, CATEGORY_KEYS, where)
+    for stage in ("parse", "chunk"):
+        if stage not in data:
+            raise ConfigError(
+                f"{where} has no {stage} step. A category needs parse and chunk; clean may be left out.",
+                step=where,
+            )
+    for text in ("name", "template"):
+        if text in data and not isinstance(data[text], str):
+            raise ConfigError(f"{where}.{text} must be text.", step=f"{where}.{text}")
+    steps = data.get("clean") or []
+    if not isinstance(steps, list):
+        raise ConfigError(f"{where}.clean must be a list of cleaners, each with use.", step=f"{where}.clean")
+    return CategoryConfig(
+        parse=_step(Stage.PARSE, data["parse"], f"{where}.parse"),
+        clean=[
+            _step(Stage.CLEAN, step, f"{where}.clean step {n}")
+            for n, step in enumerate(steps, start=1)
+        ],
+        chunk=_step(Stage.CHUNK, data["chunk"], f"{where}.chunk"),
+        name=data.get("name", ""),
+        template=data.get("template"),
+    )
+
+
+def _route(data: Any, categories: dict[str, CategoryConfig]) -> list[RouteRule]:
+    if not isinstance(data, list) or not data:
+        raise ConfigError(
+            "The file has categories but no route. route lists the rules that choose a "
+            "category, and its last rule has no when.",
+            step="route",
+        )
+    rules = []
+    for n, rule in enumerate(data, start=1):
+        where = f"route.{n}"
+        _keys(rule, ROUTE_KEYS, where)
+        category = rule.get("category")
+        if not isinstance(category, str) or not category:
+            raise ConfigError(f"{where} must say which category to use, as category: <name>.", step=where)
+        if category not in categories:
+            known = ", ".join(f"'{key}'" for key in categories)
+            raise ConfigError(
+                f"{where} names the category '{category}', which is not under categories. "
+                f"The categories are: {known}.",
+                step=where,
+            )
+        if "when" not in rule:
+            if n < len(data):
+                raise ConfigError(
+                    f"Rule {n} has no when, so it takes every document and the rules after it "
+                    "can never run. Only the last rule may leave out when.",
+                    step=where,
+                )
+            rules.append(RouteRule(category=category))
+            continue
+        checks = rule["when"] if isinstance(rule["when"], list) else [rule["when"]]
+        if not checks:
+            raise ConfigError(f"{where}.when must hold at least one check.", step=f"{where}.when")
+        rules.append(
+            RouteRule(
+                category=category,
+                when=[_use(check, f"{where}.when.{k}") for k, check in enumerate(checks, start=1)],
+            )
+        )
+    if rules[-1].when is not None:
+        raise ConfigError(
+            "The last rule of route must have no when, so every document goes to some category.",
+            step="route",
+        )
+    return rules
 
 
 def _source(step: Any) -> tuple[str, dict[str, Any]]:

@@ -42,10 +42,22 @@ def recipe_hash(index_settings: Any) -> str:
     """A sha256 of the index settings (an `IndexConfig`), in canonical JSON.
 
     No enrich step is left out, so an index made before the enrich stage
-    existed keeps its hash."""
-    settings = asdict(index_settings)
-    if settings.get("enrich") is None:
-        settings.pop("enrich", None)
+    existed keeps its hash. An old file (one default category) hashes as it
+    always did. With categories, each category's steps are hashed but not its
+    name or template, and the route never is: sorting a document differently
+    does not change how a category reads it."""
+    index = index_settings
+    steps = {"store": index.store, "store_use": index.store_use, "source": index.source}
+    if index.enrich is not None:
+        steps["enrich"] = index.enrich
+    if index.legacy:
+        default = index.default
+        settings = {**steps, "parse": default.parse, "chunk": default.chunk, "clean": default.clean}
+    else:
+        categories = {
+            key: {"parse": c.parse, "chunk": c.chunk, "clean": c.clean} for key, c in index.categories.items()
+        }
+        settings = {**steps, "categories": categories}
     return hashlib.sha256(canonical_json(settings).encode("utf-8")).hexdigest()
 
 

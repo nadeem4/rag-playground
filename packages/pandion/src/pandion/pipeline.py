@@ -44,7 +44,7 @@ from typing import Any, Callable
 
 import yaml
 
-from pandion.config import ConfigError, PipelineConfig, build, from_dict as _from_dict, load, to_dict
+from pandion.config import CategoryConfig, ConfigError, PipelineConfig, build, from_dict as _from_dict, load, to_dict
 from pandion.cost import cost as _cost
 from pandion.embedding_cache import EmbeddingCache
 from pandion.executor import NodeResult, RunResult, run
@@ -58,6 +58,7 @@ from pandion.plugins import discover
 from pandion.ports import Stage
 from pandion.registry import registry
 from pandion.results import ResultStore, StageResult
+from pandion.routing import sort_document
 from pandion.sources import SourceFile, Sources
 from pandion.storage import Store
 
@@ -95,6 +96,8 @@ class DocumentReport:
     chunk, and enrich when the index has one."""
 
     stages: dict[str, StageResult] = field(default_factory=dict)
+    #: The category whose steps this document went through.
+    category: str = "default"
 
 
 @dataclass
@@ -290,14 +293,15 @@ def extras_for(config: PipelineConfig) -> list[str]:
 
     discover()
     index = config.index
-    steps = [
-        ("index.source", Stage.SOURCE, index.source),
-        ("index.parse", Stage.PARSE, index.parse),
-        *(("index.clean", Stage.CLEAN, step) for step in index.clean),
-        ("index.chunk", Stage.CHUNK, index.chunk),
-        *((("index.enrich", Stage.ENRICH, index.enrich),) if index.enrich else ()),
-        ("index.store", Stage.INDEX, (index.store_use, index.store)),
-    ]
+    steps = [("index.source", Stage.SOURCE, index.source)]
+    for name, category in index.categories.items():
+        where = "index" if index.legacy else f"categories.{name}"
+        steps.append((f"{where}.parse", Stage.PARSE, category.parse))
+        steps.extend((f"{where}.clean", Stage.CLEAN, step) for step in category.clean)
+        steps.append((f"{where}.chunk", Stage.CHUNK, category.chunk))
+    if index.enrich:
+        steps.append(("index.enrich", Stage.ENRICH, index.enrich))
+    steps.append(("index.store", Stage.INDEX, (index.store_use, index.store)))
     if config.retrieve is not None:
         retrieve = config.retrieve
         if retrieve.rewrite:
@@ -348,6 +352,8 @@ class Pipeline:
                  answer="search")
 
     Each stage is a dict (the file's block for it), a step class or a name.
+    For documents that need different steps, give `categories` and `route`
+    (the file's blocks) in place of `parse`, `clean` and `chunk`.
     `source` is optional, as in the file: left out, the documents are the
     files given to index.run (see "Your own source" in docs/pandion.md).
     `embed` is left out for a store that embeds by itself.
@@ -359,9 +365,11 @@ class Pipeline:
         self,
         *,
         path: str | Path,
-        parse: Step,
-        chunk: Step,
         store: Step,
+        parse: Step = None,
+        chunk: Step = None,
+        categories: dict | None = None,
+        route: list | None = None,
         embed: Step = None,
         clean: Step = None,
         source: Step = None,
@@ -380,6 +388,8 @@ class Pipeline:
                     "source": source, "parse": parse, "clean": clean,
                     "chunk": chunk, "enrich": enrich, "embed": embed, "store": store,
                 },
+                categories=categories,
+                route=route,
                 retrieve={"rewrite": rewrite, "search": search, "rerank": rerank},
                 answer=answer,
             )
@@ -487,16 +497,20 @@ class IndexPipeline:
 
     In code: `IndexPipeline(path=..., parse=..., chunk=..., embed=..., store=...)`,
     with `source`, `clean` (one cleaner or a list) and `models` optional, and
-    `embed` left out for a store that embeds by itself.
+    `embed` left out for a store that embeds by itself. In place of `parse`,
+    `clean` and `chunk`, give `categories` and `route` (the file's blocks):
+    each document then goes through the steps of its category.
     """
 
     def __init__(
         self,
         *,
         path: str | Path,
-        parse: Step,
-        chunk: Step,
         store: Step,
+        parse: Step = None,
+        chunk: Step = None,
+        categories: dict | None = None,
+        route: list | None = None,
         embed: Step = None,
         clean: Step = None,
         source: Step = None,
@@ -511,6 +525,8 @@ class IndexPipeline:
                     "source": source, "parse": parse, "clean": clean,
                     "chunk": chunk, "enrich": enrich, "embed": embed, "store": store,
                 },
+                categories=categories,
+                route=route,
             )
         )
 
@@ -538,6 +554,33 @@ class IndexPipeline:
         #: The documents the last run or sync in this process indexed: stored
         #: files with the upload source, locations with any other.
         self.documents: dict[str, SourceFile | str] | None = None
+        #: Categories chosen by hand, by document id (see `assign`).
+        self._pins: dict[str, str] = {}
+        #: The category each document had in the last run or sync.
+        self._categories: dict[str, str] | None = None
+
+    def assign(self, *, categories: dict[str, str] | None = None) -> None:
+        """Send documents to categories by hand, by document id. The choice
+        holds for this object and wins over the route."""
+        self._check_names(categories)
+        self._pins.update(categories or {})
+
+    def category_of(self, doc_id: str) -> str:
+        """The category of a document: its pin, else the one it had in the
+        last run, else the route's default."""
+        if doc_id in self._pins:
+            return self._pins[doc_id]
+        if self._categories is not None and doc_id in self._categories:
+            return self._categories[doc_id]
+        return sort_document(self.config.index.route, None).category
+
+    def _check_names(self, categories: dict[str, str] | None) -> None:
+        known = self.config.index.categories
+        for name in (categories or {}).values():
+            if name not in known:
+                raise ValueError(
+                    f"There is no category '{name}'. The categories are: {', '.join(known)}."
+                )
 
     def run(
         self,
@@ -548,6 +591,7 @@ class IndexPipeline:
         cancel: threading.Event | None = None,
         credentials: dict[str, str] | None = None,
         force: bool = False,
+        categories: dict[str, str] | None = None,
     ) -> IndexReport:
         """Index the files at `paths`: files, folders, or a list of both.
 
@@ -564,14 +608,18 @@ class IndexPipeline:
         Markdown or text file's name raises it too.
 
         `through` stops every document after that step: "parse", "clean" (the
-        last cleaner, or parse when there are none), "clean.1", "clean.2" ...,
-        or "chunk"; "index" is the whole run. The report then has no index.
+        document's last cleaner, or parse when its category has none),
+        "clean.1", "clean.2" ..., or "chunk"; "index" is the whole run. The
+        report then has no index. `categories` sends documents to categories
+        for this call (a document id to a name); `assign` does it for good.
         `on_event`, `cancel`, `credentials` and `force` work as in `execute`.
         """
         stop = self._last_step(through)
+        self._check_names(categories)
         return self._index(
             self._documents(paths),
             stop=stop,
+            categories=categories,
             on_event=on_event,
             cancel=cancel,
             credentials=credentials,
@@ -579,16 +627,25 @@ class IndexPipeline:
         )
 
     def _last_step(self, through: str | None) -> str | None:
-        """The step each document stops after, or None for the whole run."""
+        """The step each document stops after, or None for the whole run.
+        "clean" stays as it is: each document stops at its own category's
+        last cleaner (see `_stop_for`)."""
         if through is None or through == "index":
             return None
-        cleans = [f"clean.{n}" for n in range(1, len(self.config.index.clean) + 1)]
-        if through == "clean":
-            return cleans[-1] if cleans else "parse"
-        if through in ("parse", "chunk", *cleans):
+        most = max(len(c.clean) for c in self.config.index.categories.values())
+        cleans = [f"clean.{n}" for n in range(1, most + 1)]
+        if through in ("parse", "clean", "chunk", *cleans):
             return through
         named = ", ".join(["parse", "clean", *cleans, "chunk", "index"])
         raise ValueError(f"through names the step to stop after: one of {named}, not '{through}'.")
+
+    @staticmethod
+    def _stop_for(stop: str, category: CategoryConfig) -> str:
+        """`stop` for one document: "clean", or a cleaner its category lacks,
+        becomes its last cleaner, or parse when it has none."""
+        if stop == "clean" or (stop.startswith("clean.") and int(stop[6:]) > len(category.clean)):
+            return f"clean.{len(category.clean)}" if category.clean else "parse"
+        return stop
 
     def sync(self, paths: Documents, *, credentials: dict[str, str] | None = None) -> SyncReport:
         """Bring the index in line with the files at `paths` now.
@@ -696,6 +753,7 @@ class IndexPipeline:
         credentials: dict[str, str] | None = None,
         force: bool = False,
         remember: bool = True,
+        categories: dict[str, str] | None = None,
     ) -> IndexReport:
         """Index `documents`. `remember=False` leaves `self.documents` as it
         was; evaluate's trace of a miss uses it so the pipeline is unchanged."""
@@ -708,8 +766,10 @@ class IndexPipeline:
                 path = self.sources.path(file.sha, file.filename)
                 if path.is_file():
                     check_contents(path, file.filename)
-        graph, roles = self.graph(documents)
-        targets = {f"{doc_id}::{stop}" for doc_id in documents} if stop else None
+        chosen = {doc_id: (categories or {}).get(doc_id) or self.category_of(doc_id) for doc_id in documents}
+        graph, roles = self.graph(documents, chosen)
+        known = self.config.index.categories
+        targets = {f"{d}::{self._stop_for(stop, known[chosen[d]])}" for d in documents} if stop else None
         result = self.execute(
             graph,
             credentials,
@@ -719,7 +779,7 @@ class IndexPipeline:
             force=force,
             roles=roles,
         )
-        reports = {doc_id: DocumentReport() for doc_id in documents}
+        reports = {doc_id: DocumentReport(category=chosen[doc_id]) for doc_id in documents}
         index = None
         for node in graph.nodes:
             if result.nodes[node.id].status == "pruned":
@@ -732,6 +792,7 @@ class IndexPipeline:
                 reports[doc_id].stages[role] = stage
         if remember:
             self.documents = documents
+            self._categories = chosen
         return IndexReport(documents=reports, index=index)
 
     def execute(
@@ -815,9 +876,13 @@ class IndexPipeline:
             for doc_id, entry in manifest.documents.items()
         }
 
-    def graph(self, documents: dict[str, SourceFile | str]) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
+    def graph(
+        self, documents: dict[str, SourceFile | str], categories: dict[str, str] | None = None
+    ) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The graph for `documents`, and each node's (document id, step name).
 
+        Each document has the parse, clean and chunk steps of its category:
+        the one in `categories` (document id to name), else `category_of`.
         The index takes every document's chunks in document-id order. With
         the upload source a document is a stored file; with another source it
         is the location that source is told to read.
@@ -833,10 +898,13 @@ class IndexPipeline:
             roles[node_id] = (doc_id, role)
             return node_id
 
+        self._check_names(categories)
+        of = {doc_id: (categories or {}).get(doc_id) or self.category_of(doc_id) for doc_id in documents}
+
         # A file the parser cannot read fails here, before any step runs.
         if self._uploads():
             for doc_id in sorted(documents):
-                check_readable(index.parse[0], documents[doc_id].filename)
+                check_readable(index.categories[of[doc_id]].parse[0], documents[doc_id].filename)
 
         chunk_nodes = []
         for doc_id in sorted(documents):
@@ -846,14 +914,15 @@ class IndexPipeline:
             else:
                 use, settings = index.source
                 last = add(doc_id, "source", Stage.SOURCE, use, {**settings, "location": documents[doc_id]})
-            parse = add(doc_id, "parse", Stage.PARSE, *index.parse)
+            category = index.categories[of[doc_id]]
+            parse = add(doc_id, "parse", Stage.PARSE, *category.parse)
             edges.append(Edge(last, parse, "file"))
             last = parse
-            for n, step in enumerate(index.clean, start=1):
+            for n, step in enumerate(category.clean, start=1):
                 clean = add(doc_id, f"clean.{n}", Stage.CLEAN, *step)
                 edges.append(Edge(last, clean, "doc"))
                 last = clean
-            chunk = add(doc_id, "chunk", Stage.CHUNK, *index.chunk)
+            chunk = add(doc_id, "chunk", Stage.CHUNK, *category.chunk)
             edges.append(Edge(last, chunk, "doc"))
             if index.enrich is not None:
                 enrich = add(doc_id, "enrich", Stage.ENRICH, *index.enrich)

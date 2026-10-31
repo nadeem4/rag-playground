@@ -46,9 +46,9 @@ def test_a_full_file_loads(tmp_path):
     assert config.path == tmp_path / "my-index"
     assert config.models == ModelSettings(download="never", device="cpu")
     index = config.index
-    assert index.parse == ("pdfium", {})
-    assert index.clean == [("header_footer_strip", {}), ("dedupe_blocks", {})]
-    assert index.chunk == ("recursive_character", {"chunk_size": 400, "chunk_overlap": 80})
+    assert index.default.parse == ("pdfium", {})
+    assert index.default.clean == [("header_footer_strip", {}), ("dedupe_blocks", {})]
+    assert index.default.chunk == ("recursive_character", {"chunk_size": 400, "chunk_overlap": 80})
     assert index.store == {
         "embedder": "fake-deterministic",
         "truncate_dim": 64,
@@ -64,7 +64,7 @@ def test_clean_and_models_may_be_left_out(tmp_path):
 
     config = load(write(tmp_path, text))
 
-    assert config.index.clean == []
+    assert config.index.default.clean == []
     assert config.models == ModelSettings()
 
 
@@ -133,7 +133,7 @@ def test_an_unknown_store_lists_the_stores(tmp_path):
 
 
 def test_an_unknown_top_level_key_lists_the_valid_ones(tmp_path):
-    with pytest.raises(ConfigError, match="'generate'.*path, models, index, retrieve, answer"):
+    with pytest.raises(ConfigError, match="'generate'.*path, models, categories, route, index, retrieve, answer"):
         load(write(tmp_path, GOOD + "generate:\n  use: chat\n"))
 
 

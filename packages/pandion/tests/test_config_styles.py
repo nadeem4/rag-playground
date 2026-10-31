@@ -148,8 +148,8 @@ def test_styles_may_be_mixed(tmp_path):
         answer="search",
     )
 
-    assert mixed.config.index.parse == ("pdfium", {})
-    assert mixed.config.index.clean == [("dedupe_blocks", {}), ("drop_matching", {"pattern": "Draft"})]
+    assert mixed.config.index.default.parse == ("pdfium", {})
+    assert mixed.config.index.default.clean == [("dedupe_blocks", {}), ("drop_matching", {"pattern": "Draft"})]
     assert mixed.config.retrieve.rerank == [("mmr", {"top_k": 2})]
     assert mixed.config.answer == ("search", {})
 
@@ -232,7 +232,7 @@ def test_a_class_in_the_wrong_slot_is_refused(tmp_path):
 
 
 def test_a_missing_stage_is_named(tmp_path):
-    with pytest.raises(TypeError, match="chunk"):
+    with pytest.raises(ConfigError, match="no chunk step"):
         IndexPipeline(path=tmp_path, parse="pdfium", embed="fake-deterministic", store="lancedb")
 
 

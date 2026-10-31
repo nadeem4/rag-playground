@@ -649,7 +649,8 @@ export function useStoredGraph(registry: Registry, fallback?: () => PipelineGrap
   if (!stored && fallback && !seed.current) seed.current = fallback()
   const graph = stored ?? (fallback ? seed.current : null)
   useEffect(() => {
-    if (!stored && seed.current) storeGraph(seed.current)
+    // Read the store again: a strict-mode rerun keeps this render's `stored`, and a share link may have stored its own since.
+    if (!stored && seed.current && !readWorking()) storeGraph(seed.current)
   }, [stored])
   return graph
 }

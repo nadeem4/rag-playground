@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
-import { useEffect } from "react"
+import { StrictMode, useEffect } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiKeyProvider, useApiKey } from "@/api/apiKey"
@@ -2314,6 +2314,31 @@ describe("a pipeline with categories", () => {
       },
     })
   }
+
+  it("a share link opened in a fresh browser keeps its categories, past the Starter", async () => {
+    const SAMPLE = { sha: "ef".repeat(32), filename: "chunking-primer.pdf", size: 4096, content_type: "application/pdf" }
+    const card0 = { name: "chunking-primer", title: "A primer", blurb: "b", shows: "s", stresses: "chunk", pages: 3, default: true, filename: SAMPLE.filename, sha: SAMPLE.sha, question: "Why?" }
+    const base = globalThis.fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => (url === "/api/samples" ? new Response(JSON.stringify([card0]), { status: 200 }) : base(url, init))))
+    keepWorking()
+    const w = readWorking()!
+    w.documents[0] = { ...w.documents[0], sha: SAMPLE.sha, filename: SAMPLE.filename }
+    const code = btoa(JSON.stringify({ v: 3, name: "Two kinds", config: w.config, documents: w.documents, question: w.question })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
+    window.localStorage.clear()
+    resetStoredGraphForTests()
+    resetPipelinesForTests()
+    window.history.replaceState(null, "", `/build?pipeline=${code}`)
+    // Strict mode runs each effect twice, as the dev server does.
+    render(
+      <StrictMode>
+        <Shell />
+      </StrictMode>,
+    )
+    await waitFor(() => expect(card("chunk")).toBeTruthy())
+    await new Promise((r) => setTimeout(r, 500))
+    expect(Object.keys(readWorking()!.config.categories ?? {})).toEqual(["default", "tables"])
+    expect(readWorking()!.documents).toHaveLength(2)
+  })
 
   it("the cards show the steps of the shown document's category", async () => {
     keepWorking()

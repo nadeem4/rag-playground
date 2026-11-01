@@ -29,6 +29,9 @@ fetched page was stored under, whose suffix came from its content type
 (`pandion.fetch`). An entry has `filename` only when it differs from the last
 part of the id, so the entries of local files are as before.
 
+An entry synced from a `Source` also has `version`: the source's version of the document,
+so the next sync can skip reading a document whose version is the same.
+
 An entry also records the document's `category` and the `reason` for it, and
 its `metadata` labels when it has any. A document keeps them until it is moved,
 even when its bytes change or the route changes. An entry from before

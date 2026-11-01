@@ -50,6 +50,7 @@ from pandion.embedding_cache import EmbeddingCache
 from pandion.executor import NodeResult, RunResult, run
 from pandion.fetch import fetch_url, is_url
 from pandion.filters import check_where, resolve as _resolve_where
+from pandion.document_sources import Source
 from pandion.docinfo import DocumentInfo, document_info
 from pandion.formats import check_contents, check_readable, format_of
 from pandion.graph import Edge, Graph, Node
@@ -769,13 +770,19 @@ class IndexPipeline:
 
     def sync(
         self,
-        paths: Documents,
+        paths: Documents | Source,
         *,
         credentials: dict[str, str] | None = None,
         metadata: dict[str, dict[str, str]] | None = None,
         categories: dict[str, str] | None = None,
     ) -> SyncReport:
         """Bring the index in line with the files at `paths` now.
+
+        `paths` can also be a `Source` (see `pandion.document_sources`): its
+        entries are listed without bytes, and only an entry that is new, or
+        whose version changed, or whose stored file is gone, is read. A source
+        that lists nothing is refused before anything is written. An entry's
+        metadata becomes the labels of a document new to the index.
 
         Reads `manifest.json` under the config's `path`, indexes the files the
         same way as `run`, and says which documents were added, changed,
@@ -812,11 +819,46 @@ class IndexPipeline:
             raise ValueError(
                 f"{', '.join(held)} already in the index. Use p.index.move to change a category."
             )
-        documents = self._documents(paths)
+        versions: dict[str, str] | None = None
+        entry_labels: dict[str, dict[str, str]] = {}
+        if isinstance(paths, Source):
+            documents, versions, entry_labels = self._from_source(paths, before)
+        else:
+            documents = self._documents(paths)
         known = self._recorded(before)
         known.update({d: Sorting(c, "Chosen when added") for d, c in (categories or {}).items()})
         new = {d: m for d, m in (metadata or {}).items() if d not in before.documents}
-        return self._commit(documents, before, known, new, credentials=credentials)
+        new = {**{d: m for d, m in entry_labels.items() if d not in new}, **new}
+        return self._commit(documents, before, known, new, versions=versions, credentials=credentials)
+
+    def _from_source(
+        self, source: Source, before: Manifest
+    ) -> tuple[dict[str, SourceFile], dict[str, str], dict[str, dict[str, str]]]:
+        """The documents of `source` by id, their versions, and the labels of
+        the ids new to the manifest. An entry with the version the manifest
+        holds, whose stored file is still here, is not read."""
+        entries = list(source.list())
+        if not entries:
+            raise ValueError("There are no documents to index: the source listed none. Check its location.")
+        documents: dict[str, SourceFile] = {}
+        versions: dict[str, str] = {}
+        labels: dict[str, dict[str, str]] = {}
+        for entry in sorted(entries, key=lambda e: e.doc_id):
+            if entry.doc_id in documents:
+                raise ValueError(f"The document id '{entry.doc_id}' is given twice.")
+            old = before.documents.get(entry.doc_id)
+            file = None
+            if old is not None and old.get("version") == entry.version:
+                kept = SourceFile(sha=old["content_hash"], filename=old.get("filename") or PurePosixPath(entry.doc_id).name)
+                if self.sources.path(kept.sha, kept.filename).is_file():
+                    file = kept
+            if file is None:
+                file = self.sources.add_bytes(source.read(entry.doc_id), PurePosixPath(entry.doc_id).name)
+            documents[entry.doc_id] = file
+            versions[entry.doc_id] = entry.version
+            if old is None and entry.metadata:
+                labels[entry.doc_id] = dict(entry.metadata)
+        return documents, versions, labels
 
     def _check_recorded(self, manifest: Manifest, moving: str | None = None) -> None:
         """Refuse a manifest document whose category the pipeline no longer
@@ -850,6 +892,7 @@ class IndexPipeline:
         known: dict[str, Sorting],
         labels: dict[str, dict[str, str]] | None = None,
         *,
+        versions: dict[str, str] | None = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
@@ -876,6 +919,7 @@ class IndexPipeline:
                     "category": report.documents[doc_id].category,
                     "reason": report.documents[doc_id].reason,
                     **({"metadata": labels[doc_id]} if labels.get(doc_id) else {}),
+                    **({"version": versions[doc_id]} if versions and doc_id in versions else {}),
                     # A fetched page's file name comes from its content type.
                     **({} if file.filename == PurePosixPath(doc_id).name else {"filename": file.filename}),
                 }

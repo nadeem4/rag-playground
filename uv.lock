@@ -1118,6 +1118,9 @@ docling = [
     { name = "docling" },
     { name = "onnxruntime" },
 ]
+files = [
+    { name = "fsspec" },
+]
 lancedb = [
     { name = "lancedb" },
     { name = "pyarrow" },
@@ -1138,6 +1141,7 @@ pdfium = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=1.7.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.129.0" },
+    { name = "fsspec", marker = "extra == 'files'", specifier = ">=2025.3" },
     { name = "lancedb", marker = "extra == 'lancedb'", specifier = ">=0.38,<0.39" },
     { name = "onnxruntime", marker = "extra == 'docling'", specifier = ">=1.30.0" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=3.17.0" },
@@ -1149,7 +1153,7 @@ requires-dist = [
     { name = "torch", marker = "sys_platform == 'linux' and extra == 'local'", specifier = ">=2.14.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torch", marker = "sys_platform != 'linux' and extra == 'local'", specifier = ">=2.14.0" },
 ]
-provides-extras = ["pdfium", "docling", "local", "lancedb", "openai", "anthropic"]
+provides-extras = ["pdfium", "docling", "local", "lancedb", "openai", "anthropic", "files"]
 
 [[package]]
 name = "pandion-api"
@@ -1518,7 +1522,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "fastapi" },
     { name = "openai" },
-    { name = "pandion", extra = ["anthropic", "docling", "lancedb", "local", "openai", "pdfium"] },
+    { name = "pandion", extra = ["anthropic", "docling", "files", "lancedb", "local", "openai", "pdfium"] },
     { name = "pandion-api" },
     { name = "pillow" },
     { name = "pydantic" },
@@ -1546,7 +1550,7 @@ requires-dist = [
     { name = "git-cliff", marker = "extra == 'dev'", specifier = "==2.14.2" },
     { name = "httpx2", marker = "extra == 'dev'", specifier = ">=2.13.0" },
     { name = "openai", specifier = ">=3.17.0" },
-    { name = "pandion", extras = ["anthropic", "docling", "lancedb", "local", "openai", "pdfium"], editable = "packages/pandion" },
+    { name = "pandion", extras = ["anthropic", "docling", "files", "lancedb", "local", "openai", "pdfium"], editable = "packages/pandion" },
     { name = "pandion-api", editable = "packages/pandion-api" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "pydantic", specifier = ">=2.9" },

@@ -811,3 +811,39 @@ describe("the category a step card shows", () => {
     expect(screen.getByRole("article").querySelector("[data-category]")).toBeNull()
   })
 })
+
+describe("NodeCard documents line", () => {
+  const withDocs = (documents: NodeState["documents"]): NodeState => ({ id: "chunk", status: "running", documents })
+  const d = (status: "done" | "running" | "pending" | "failed") => ({ status })
+
+  it("says nothing new for one document", () => {
+    renderCard({ result: withDocs({ "a.pdf": d("done") }) })
+    expect(screen.queryByTestId("doc-progress")).toBeNull()
+  })
+
+  it("counts a reused document as done, and a skipped one on its own", () => {
+    renderCard({ result: withDocs({ "a.pdf": { status: "cached" }, "b.pdf": { status: "skipped" }, "c.pdf": d("done") }) })
+    expect(screen.getByTestId("doc-progress").textContent).toBe("2 of 3 documents done, 1 skipped")
+  })
+
+  it("shows the line on a collapsed card, outside the folded settings", () => {
+    renderCard({ selected: false, result: withDocs({ "a.pdf": d("done"), "b.pdf": d("failed") }) })
+    for (const id of ["doc-progress", "doc-failed"]) expect(screen.getByTestId(id).closest("[class*='grid-rows-[0fr]']")).toBeNull()
+  })
+
+  it("shows no line when the result has no documents", () => {
+    renderCard({ result: { id: "chunk", status: "done", artifact_id: "z" } })
+    expect(screen.queryByTestId("doc-progress")).toBeNull()
+  })
+
+  it("counts the documents of a step with three", () => {
+    renderCard({ result: withDocs({ "a.pdf": d("done"), "b.pdf": d("done"), "c.pdf": d("running") }) })
+    expect(screen.getByTestId("doc-progress").textContent).toBe("2 of 3 documents done, 1 running")
+  })
+
+  it("names the failed documents", () => {
+    renderCard({ result: withDocs({ "a.pdf": d("done"), "b.pdf": d("failed"), "c.pdf": d("pending") }) })
+    expect(screen.getByTestId("doc-progress").textContent).toBe("1 of 3 documents done, 1 waiting, 1 failed")
+    expect(screen.getByTestId("doc-failed").textContent).toBe("Failed: b.pdf")
+  })
+})

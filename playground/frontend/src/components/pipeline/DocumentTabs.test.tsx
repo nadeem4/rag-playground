@@ -79,4 +79,18 @@ describe("DocumentTabs category line", () => {
     render(<DocumentTabs files={FILES} value="a" onChange={() => {}} note={(sha) => (sha === "a" ? "Reports with tables, by rule 2" : null)} />)
     expect(screen.getByRole("tab", { name: /report.pdf/ }).textContent).toContain("Reports with tables, by rule 2")
   })
+
+  it("shows each tab's status when asked", () => {
+    const st = { a: "done", b: "running", c: "failed" } as const
+    render(<DocumentTabs files={FILES} value="a" onChange={() => {}} status={(sha) => st[sha as "a"]} />)
+    expect(screen.getAllByTestId("tab-status").map((e) => e.getAttribute("data-status"))).toEqual(["done", "running", "failed"])
+    expect(screen.getByRole("tab", { name: "notes.md, running" })).toBeTruthy()
+    expect(screen.getByRole("tab", { name: "notes.md, running" }).textContent).toContain("notes.md, running")
+    expect(screen.getByRole("tab", { name: /notes.md/ }).getAttribute("title")).toBe("notes.md: running")
+  })
+
+  it("shows no status dot without a status", () => {
+    render(<DocumentTabs files={FILES} value="a" onChange={() => {}} />)
+    expect(screen.queryByTestId("tab-status")).toBeNull()
+  })
 })

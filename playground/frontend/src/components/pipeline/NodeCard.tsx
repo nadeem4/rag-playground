@@ -3,7 +3,7 @@ import { Info, PanelRightOpen, Settings, X } from "lucide-react"
 import { Popover } from "radix-ui"
 
 import { needsKey } from "@/api/apiKey"
-import type { NodeState } from "@/api/runState"
+import { docCounts, type NodeState } from "@/api/runState"
 import type { GraphNode, LlmProvider, TransformInfo } from "@/api/types"
 import type { ExplainState } from "@/api/useExplain"
 import { FieldHelp } from "@/components/fields/FieldHelp"
@@ -331,6 +331,7 @@ export function NodeCard(p: NodeCardProps) {
         ? "Settings changed since the last run."
         : null
 
+  const perDoc = p.result ? docCounts(p.result) : null
   const docs = isSource ? documentsOf({ nodes: [p.node] }) : []
 
   // The head's name and the chevron both open a closed card and close the open one.
@@ -602,6 +603,19 @@ export function NodeCard(p: NodeCardProps) {
           <span className="font-mono text-2xs">{p.node.transform}</span>
         </p>
       )}
+
+      {perDoc && perDoc.total > 1 ? (
+        <div className="text-xs text-fg-muted">
+          <p data-testid="doc-progress">
+            {[`${perDoc.done} of ${perDoc.total} documents done`, perDoc.running && `${perDoc.running} running`, perDoc.waiting && `${perDoc.waiting} waiting`, perDoc.skipped && `${perDoc.skipped} skipped`, perDoc.failed && `${perDoc.failed} failed`].filter(Boolean).join(", ")}
+          </p>
+          {perDoc.failed ? (
+            <p data-testid="doc-failed" className="text-danger">
+              Failed: {perDoc.failedNames.join(", ")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Closed, the result shows here; open, it shows under the Run button instead. */}
       {ready?.outcome && !isSource && !open ? <ResultLine outcome={ready.outcome} onShow={p.onShowOutput} /> : null}

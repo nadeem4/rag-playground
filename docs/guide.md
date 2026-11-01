@@ -231,6 +231,15 @@ the steps of the Category of the document on show, and the Parse, Clean and Chun
 beside the file. Choose another tab and the cards change with it. A pipeline with one Category
 looks exactly as it did before.
 
+With several documents, each document tab also has a small status dot: an empty grey ring while
+it waits, a ring half filled with the accent colour while it runs, a filled accent dot when every
+step is done, and a red dot when a step failed for it. Screen readers hear the status after the
+filename. A step
+card shows how far it has got on one line, for example "2 of 3 documents done, 1 running,
+1 waiting" (it can also say skipped or failed), and when a document failed, a second line names
+it, for example "Failed: report.pdf". With one document
+neither the dot nor the line appears.
+
 To change where a document goes, use the **Category** menu. It sits below the tabs in the
 Parse, Clean and Chunk panes, and its tooltip reads "Move to another category". Pick another
 Category in it and the document is put there by hand, so its tab line says "chosen by hand".

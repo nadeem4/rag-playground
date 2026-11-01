@@ -142,6 +142,17 @@ function together(docs: Record<string, DocNodeState>): Pick<NodeState, "status" 
   return { status: all[0]?.status ?? "pending" }
 }
 
+/** Every document a step will run is known at the start, waiting, so a count is whole from the first event. */
+function seedDocuments(nodes: Record<string, NodeState>, named: { node: string; document: string }[] = []): Record<string, NodeState> {
+  const out = { ...nodes }
+  for (const { node, document } of named) {
+    const n = out[node]
+    if (!n || n.documents?.[document]) continue
+    out[node] = { ...n, documents: { ...n.documents, [document]: { status: "pending" } } }
+  }
+  return out
+}
+
 /** The document a /api/v2 event names, for a step that runs once per document. */
 const documentOf = (e: RunEvent): string | undefined => {
   const d = (e as { document?: unknown }).document
@@ -166,7 +177,10 @@ export function cardEvent(e: RunEvent, cardOf: CardOf = cardOfStep): RunEvent {
   const n = e as RunEvent & Named
   if (n.event === "run_started" && Array.isArray(n.steps)) {
     const nodes = cards(n.steps, cardOf)!
-    return { ...n, nodes, selected: cards(n.selected_steps, cardOf) ?? nodes } as RunEvent
+    const named = ((n.selected_steps ?? n.steps) as { step?: unknown; document?: unknown }[]).flatMap((s) =>
+      typeof s?.document === "string" && s.document ? [{ node: cardFor(String(s.step ?? ""), cardOf), document: s.document }] : [],
+    )
+    return { ...n, nodes, selected: cards(n.selected_steps, cardOf) ?? nodes, documents: named } as RunEvent
   }
   if (n.event === "run_cancelled" && Array.isArray(n.skipped_steps)) return { ...n, skipped: cards(n.skipped_steps, cardOf)! } as RunEvent
   if (typeof n.step === "string" && "node_id" in n) return { ...n, node_id: cardFor(n.step, cardOf) } as RunEvent
@@ -207,12 +221,15 @@ function applyEvent(prev: RunState, e: RunEvent): RunState {
       return withCurrent(base, (v) => ({
         ...v,
         order: [...v.order, ...e.nodes.filter((id) => !v.order.includes(id))],
-        nodes: {
-          ...v.nodes,
-          ...Object.fromEntries(
-            e.nodes.filter((id) => !(id in v.nodes)).map((id) => [id, { id, status: selected.has(id) ? "pending" : "pruned" } as NodeState]),
-          ),
-        },
+        nodes: seedDocuments(
+          {
+            ...v.nodes,
+            ...Object.fromEntries(
+              e.nodes.filter((id) => !(id in v.nodes)).map((id) => [id, { id, status: selected.has(id) ? "pending" : "pruned" } as NodeState]),
+            ),
+          },
+          (e as { documents?: { node: string; document: string }[] }).documents,
+        ),
       }))
     }
     case "question_finished":
@@ -316,9 +333,9 @@ export function runsAs(filename: string, name: string, sha?: string): boolean {
 
 /**
  * Every node as one document's run shows it: a step that ran once per
- * document takes that document's result and timing, and keeps the status of
- * all of them together, so a card still runs while another document does.
- * `filename` null, or a node with no run for it, leaves the node as it is.
+ * document takes that document's own status, error, result and timing, so the
+ * card shows that document. `documents` still holds every document's state,
+ * for the counts. `filename` null, or a node with no run for it, leaves the node as it is.
  */
 export function forDocument(results: Record<string, NodeState>, filename: string | null, sha?: string): Record<string, NodeState> {
   if (filename === null) return results
@@ -328,7 +345,37 @@ export function forDocument(results: Record<string, NodeState>, filename: string
     if (!name) continue
     const own = node.documents![name]
     if (out === results) out = { ...results }
-    out[id] = { ...node, artifact_id: own.artifact_id, cache_hit: own.cache_hit, duration_ms: own.duration_ms, started_at: own.started_at }
+    out[id] = { ...node, status: own.status, error: own.error, artifact_id: own.artifact_id, cache_hit: own.cache_hit, duration_ms: own.duration_ms, started_at: own.started_at }
   }
   return out
+}
+
+/** How many of a step's documents are done, running, waiting, skipped or failed, and who failed. */
+export function docCounts(node: NodeState) {
+  const c = { total: 0, done: 0, running: 0, waiting: 0, skipped: 0, failed: 0, failedNames: [] as string[] }
+  for (const [name, d] of Object.entries(node.documents ?? {})) {
+    c.total++
+    if (d.status === "done" || d.status === "cached") c.done++
+    else if (d.status === "running") c.running++
+    else if (d.status === "failed") {
+      c.failed++
+      c.failedNames.push(name)
+    } else if (d.status === "skipped") c.skipped++
+    else c.waiting++
+  }
+  return c
+}
+
+/** One document's state across every step: failed, else running, else done when every step is, else skipped if one was, else pending. */
+export function docStatusOf(results: Record<string, NodeState>, filename: string, sha?: string): NodeStatus | undefined {
+  const all: NodeStatus[] = []
+  for (const node of Object.values(results)) {
+    const name = node.documents ? Object.keys(node.documents).find((n) => runsAs(filename, n, sha)) : undefined
+    if (name) all.push(node.documents![name].status)
+  }
+  if (!all.length) return undefined
+  if (all.includes("failed")) return "failed"
+  if (all.includes("running")) return "running"
+  if (all.every((s) => s === "done" || s === "cached")) return "done"
+  return all.includes("skipped") ? "skipped" : "pending"
 }

@@ -116,7 +116,7 @@ def test_an_empty_listing_is_refused_and_the_index_is_kept(setup):
     kept = path.read_bytes()
     for f in [docs / "report.pdf", docs / "guides" / "short.pdf"]:
         f.unlink()
-    with pytest.raises(ValueError, match="listed none"):
+    with pytest.raises(ValueError, match="listed no documents"):
         sync(config, source)
     assert path.read_bytes() == kept
 
@@ -150,3 +150,22 @@ def test_the_same_file_name_in_two_folders_indexes_both(tmp_path):
     report = sync(config, FilesSource(str(docs)))
     assert report.added == ["a/report.pdf", "b/report.pdf"]
     assert sorted(manifest(config)["documents"]) == ["a/report.pdf", "b/report.pdf"]
+
+
+class Unreadable(Counting):
+    name = "unreadable"
+
+    def read(self, doc_id: str) -> bytes:
+        if doc_id == "report.pdf":
+            raise PermissionError("denied")
+        return super().read(doc_id)
+
+
+def test_an_entry_that_cannot_be_read_is_listed_and_the_rest_index(setup):
+    config, docs, _ = setup
+    report = sync(config, Unreadable(str(docs)))
+    assert list(report.failed) == ["report.pdf"]
+    assert "denied" in report.failed["report.pdf"]
+    assert report.added == ["guides/short.pdf"]
+    assert report.removed == []
+    assert report.ok and not report.complete

@@ -102,6 +102,14 @@ def test_sync_says_what_changed(folder):
     assert "unchanged: report.pdf" in again.stdout
 
 
+def test_sync_lists_a_file_it_left_out_and_exits_1(folder):
+    (folder / "bad.pdf").write_bytes(b"%PDF-1.4 not really")
+    out = pandion("index", "pipeline.yaml", "report.pdf", "bad.pdf", "--sync", cwd=folder)
+    assert out.returncode == 1
+    assert any(line.startswith("failed: bad.pdf: ") for line in out.stdout.splitlines())
+    assert "added: report.pdf" in out.stdout
+
+
 def test_plugins_name_modules_to_import_before_the_file_is_read(tmp_path):
     data = yaml.safe_load((EXAMPLE / "pipeline.yaml").read_text(encoding="utf-8"))
     data.pop("plugins")

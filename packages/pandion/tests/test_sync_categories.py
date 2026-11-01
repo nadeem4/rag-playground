@@ -135,20 +135,15 @@ def test_config_changed_follows_category_settings_not_routes(tmp_path, docs):
     assert make(config(tmp_path, reports_tokens=40)).index.sync(docs).config_changed
 
 
-def test_removing_a_category_with_documents_is_refused_with_their_names(tmp_path, docs):
-    p = make(config(tmp_path))
-    first = p.index.sync(docs)
-    before = manifest(tmp_path)
+def test_removing_a_category_sends_its_documents_back_through_routing(tmp_path, docs):
+    make(config(tmp_path)).index.sync(docs)
     only_text = config(tmp_path, route=[{"category": "text"}])
     del only_text["categories"]["reports"]
-    with pytest.raises(ValueError) as e:
-        make(only_text).index.sync(docs)
-    assert str(e.value) == (
-        'These documents are in a category the pipeline no longer has ("reports"): legal/a.pdf. '
-        "Move them to another category first, or put the category back."
-    )
-    assert manifest(tmp_path) == before
-    assert p.index.store.has(first.index.artifact_id)
+    report = make(only_text).index.sync(docs)
+    entry = manifest(tmp_path)["documents"]["legal/a.pdf"]
+    assert (entry["category"], entry["reason"]) == ("text", "Default: no rule matched")
+    assert "legal/a.pdf" in report.changed
+    assert report.complete
 
 
 def test_old_manifest_without_category_is_sorted_on_next_sync(tmp_path, docs):
@@ -208,10 +203,23 @@ def test_sync_refuses_categories_for_a_document_already_in_the_manifest(tmp_path
     assert manifest(tmp_path) == before
 
 
-def test_sync_that_drops_every_document_of_a_removed_category_is_refused(tmp_path, docs):
+def test_sync_that_drops_every_document_of_a_removed_category_works(tmp_path, docs):
     make(config(tmp_path)).index.sync(docs)
     data = config(tmp_path)
     del data["categories"]["reports"]
     data["route"] = [{"category": "text"}]
+    report = make(data).index.sync(docs / "b.pdf")
+    assert report.removed == ["legal/a.pdf"]
+
+
+def test_add_and_move_still_refuse_a_removed_category(tmp_path, docs):
+    make(config(tmp_path)).index.sync(docs)
+    data = config(tmp_path)
+    del data["categories"]["reports"]
+    data["categories"]["extra"] = data["categories"]["text"]
+    data["route"] = [{"category": "text"}]
+    p = make(data)
     with pytest.raises(ValueError, match="no longer has"):
-        make(data).index.sync(docs / "b.pdf")
+        p.index.move("b.pdf", "extra")
+    with pytest.raises(ValueError, match="no longer has"):
+        p.index.add(docs / "b.pdf")

@@ -264,6 +264,16 @@ flowchart TD
     G --> H["Write the manifest with each version, then report added, changed, removed, unchanged"]
 ```
 
+Three rules keep a sync safe. First, one sync runs at a time: it holds `sync.lock` in the
+index folder (`pandion/synclock.py`) and a second one raises `SyncBusy`. `add` and `move` do
+not take the lock. Second, a document whose file cannot be indexed is set aside. Before the
+run, a file whose bytes do not match its name is set aside. After the run, a document with a
+failed step is set aside too, and the run is repeated for the rest, where every step is a
+cache hit. Set-aside documents are left out of the manifest, listed in `SyncReport.failed`,
+not counted as removed, and tried again next sync. If none are left, nothing is written.
+Third, a document in a category the pipeline no longer has is sorted again by the route, for
+both a folder and a `Source`.
+
 ## Artifacts and the cache
 
 An artifact's id is a hash of its recipe: the transform, the transform's version, its

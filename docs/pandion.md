@@ -699,6 +699,29 @@ again, even when its bytes change. `metadata` is used only for new documents, an
 `categories` naming a document that is already in the manifest raises a `ValueError` that
 points to `p.index.move`.
 
+If you remove a category from the pipeline, its documents are not refused. The next sync
+sorts them again with your route, and they show up in `report.changed`. `add` and `move`
+still refuse a pipeline whose manifest names a category that is gone.
+
+Only one sync runs at a time for an index folder. A sync makes `sync.lock` in the folder and
+removes it when it ends, even when it fails. If a lock is there, `sync` raises `SyncBusy`
+(a `ValueError`, imported from `pandion.synclock`) that names the file. If no sync is running, delete the file and run it
+again. `add` and `move` take no lock.
+
+A file that cannot be indexed does not stop the sync. A PDF behind a `.docx` name, or a file
+whose parse fails, is left out of the index and the manifest. It is listed in `report.failed`,
+which maps the document id to a one-line reason, and the next sync tries it again. The other
+documents are committed, and they cost only cache hits. A document that was indexed before
+and now fails is dropped from the manifest, so you must set its category and labels again once
+it is fixed. If every file fails, nothing is
+written. `report.ok` means every step ran for the documents that were committed.
+`report.complete` also needs `failed` to be empty, so use it for an exit code:
+
+```python
+report = pipeline.index.sync("docs/")
+raise SystemExit(0 if report.complete else 1)
+```
+
 Each sync compares the folder with the manifest:
 
 - A new file is parsed, cleaned, chunked and added to the index.
@@ -717,10 +740,7 @@ Three rules say what a change re-runs:
 - Changing the route moves nothing. It sorts only the files that are new.
 - Moving a document re-runs only that document.
 
-Removing a category that documents are in is refused before anything runs, with their
-names: `Move them to another category first, or put the category back.` This holds even when your
-paths leave those documents out, so move them, or sync without removing the category first. A route that names
-a category the pipeline does not have is refused when the file is loaded.
+A route that names a category the pipeline does not have is refused when the file is loaded.
 
 A search in a new process builds each document with the category the manifest recorded,
 so it reads the same index the sync made.
@@ -755,7 +775,7 @@ understands: a local folder, or a bucket.
 from pandion import Pipeline
 from pandion.document_sources import FilesSource
 
-report = Pipeline.from_file("pipeline.yaml").index.sync(FilesSource("gs://bucket/docs"))
+report = Pipeline.from_yaml("pipeline.yaml").index.sync(FilesSource("gs://bucket/docs"))
 print(report.added, report.changed, report.removed)
 ```
 
@@ -2013,6 +2033,8 @@ index  lancedb  executed  310 ms
 `--through chunk` stops every document after that step (`parse`, `clean`, `clean.2`,
 `chunk` or `index`), so there is no index line, and nothing is remembered. `--sync` also
 says, per document, `added`, `changed`, `removed` or `unchanged` since the last index.
+A document the sync left out is printed as `failed: ID: REASON`, and the command exits 1
+until nothing is left out.
 
 **`pandion retrieve FILE QUESTION [--k K] [--documents DOC...]`** searches the index and
 prints the hits, one per line, as the rank, the score and the start of the piece:

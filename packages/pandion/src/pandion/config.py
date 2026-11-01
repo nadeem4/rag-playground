@@ -73,7 +73,6 @@ it accepts.
 
 from __future__ import annotations
 
-import importlib
 import re
 import sys
 from dataclasses import dataclass, field
@@ -510,7 +509,7 @@ def _load_plugins(plugins: Any, base: Path) -> list[str]:
     path is read from it; it is on sys.path only while the modules import.
     """
     if plugins is None:
-        return []
+        plugins = []
     if not isinstance(plugins, list) or not all(isinstance(p, str) and p for p in plugins):
         raise ConfigError(
             "plugins must be a list of Python module names, for example "
@@ -519,6 +518,8 @@ def _load_plugins(plugins: Any, base: Path) -> list[str]:
     try:
         return load_plugin_modules(base, plugins)
     except PluginError as e:
+        if e.module not in plugins:
+            raise ConfigError(str(e)) from None
         raise ConfigError(
             f"plugins lists '{e.module}', which could not be imported: "
             f"{type(e.cause).__name__}: {e.cause}"

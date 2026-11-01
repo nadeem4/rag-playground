@@ -60,3 +60,34 @@ def test_plugins_json_is_a_list_of_objects_with_the_four_keys(capsys):
     rows = json.loads(capsys.readouterr().out)
     assert rows
     assert all(set(r) == {"kind", "name", "module", "level"} for r in rows)
+
+
+def _break_entry_point(monkeypatch):
+    import pandion.plugins as plugins
+
+    class EP:
+        name, value = "broken_ep", "broken_ep_pkg"
+
+    def fail(ep):
+        raise ImportError("no good")
+
+    monkeypatch.setattr(plugins, "_failed", [])
+    monkeypatch.setattr(plugins, "_discovered", False)
+    monkeypatch.setattr(plugins, "_entry_points", lambda: [EP()])
+    monkeypatch.setattr(plugins, "_load_entry_point", fail)
+
+
+def test_a_broken_entry_point_stops_the_cli_without_the_flag(monkeypatch):
+    _break_entry_point(monkeypatch)
+    with pytest.warns(UserWarning):
+        with pytest.raises(cli.ConfigError) as caught:
+            cli.load_plugins(None)
+    assert "broken_ep" in str(caught.value)
+    assert "installed plugin" in str(caught.value)
+    assert "--plugins names" not in str(caught.value)
+
+
+def test_a_listed_module_that_cannot_import_keeps_its_message(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(cli.ConfigError, match="--plugins names 'no_such_mod', which cannot be imported"):
+        cli.load_plugins("no_such_mod")

@@ -20,7 +20,6 @@ printed. The command uses only Pandion's public API, as any app would.
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
 import os
 import re
@@ -65,11 +64,12 @@ def credentials_from_env() -> dict[str, str]:
 
 def load_plugins(names: str | None) -> None:
     """Import each module in `names` (a,b,c), the current folder first."""
-    if not names:
-        return
+    listed = [n.strip() for n in (names or "").split(",") if n.strip()]
     try:
-        load_modules(os.getcwd(), [n.strip() for n in names.split(",") if n.strip()])
+        load_modules(os.getcwd(), listed)
     except PluginError as e:
+        if e.module not in listed:
+            raise ConfigError(str(e)) from None
         raise ConfigError(f"--plugins names '{e.module}', which cannot be imported: {e.cause}") from None
 
 

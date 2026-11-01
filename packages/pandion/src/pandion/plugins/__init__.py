@@ -74,7 +74,7 @@ class PluginError(ValueError):
         self.cause = cause
         super().__init__(
             f"The plugin '{module}' could not be loaded: {type(cause).__name__}: {cause}. "
-            "Fix or remove it, then start again."
+            "Fix or remove that installed plugin, then start again."
         )
 
 
@@ -140,7 +140,6 @@ def plugin_listing() -> list[dict[str, str]]:
     from pandion.routing import CHECKS
 
     discover()
-    built_in = set(PLUGIN_MODULES)
     rows: list[dict[str, str]] = []
     for stage in registry.stages():
         for name, cls in sorted(registry.all_for(stage).items()):

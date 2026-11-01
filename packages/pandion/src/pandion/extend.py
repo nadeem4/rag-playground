@@ -43,9 +43,9 @@ from pandion.transform import Explanation, Transform
 
 __all__ = [
     "FORMATS", "ArtifactType", "Chunk", "ChunkSet", "DocumentInfo", "Element", "Embedder", "EndpointRefused",
-    "Explanation", "FetchRefused", "Hit", "Output", "ParsedDoc", "PortSpec", "Query", "RetrievalResult",
+    "Explanation", "FetchRefused", "Hit", "Output", "ParsedDoc", "PluginError", "PortSpec", "Query", "RetrievalResult",
     "RunContext", "Stage", "Transform", "UnreadableFormat", "check_contents", "document_info", "fetch_url", "format_of", "get_embedder", "guard_endpoint",
-    "openai_client_kwargs", "PluginError", "load_plugins", "plugin_listing", "raw_file", "register", "route_check", "set_note", "set_usage",
+    "load_plugins", "openai_client_kwargs", "plugin_listing", "raw_file", "register", "route_check", "set_note", "set_usage",
 ]
 
 

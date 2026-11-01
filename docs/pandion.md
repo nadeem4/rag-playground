@@ -2334,7 +2334,7 @@ shows None, since it called no model.
 
 `pandion.plugins.load(project_dir, modules)` is the one loader, also exported as `pandion.extend.load_plugins`. It imports the built-in
 strategies, then the installed packages, then your modules, and puts `project_dir` on the
-import path only while it does so. Serve, sync, eval and the command line use it. Any load
+import path only while it does so. Pipeline files and the command line use it; serve, sync and eval will too. Any load
 failure stops the process with a `PluginError` that names the module, and a name registered
 twice fails with a sentence that names both modules. A `pipeline.yaml` runs code, because
 its `plugins:` list imports modules, so never load one from a source you do not trust.

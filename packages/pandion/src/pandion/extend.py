@@ -33,6 +33,7 @@ from pandion.endpoints import EndpointRefused, guard_endpoint
 from pandion.fetch import FetchRefused, fetch_url
 from pandion.formats import FORMATS, UnreadableFormat, check_contents, format_of
 from pandion.llm import openai_client_kwargs
+from pandion.plugins import PluginError, load as load_plugins, plugin_listing
 from pandion.payloads import Chunk, ChunkSet, Element, Hit, Output, ParsedDoc, Query, RetrievalResult
 from pandion.ports import PortSpec, RunContext, Stage, set_note, set_usage
 from pandion.registry import register as _register_transform
@@ -44,7 +45,7 @@ __all__ = [
     "FORMATS", "ArtifactType", "Chunk", "ChunkSet", "DocumentInfo", "Element", "Embedder", "EndpointRefused",
     "Explanation", "FetchRefused", "Hit", "Output", "ParsedDoc", "PortSpec", "Query", "RetrievalResult",
     "RunContext", "Stage", "Transform", "UnreadableFormat", "check_contents", "document_info", "fetch_url", "format_of", "get_embedder", "guard_endpoint",
-    "openai_client_kwargs", "raw_file", "register", "route_check", "set_note", "set_usage",
+    "openai_client_kwargs", "PluginError", "load_plugins", "plugin_listing", "raw_file", "register", "route_check", "set_note", "set_usage",
 ]
 
 

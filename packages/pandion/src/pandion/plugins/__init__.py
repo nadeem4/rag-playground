@@ -20,8 +20,11 @@ Pydantic, so they come with the base install.
 from __future__ import annotations
 
 import importlib
+import sys
 import warnings
+from collections.abc import Iterable
 from importlib import metadata
+from pathlib import Path
 
 #: Installed packages add strategies under this entry point group, for example
 #: [project.entry-points."pandion.strategies"] qdrant = "pandion_qdrant".
@@ -58,6 +61,22 @@ PLUGIN_MODULES: tuple[str, ...] = (
 
 _discovered = False
 
+#: Each entry point that failed to load: (name, value, error). `discover()` only
+#: warns about it; `load()` stops on the first.
+_failed: list[tuple[str, str, BaseException]] = []
+
+
+class PluginError(ValueError):
+    """A plugin module or installed strategy package could not be loaded."""
+
+    def __init__(self, module: str, cause: BaseException):
+        self.module = module
+        self.cause = cause
+        super().__init__(
+            f"The plugin '{module}' could not be loaded: {type(cause).__name__}: {cause}. "
+            "Fix or remove it, then start again."
+        )
+
 
 def _entry_points():
     return list(metadata.entry_points(group=ENTRY_POINT_GROUP))
@@ -77,6 +96,7 @@ def discover() -> tuple[str, ...]:
             try:
                 _load_entry_point(ep)
             except Exception as exc:  # a broken third-party package must not break Pandion
+                _failed.append((ep.name, ep.value, exc))
                 warnings.warn(
                     f"The strategy package '{ep.name}' ({ep.value}) could not be loaded, "
                     f"so its strategies are not available: {exc}",
@@ -84,3 +104,56 @@ def discover() -> tuple[str, ...]:
                 )
         _discovered = True
     return PLUGIN_MODULES
+
+
+def load(project_dir: str | Path, modules: Iterable[str] = ()) -> list[str]:
+    """The one plugin loader: built-ins, then installed packages, then `modules`.
+
+    `project_dir` is on sys.path only while the modules import. Any failure
+    raises `PluginError`; nothing is skipped. Returns the modules imported.
+    """
+    discover()
+    if _failed:
+        name, _, exc = _failed[0]
+        raise PluginError(name, exc)
+    folder = str(Path(project_dir).resolve())
+    added = folder not in sys.path
+    if added:
+        sys.path.insert(0, folder)
+    imported: list[str] = []
+    try:
+        for module in modules:
+            try:
+                importlib.import_module(module)
+            except Exception as exc:
+                raise PluginError(module, exc) from exc
+            imported.append(module)
+    finally:
+        if added:
+            sys.path.remove(folder)
+    return imported
+
+
+def plugin_listing() -> list[dict[str, str]]:
+    """Every loaded extension point as {kind, name, module, level}."""
+    from pandion.registry import registry
+    from pandion.routing import CHECKS
+
+    discover()
+    built_in = set(PLUGIN_MODULES)
+    rows: list[dict[str, str]] = []
+    for stage in registry.stages():
+        for name, cls in sorted(registry.all_for(stage).items()):
+            rows.append(
+                {
+                    "kind": "step",
+                    "name": f"{stage}/{name}",
+                    "module": cls.__module__,
+                    "level": "provisional",
+                }
+            )
+    for name, check in sorted(CHECKS.items()):
+        rows.append(
+            {"kind": "route check", "name": name, "module": check.fn.__module__, "level": "stable"}
+        )
+    return rows

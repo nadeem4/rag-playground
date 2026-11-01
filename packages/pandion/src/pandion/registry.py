@@ -32,7 +32,8 @@ class Registry:
         if cls.name in bucket:
             raise DuplicateTransformError(
                 f"{cls.stage}/{cls.name} is already registered by "
-                f"{bucket[cls.name].__name__}"
+                f"{bucket[cls.name].__module__}.{bucket[cls.name].__name__} "
+                f"and again by {cls.__module__}.{cls.__name__}"
             )
         bucket[cls.name] = cls
         return cls

@@ -152,3 +152,12 @@ def sample_pdf(tmp_path: Path) -> Path:
     path = tmp_path / "sample.pdf"
     path.write_bytes(build_pdf(SAMPLE_PAGES))
     return path
+
+
+@pytest.fixture(autouse=True)
+def _no_leaked_plugin_failures():
+    """A test that breaks an entry point on purpose must not stop later loads."""
+    import pandion.plugins as plugins
+
+    yield
+    plugins._failed.clear()

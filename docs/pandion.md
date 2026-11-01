@@ -321,6 +321,10 @@ the full format, with every field the package reads.
 ```yaml
 # pipeline.yaml
 
+# Optional. The format version of this file. Leave it out or write 1. A file with a
+# higher number is refused with a sentence that says to upgrade pandion.
+version: 1
+
 # Optional. Modules to import before the steps are checked, so strategies
 # you wrote can be used by name. See Loading your strategies.
 plugins: [my_company.rag_steps]
@@ -1940,6 +1944,11 @@ pandion questions report.pdf --model claude-haiku-4-5 --count 15 --out questions
 its summary, and a `route` group for the route checks. `--stage chunk` shows one stage.
 `--json` prints only the names, as JSON.
 
+**`pandion plugins [--json]`** lists every extension point that is loaded: its kind, its name,
+the module it came from and its level, which is `stable` or `provisional`. Add `--plugins a,b`
+to see your own modules in the list. `--json` prints a list of objects with the keys `kind`,
+`name`, `module` and `level`.
+
 **`pandion index FILE DOC... [--sync] [--through STEP]`** indexes files and folders. With
 local files (the `upload` source, the default) it runs `p.index.sync`, so it remembers the
 documents it indexed for the next command; with any other source it runs `p.index.run`. It
@@ -2322,6 +2331,21 @@ step's result, as `StageResult.usage`, and in its `node_finished` event, or its
 shows None, since it called no model.
 
 ## Loading your strategies
+
+`pandion.plugins.load(project_dir, modules)` is the one loader, also exported as `pandion.extend.load_plugins`. It imports the built-in
+strategies, then the installed packages, then your modules, and puts `project_dir` on the
+import path only while it does so. Pipeline files and the command line use it; serve, sync and eval will too. Any load
+failure stops the process with a `PluginError` that names the module, and a name registered
+twice fails with a sentence that names both modules. A `pipeline.yaml` runs code, because
+its `plugins:` list imports modules, so never load one from a source you do not trust.
+
+These are the extension points and how steady each one is. Pandion is 0.x, and a Stable
+contract changes only after a deprecation in the changelog.
+
+| Level | Extension points |
+| --- | --- |
+| Stable | Source, route check, access rule, index store, conversation store, Policy |
+| Provisional | Step plugins, executor events, online evaluators |
 
 A strategy only works by name once the module that registers it has been imported. There are
 three ways to make that happen.

@@ -53,7 +53,9 @@ def route_check(
     def add(fn: CheckFn) -> CheckFn:
         if name in CHECKS:
             raise DuplicateTransformError(
-                f"route/{name} is already registered by {CHECKS[name].fn.__name__}"
+                f"route/{name} is already registered by "
+                f"{CHECKS[name].fn.__module__}.{CHECKS[name].fn.__name__} "
+                f"and again by {fn.__module__}.{fn.__name__}"
             )
         CHECKS[name] = RegisteredCheck(
             name, summary, config, fn, because or (lambda settings: f"{name} is true")

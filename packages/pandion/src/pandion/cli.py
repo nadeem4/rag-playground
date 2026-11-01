@@ -20,7 +20,6 @@ printed. The command uses only Pandion's public API, as any app would.
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
 import os
 import re
@@ -32,6 +31,7 @@ import yaml
 
 import pandion
 from pandion import ConfigError, Pipeline
+from pandion.extend import PluginError, load_plugins as load_modules, plugin_listing
 from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K
 
 #: Pandion's name for each key, and the environment variable it is read from.
@@ -64,17 +64,13 @@ def credentials_from_env() -> dict[str, str]:
 
 def load_plugins(names: str | None) -> None:
     """Import each module in `names` (a,b,c), the current folder first."""
-    if not names:
-        return
-    if os.getcwd() not in sys.path:
-        sys.path.insert(0, os.getcwd())
-    for name in (n.strip() for n in names.split(",")):
-        if not name:
-            continue
-        try:
-            importlib.import_module(name)
-        except Exception as exc:  # noqa: BLE001 - any import error is the user's to see
-            raise ConfigError(f"--plugins names '{name}', which cannot be imported: {exc}") from None
+    listed = [n.strip() for n in (names or "").split(",") if n.strip()]
+    try:
+        load_modules(os.getcwd(), listed)
+    except PluginError as e:
+        if e.module not in listed:
+            raise ConfigError(str(e)) from None
+        raise ConfigError(f"--plugins names '{e.module}', which cannot be imported: {e.cause}") from None
 
 
 def _load(args: argparse.Namespace) -> Pipeline:
@@ -135,6 +131,17 @@ def cmd_strategies(args: argparse.Namespace) -> int:
         print(stage)
         for name, info in sorted(strategies.items()):
             print(f"  {name}: {info.get('summary', '')}")
+    return 0
+
+
+def cmd_plugins(args: argparse.Namespace) -> int:
+    load_plugins(args.plugins)
+    rows = plugin_listing()
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    for r in rows:
+        print(f"{r['kind']}  {r['name']}  {r['module']}  {r['level']}")
     return 0
 
 
@@ -457,6 +464,9 @@ def parser() -> argparse.ArgumentParser:
     sub = command("strategies", "list every strategy by stage", cmd_strategies)
     sub.add_argument("--stage", help="only this stage, such as chunk")
     sub.add_argument("--json", action="store_true", help="print the names as JSON")
+
+    sub = command("plugins", "list the extension points that are loaded", cmd_plugins)
+    sub.add_argument("--json", action="store_true", help="print the list as JSON")
 
     sub = command("index", "index documents with a pipeline file", cmd_index)
     sub.add_argument("config")

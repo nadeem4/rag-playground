@@ -73,7 +73,6 @@ it accepts.
 
 from __future__ import annotations
 
-import importlib
 import re
 import sys
 from dataclasses import dataclass, field
@@ -85,13 +84,14 @@ from pydantic import BaseModel, ValidationError
 
 from pandion.embeddings import embedder_names
 from pandion.models import ModelSettings
-from pandion.plugins import discover
+from pandion.plugins import PluginError, discover
+from pandion.plugins import load as load_plugin_modules
 from pandion.ports import Stage
 from pandion.registry import UnknownTransformError, registry
 from pandion.routing import CHECKS
 from pandion.stages import _problems, _settings, _strategy
 
-TOP_KEYS = ("plugins", "path", "models", "categories", "route", "index", "retrieve", "answer")
+TOP_KEYS = ("version", "plugins", "path", "models", "categories", "route", "index", "retrieve", "answer")
 CATEGORY_KEYS = ("name", "template", "parse", "clean", "chunk")
 ROUTE_KEYS = ("when", "category")
 RETRIEVE_KEYS = ("rewrite", "search", "rerank")
@@ -244,6 +244,7 @@ def load(file: str | Path) -> PipelineConfig:
 def from_dict(data: Any, *, base: Path) -> PipelineConfig:
     """Check a loaded pipeline file. Relative paths are read from `base`."""
     _keys(data, TOP_KEYS, "The pipeline file")
+    _check_version(data.get("version"))
     plugins = _load_plugins(data.get("plugins"), base)
     if not data.get("path"):
         raise ConfigError(
@@ -508,30 +509,21 @@ def _load_plugins(plugins: Any, base: Path) -> list[str]:
     path is read from it; it is on sys.path only while the modules import.
     """
     if plugins is None:
-        return []
+        plugins = []
     if not isinstance(plugins, list) or not all(isinstance(p, str) and p for p in plugins):
         raise ConfigError(
             "plugins must be a list of Python module names, for example "
             "plugins: [my_company.rag_steps]."
         )
-    discover()  # built-ins first, so a clashing plugin fails at its own import
-    folder = str(Path(base).resolve())
-    added = folder not in sys.path
-    if added:
-        sys.path.insert(0, folder)
     try:
-        for module in plugins:
-            try:
-                importlib.import_module(module)
-            except Exception as exc:
-                raise ConfigError(
-                    f"plugins lists '{module}', which could not be imported: "
-                    f"{type(exc).__name__}: {exc}"
-                ) from None
-    finally:
-        if added:
-            sys.path.remove(folder)
-    return list(plugins)
+        return load_plugin_modules(base, plugins)
+    except PluginError as e:
+        if e.module not in plugins:
+            raise ConfigError(str(e)) from None
+        raise ConfigError(
+            f"plugins lists '{e.module}', which could not be imported: "
+            f"{type(e.cause).__name__}: {e.cause}"
+        ) from None
 
 
 def _answer(answer: Any) -> tuple[str, dict[str, Any]]:
@@ -865,6 +857,21 @@ def _named(settings: dict[Any, Any], where: str) -> None:
     for key in settings:
         if not isinstance(key, str):
             raise ConfigError(f"{where} has a setting whose name is not text: {key!r}.", step=place(where))
+
+
+CONFIG_VERSION = 1
+
+
+def _check_version(v: Any) -> None:
+    if v is None:
+        return
+    if not isinstance(v, int) or isinstance(v, bool) or v < 1:
+        raise ConfigError("version must be a whole number from 1, such as version: 1.")
+    if v > CONFIG_VERSION:
+        raise ConfigError(
+            f"This pipeline file is version {v}; this Pandion reads up to version "
+            f"{CONFIG_VERSION}. Upgrade pandion."
+        )
 
 
 def _keys(data: Any, valid: tuple[str, ...], where: str) -> None:

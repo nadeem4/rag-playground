@@ -218,6 +218,8 @@ what these settings will do.
 - `PLUGIN_MODULES` in `pandion/plugins/__init__.py` lists every plugin module, and Pandion
   loads them itself. A test fails if a plugin module exists but is not listed. The app
   never names a plugin module.
+- `pandion.plugins.load` is the one loader for built-ins, entry points and listed modules, and any
+  failure stops the process. See "Loading your strategies" in [pandion.md](pandion.md#loading-your-strategies).
 - `GET /api/v2/strategies` exports every transform with its summary, its config's JSON schema,
   and what it requires, provides and prefers. The web app builds every settings form from
   that schema, so a new strategy needs no frontend change.

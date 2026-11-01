@@ -31,6 +31,11 @@ repeats the URL, so nothing secret in a query string leaks into a log, and a
 `kind` (one of `KINDS`) a server can map to a status without reading the
 message.
 
+A GitHub file link (`github.com/<owner>/<repo>/blob/<ref>/<path>`) is rewritten to
+the file on raw.githubusercontent.com before the checks and before each redirect,
+so the file is indexed and not the HTML page around it. Raw GitHub answers
+`text/plain`, so the file is stored as `.txt`.
+
 A fetched page is named from its host and path, such as
 `en.wikipedia.org-wiki-Retrieval-augmented_generation.html`, so the front
 pages of two sites never share a name.
@@ -162,7 +167,7 @@ def _fetch(url: str, public_only: bool, max_bytes: int, deadline: _Deadline) -> 
         f"The URL took longer than {TIMEOUT:g} seconds to answer, so it was not fetched.", "timed_out"
     )
     for _ in range(MAX_REDIRECTS + 1):
-        url = urldefrag(url or "")[0]
+        url = _raw_github(urldefrag(url or "")[0])
         ips = _check(url, public_only)
         try:
             response = _send(url, ips, deadline)
@@ -198,6 +203,19 @@ def _fetch(url: str, public_only: bool, max_bytes: int, deadline: _Deadline) -> 
     raise FetchRefused(
         f"The URL redirected more than {MAX_REDIRECTS} times, so it was not fetched.", "too_many_redirects"
     )
+
+
+def _raw_github(url: str) -> str:
+    """A GitHub file link (`github.com/<owner>/<repo>/blob/<ref>/<path>`) as the
+    file itself on raw.githubusercontent.com, so the file is fetched and not the
+    GitHub web page around it. The query is dropped. Any other URL is returned
+    unchanged."""
+    parts = urlsplit(url)
+    if parts.scheme.lower() in ("http", "https") and (parts.hostname or "").lower() in ("github.com", "www.github.com"):
+        match = re.fullmatch(r"/([^/]+)/([^/]+)/blob/([^/]+)/(.+)", parts.path)
+        if match:
+            return "https://raw.githubusercontent.com/" + "/".join(match.groups())
+    return url
 
 
 def _ascii(host: str) -> str:

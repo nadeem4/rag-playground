@@ -74,6 +74,20 @@ This is a working document. We keep it up to date as we build RAG Playground. Ea
 
 **What we learned.** The same lockfile on a different machine can give a different parse. Test on the machine your users use: here that meant running Docling on the hosted app itself, not only on GitHub's Linux machines. And read the blocks before you name a cause: the guess was a footer, and the real cause was how Docling grouped lines into blocks. And a fix on one machine can break another: check every change on both before you merge.
 
+### A GitHub link indexed the web page, not the file
+
+2026-11-01, PR #228 (C14)
+
+**The problem.** We pasted a link to a Markdown file on GitHub. The pipeline indexed the page, and questions about the file found menus, buttons and sign-in text instead of its words.
+
+**Why it was broken.** A link like `github.com/owner/repo/blob/main/README.md` opens GitHub's viewer, which is an HTML page that shows the file inside a lot of other text. The fetch did what it was asked and saved that page.
+
+**What fixed it.** Before the fetch, a GitHub file link is rewritten to `raw.githubusercontent.com/owner/repo/main/README.md`, which returns the file itself. The rewrite runs before the public address check, so the check looks at the host we really connect to. Other GitHub links, such as a repo page or `tree/`, are left alone.
+
+**Why the fix worked.** The raw address sends only the bytes of the file, so there is no page around it to parse.
+
+**What we learned.** A link a person can open is not always the file. Look at what a fetch actually returned before you tune anything after it.
+
 ## Chunking
 
 ### A heading became a piece on its own

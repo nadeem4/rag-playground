@@ -170,6 +170,12 @@ A web address works wherever a file does, in `index.run`, `index.sync` and the
 each question costs one request to that site; the steps after it are still cache hits
 when the bytes did not change.
 
+A GitHub file link, `https://github.com/<owner>/<repo>/blob/<ref>/<path>`, is fetched as
+the raw file from `raw.githubusercontent.com`, so the file is indexed and not GitHub's web
+page. The query string is dropped. Raw GitHub answers `text/plain`, so the file is stored as
+`.txt`. With `public_only`, the check runs on the raw address. Other GitHub links (a repo
+page, `tree/`, `issues/`) are fetched as they are.
+
 ```python
 p.index.run(["docs/", "https://example.com/guides/ferns", "https://example.com/report.pdf"])
 p.index.run({"ferns.html": "https://example.com/guides/ferns"})   # name it yourself

@@ -596,3 +596,26 @@ def test_public_only_checks_the_raw_github_host(resolve):
 
     assert message == "That address is not on the public internet, so it was not fetched."
     assert resolve.asked == ["raw.githubusercontent.com"]
+
+
+def test_a_branch_name_with_slashes_still_gives_the_raw_file_link():
+    assert (
+        fetch._raw_github("https://github.com/o/r/blob/feature/x/a.md")
+        == "https://raw.githubusercontent.com/o/r/feature/x/a.md"
+    )
+
+
+def test_a_redirect_to_a_github_file_link_is_fetched_from_the_raw_host(server, monkeypatch):
+    server.redirect("/go", "https://github.com/o/r/blob/main/a.md")
+    hosts: list[str] = []
+
+    def connect(address, timeout):
+        hosts.append(address[0])
+        if address[0] == "127.0.0.1":
+            return socket.create_connection(address, timeout)
+        raise OSError("no network in tests")
+
+    monkeypatch.setattr(fetch, "_connect", connect)
+
+    assert refused(server.url("/go")) == "The URL could not be reached, so it was not fetched."
+    assert hosts[-1] == "raw.githubusercontent.com"

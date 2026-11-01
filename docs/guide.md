@@ -66,7 +66,8 @@ to 5 MB.
 **Or paste a link to a web page or PDF** takes the address of a web page or a PDF. Paste it and press **Add**. The
 server fetches the page once and keeps it like an upload: it counts as one of your uploads,
 expires with them on the demo, and is never fetched again for a question. On the demo only
-public https addresses work. A GitHub file link (one with `/blob/` in it) fetches the raw file, not the GitHub page. When a link is refused, the menu shows the server's own
+public https addresses work. A GitHub file link (one with `/blob/` in it) fetches the raw
+file, not the GitHub page. When a link is refused, the menu shows the server's own
 sentence, such as "That address is not on the public internet, so it was not fetched."
 
 Not every parser reads every kind. In the Parse step's picker, a parser that cannot read

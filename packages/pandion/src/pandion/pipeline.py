@@ -854,9 +854,10 @@ class IndexPipeline:
                 f"{', '.join(held)} already in the index. Use p.index.move to change a category."
             )
         versions: dict[str, str] | None = None
+        unread: dict[str, str] = {}
         entry_labels: dict[str, dict[str, str]] = {}
         if isinstance(paths, Source):
-            documents, versions, entry_labels = self._from_source(paths, before)
+            documents, versions, entry_labels, unread = self._from_source(paths, before)
         else:
             documents = self._documents(paths)
         # A document in a category the pipeline no longer has goes back through the route.
@@ -864,20 +865,24 @@ class IndexPipeline:
         known.update({d: Sorting(c, "Chosen when added") for d, c in (categories or {}).items()})
         new = {d: m for d, m in (metadata or {}).items() if d not in before.documents}
         new = {**{d: m for d, m in entry_labels.items() if d not in new}, **new}
-        return self._commit(documents, before, known, new, versions=versions, credentials=credentials)
+        return self._commit(
+            documents, before, known, new, versions=versions, credentials=credentials, failed=unread
+        )
 
     def _from_source(
         self, source: Source, before: Manifest
-    ) -> tuple[dict[str, SourceFile], dict[str, str], dict[str, dict[str, str]]]:
-        """The documents of `source` by id, their versions, and the labels of
-        the ids new to the manifest. An entry with the version the manifest
+    ) -> tuple[dict[str, SourceFile], dict[str, str], dict[str, dict[str, str]], dict[str, str]]:
+        """The documents of `source` by id, their versions, the labels of
+        the ids new to the manifest, and the entries that could not be read
+        (id to a one-line reason). An entry with the version the manifest
         holds, whose stored file is still here, is not read."""
         entries = list(source.list())
         if not entries:
-            raise ValueError("There are no documents to index: the source listed none. Check its location.")
+            raise ValueError("The source listed no documents to index, so check its location.")
         documents: dict[str, SourceFile] = {}
         versions: dict[str, str] = {}
         labels: dict[str, dict[str, str]] = {}
+        unread: dict[str, str] = {}
         for entry in sorted(entries, key=lambda e: e.doc_id):
             if entry.doc_id in documents:
                 raise ValueError(f"The document id '{entry.doc_id}' is given twice.")
@@ -888,12 +893,17 @@ class IndexPipeline:
                 if self.sources.path(kept.sha, kept.filename).is_file():
                     file = kept
             if file is None:
-                file = self.sources.add_bytes(source.read(entry.doc_id), PurePosixPath(entry.doc_id).name)
+                try:
+                    data = source.read(entry.doc_id)
+                except Exception as e:
+                    unread[entry.doc_id] = f"The source could not read it: {str(e).strip() or type(e).__name__}."
+                    continue
+                file = self.sources.add_bytes(data, PurePosixPath(entry.doc_id).name)
             documents[entry.doc_id] = file
             versions[entry.doc_id] = entry.version
             if old is None and entry.metadata:
                 labels[entry.doc_id] = dict(entry.metadata)
-        return documents, versions, labels
+        return documents, versions, labels, unread
 
     def _check_recorded(self, manifest: Manifest, moving: str | None = None) -> None:
         """Refuse a manifest document whose category the pipeline no longer
@@ -907,8 +917,8 @@ class IndexPipeline:
             names = ", ".join(f'"{n}"' for n in gone)
             docs = ", ".join(d for ids in gone.values() for d in ids)
             raise ValueError(
-                f"These documents are in a category the pipeline no longer has ({names}): {docs}. "
-                "Move them to another category first, or put the category back."
+                f"These documents are in a category the pipeline no longer has ({names}): {docs}, "
+                "so move them to another category first, or put the category back."
             )
 
     @staticmethod
@@ -931,6 +941,7 @@ class IndexPipeline:
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
+        failed: dict[str, str] | None = None,
     ) -> SyncReport:
         """Index `documents` (every document the index should hold), then, if
         every step worked, write the manifest and delete the previous index.
@@ -940,7 +951,7 @@ class IndexPipeline:
             **{d: e["metadata"] for d, e in before.documents.items() if e.get("metadata")},
             **(labels or {}),
         }
-        failed = self._unreadable(documents) if self._uploads() else {}
+        failed = {**(failed or {}), **(self._unreadable(documents) if self._uploads() else {})}
         documents = {d: f for d, f in documents.items() if d not in failed}
         if not documents:
             return SyncReport(documents={}, index=None, failed=dict(sorted(failed.items())))

@@ -96,6 +96,8 @@ class Manifest:
             return cls()
         data = json.loads(path.read_text(encoding="utf-8"))
         version = data.get("format_version", 1)
+        if not isinstance(version, int) or isinstance(version, bool):
+            raise ValueError(f"{path} has a format_version that is not a whole number, so the file is damaged.")
         if version > FORMAT_VERSION:
             raise FormatTooNew(
                 f"{path} was written by a newer Pandion (manifest format {version}; "

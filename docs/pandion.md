@@ -705,7 +705,7 @@ still refuse a pipeline whose manifest names a category that is gone.
 
 Only one sync runs at a time for an index folder. A sync makes `sync.lock` in the folder and
 removes it when it ends, even when it fails. If a lock is there, `sync` raises `SyncBusy`
-(a `ValueError`) that names the file. If no sync is running, delete the file and run it
+(a `ValueError`, imported from `pandion.synclock`) that names the file. If no sync is running, delete the file and run it
 again. `add` and `move` take no lock.
 
 A file that cannot be indexed does not stop the sync. A PDF behind a `.docx` name, or a file
@@ -740,10 +740,7 @@ Three rules say what a change re-runs:
 - Changing the route moves nothing. It sorts only the files that are new.
 - Moving a document re-runs only that document.
 
-Removing a category that documents are in is refused before anything runs, with their
-names: `Move them to another category first, or put the category back.` This holds even when your
-paths leave those documents out, so move them, or sync without removing the category first. A route that names
-a category the pipeline does not have is refused when the file is loaded.
+A route that names a category the pipeline does not have is refused when the file is loaded.
 
 A search in a new process builds each document with the category the manifest recorded,
 so it reads the same index the sync made.
@@ -778,7 +775,7 @@ understands: a local folder, or a bucket.
 from pandion import Pipeline
 from pandion.document_sources import FilesSource
 
-report = Pipeline.from_file("pipeline.yaml").index.sync(FilesSource("gs://bucket/docs"))
+report = Pipeline.from_yaml("pipeline.yaml").index.sync(FilesSource("gs://bucket/docs"))
 print(report.added, report.changed, report.removed)
 ```
 
@@ -2036,6 +2033,8 @@ index  lancedb  executed  310 ms
 `--through chunk` stops every document after that step (`parse`, `clean`, `clean.2`,
 `chunk` or `index`), so there is no index line, and nothing is remembered. `--sync` also
 says, per document, `added`, `changed`, `removed` or `unchanged` since the last index.
+A document the sync left out is printed as `failed: ID: REASON`, and the command exits 1
+until nothing is left out.
 
 **`pandion retrieve FILE QUESTION [--k K] [--documents DOC...]`** searches the index and
 prints the hits, one per line, as the rank, the score and the start of the piece:

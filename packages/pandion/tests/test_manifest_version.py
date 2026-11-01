@@ -31,3 +31,10 @@ def test_unknown_manifest_keys_are_ignored(tmp_path):
     p = tmp_path / "manifest.json"
     p.write_text(json.dumps({"format_version": 1, "future_field": 3}), encoding="utf-8")
     assert Manifest.load(p).format_version == 1
+
+
+def test_a_format_version_that_is_not_a_number_is_a_plain_error(tmp_path):
+    p = tmp_path / "manifest.json"
+    p.write_text(json.dumps({"format_version": "two"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="format_version"):
+        Manifest.load(p)

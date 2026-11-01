@@ -73,8 +73,8 @@ class PluginError(ValueError):
         self.module = module
         self.cause = cause
         super().__init__(
-            f"The plugin '{module}' could not be loaded: {type(cause).__name__}: {cause}. "
-            "Fix or remove that installed plugin, then start again."
+            f"The plugin '{module}' could not be loaded ({type(cause).__name__}: {cause}), "
+            "so fix or remove that installed plugin and start again."
         )
 
 

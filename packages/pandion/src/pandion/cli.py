@@ -156,6 +156,9 @@ def cmd_index(args: argparse.Namespace) -> int:
             for word in ("added", "changed", "removed", "unchanged"):
                 for document in getattr(report, word):
                     print(f"{word}: {document}")
+        for document, reason in report.failed.items():
+            print(f"failed: {document}: {reason}")
+        return 0 if report.complete else 1
     else:
         report = p.index.run(args.documents, through=args.through, credentials=credentials_from_env())
         _print_index(report)

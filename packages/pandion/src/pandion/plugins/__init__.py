@@ -159,4 +159,8 @@ def plugin_listing() -> list[dict[str, str]]:
 
     for name in store_names():
         rows.append({"kind": "store", "name": name, "module": store_class(name).__module__, "level": "stable"})
+    from pandion.document_sources import source_class, source_names
+
+    for name in source_names():
+        rows.append({"kind": "source", "name": name, "module": source_class(name).__module__, "level": "stable"})
     return rows

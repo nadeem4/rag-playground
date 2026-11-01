@@ -36,6 +36,9 @@ lancedb = ["lancedb>=0.38,<0.39", "pyarrow>=25.0.1"]
 # server through the OpenAI SDK, and Claude through the Anthropic SDK.
 openai = ["openai>=3.17.0"]
 anthropic = ["anthropic>=1.7.0"]
+# The files source: any location fsspec opens. A bucket also needs its own
+# fsspec package, such as gcsfs or s3fs.
+files = ["fsspec>=2025.3"]
 
 [project.urls]
 Homepage = "https://rag.codewithnk.com"

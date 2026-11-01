@@ -12,6 +12,7 @@ Pandion directly, and the React web app talks only to pandion-api.
 - [The three layers](#the-three-layers)
 - [The pipeline and its stages](#the-pipeline-and-its-stages)
 - [Plugins](#plugins)
+- [Sources and sync](#sources-and-sync)
 - [Artifacts and the cache](#artifacts-and-the-cache)
 - [The run stream](#the-run-stream)
 - [How the web app talks to the API](#how-the-web-app-talks-to-the-api)
@@ -241,6 +242,27 @@ the pipeline file, `--plugins` on the `pandion` command, or a `pandion.strategie
 point. [examples/pandion/own_strategies/](../examples/pandion/own_strategies) writes one
 for every stage. pandion-api never imports a module a request names, so a server loads
 its own strategies.
+
+## Sources and sync
+
+`index.sync` keeps an index in step with a place that holds documents. That place is a
+folder, or a `Source`: a Stable contract with `name`, `list()` and `read(doc_id)`
+(`pandion.document_sources`). `list()` gives an id, a version and some labels for each
+document, and no bytes. The `files` source builds on fsspec, so one class covers a local
+folder and the common buckets. fsspec is an optional extra, `pandion[files]`.
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%
+flowchart TD
+    A["source.list(): id, version, labels"] --> B{"Listed nothing?"}
+    B -- yes --> C["Refuse. Index and manifest stay as they were"]
+    B -- no --> D{"Same version in the manifest, and the stored file is still there?"}
+    D -- yes --> E["Reuse the stored file. No read"]
+    D -- no --> F["source.read(doc_id), store the bytes"]
+    E --> G["Run the index steps. Unchanged steps are cache hits"]
+    F --> G
+    G --> H["Write the manifest with each version, then report added, changed, removed, unchanged"]
+```
 
 ## Artifacts and the cache
 

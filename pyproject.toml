@@ -9,7 +9,7 @@ dependencies = [
     "openai>=3.17.0",
     # The engine: packages/pandion, installed from this workspace, with the
     # extras for the strategies that have moved into it.
-    "pandion[anthropic,docling,lancedb,local,openai,pdfium]",
+    "pandion[anthropic,docling,files,lancedb,local,openai,pdfium]",
     # The REST layer over the engine: packages/pandion-api.
     "pandion-api",
     "pillow>=12.3.0",

@@ -23,6 +23,7 @@ installs the built package in new environments, with and without extras, and tes
 - [The pipeline file](#the-pipeline-file)
 - [Build an index](#build-an-index)
 - [Keep an index up to date](#keep-an-index-up-to-date)
+  - [Sync from a source](#sync-from-a-source)
 - [Search an index](#search-an-index)
 - [Ask a question](#ask-a-question)
 - [Evaluate a pipeline](#evaluate-a-pipeline)
@@ -741,6 +742,49 @@ and sync again.
 When to sync is up to you: by hand, from a scheduled job, or from a script that watches
 the folder. A URL in the list is fetched again on each sync and reported the same way
 (see [A URL as a document](#a-url-as-a-document)).
+
+### Sync from a source
+
+A folder is not the only place documents live. `index.sync` also takes a `Source`, a
+small object that lists its documents and reads one on request. `Source` is a Stable
+contract, so a source you write keeps working across releases. Pandion ships one, the
+`files` source, which reads any location that [fsspec](https://filesystem-spec.readthedocs.io)
+understands: a local folder, or a bucket.
+
+```python
+from pandion import Pipeline
+from pandion.document_sources import FilesSource
+
+report = Pipeline.from_file("pipeline.yaml").index.sync(FilesSource("gs://bucket/docs"))
+print(report.added, report.changed, report.removed)
+```
+
+Install it with `pip install "pandion[files]"`. A bucket also needs its own fsspec
+package, such as `gcsfs` for `gs://` or `s3fs` for `s3://`. Pass `storage_options={...}`
+for keys and other settings.
+
+Each entry a source lists has a `doc_id`, a `version` and some `metadata`:
+
+- The `doc_id` is the file's path inside the location, with forward slashes on every
+  platform.
+- The `version` is a short text that changes when the file changes. The `files` source
+  uses the store's ETag, generation or checksum when it has one, and otherwise the
+  modified time and the size.
+- The `metadata` becomes the labels of a document that is new to the index. It holds the
+  `path`, the `content_type`, and any text values the store reports as custom metadata.
+  A document already in the index keeps its labels.
+
+The source lists its entries without reading any bytes. Pandion then reads only the new
+entries, and the ones whose version is different from the one in the manifest. An entry
+with the same version is not read at all, and a file that was touched but has the same
+bytes is reported as unchanged. If a stored copy has gone missing, that entry is read
+again.
+
+A source that lists nothing is refused with a sentence that says so, and the manifest
+and the index are left as they were. This stops a wrong location, or a bucket that is
+briefly unreachable, from wiping the index. The pipeline's source step must be
+`upload`, as for a folder. To write your own source, give a class a `name`, a `list()`
+and a `read(doc_id)`, and add it with `register_source` from `pandion.extend`.
 
 ## Search an index
 

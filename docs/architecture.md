@@ -229,6 +229,11 @@ what these settings will do.
 - **Prefers** is a soft lock: the strategy still runs but falls back, with a sentence
   saying what happens instead, and the app tags it "Falls back".
 
+An index store is a second kind of plugin. `pandion.index_store` defines the Stable contract (`IndexStore`,
+`Collection`, the filters and `register_store`), `pandion.index_memory` is the reference store, and
+`pandion.testing.store_conformance` proves any store keeps the contract. A store is not a pipeline step, so
+it is not in `PLUGIN_MODULES`. See "Index stores" in [pandion.md](pandion.md#index-stores).
+
 [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-strategy) walks through adding one to
 Pandion. A strategy that lives outside Pandion is registered the same way, with
 `@register` from `pandion.extend`, and loaded by an import in code, a `plugins:` list in

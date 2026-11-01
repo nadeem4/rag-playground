@@ -22,6 +22,10 @@ or an image behind a Word, PowerPoint, HTML, Markdown or text file's name,
 the check an index run makes before any step. A server that takes a URL as a document fetches it
 with `fetch_url` and catches `FetchRefused`, raised with a plain reason when
 the guard refuses it.
+
+A team that keeps its index somewhere else writes an index store: `IndexRow`,
+`IndexMeta`, `StoreHit`, `Capabilities` and the filters `Eq`, `In`, `AnyOf` and
+`And` are its words, and `register_store` adds it. See docs/pandion.md, "Index stores".
 """
 
 from typing import Any
@@ -32,6 +36,7 @@ from pandion.embeddings import Embedder, get_embedder, register_embedder
 from pandion.endpoints import EndpointRefused, guard_endpoint
 from pandion.fetch import FetchRefused, fetch_url
 from pandion.formats import FORMATS, UnreadableFormat, check_contents, format_of
+from pandion.index_store import AnyOf, And, Capabilities, Eq, In, IndexMeta, IndexRow, StoreHit, register_store
 from pandion.llm import openai_client_kwargs
 from pandion.plugins import PluginError, load as load_plugins, plugin_listing
 from pandion.payloads import Chunk, ChunkSet, Element, Hit, Output, ParsedDoc, Query, RetrievalResult
@@ -42,10 +47,11 @@ from pandion.sources import raw_file
 from pandion.transform import Explanation, Transform
 
 __all__ = [
-    "FORMATS", "ArtifactType", "Chunk", "ChunkSet", "DocumentInfo", "Element", "Embedder", "EndpointRefused",
-    "Explanation", "FetchRefused", "Hit", "Output", "ParsedDoc", "PluginError", "PortSpec", "Query", "RetrievalResult",
-    "RunContext", "Stage", "Transform", "UnreadableFormat", "check_contents", "document_info", "fetch_url", "format_of", "get_embedder", "guard_endpoint",
-    "load_plugins", "openai_client_kwargs", "plugin_listing", "raw_file", "register", "route_check", "set_note", "set_usage",
+    "FORMATS", "And", "AnyOf", "ArtifactType", "Capabilities", "Chunk", "ChunkSet", "DocumentInfo", "Element", "Embedder",
+    "EndpointRefused", "Eq", "Explanation", "FetchRefused", "Hit", "In", "IndexMeta", "IndexRow", "Output", "ParsedDoc",
+    "PluginError", "PortSpec", "Query", "RetrievalResult", "RunContext", "Stage", "StoreHit", "Transform", "UnreadableFormat",
+    "check_contents", "document_info", "fetch_url", "format_of", "get_embedder", "guard_endpoint", "load_plugins",
+    "openai_client_kwargs", "plugin_listing", "raw_file", "register", "register_store", "route_check", "set_note", "set_usage",
 ]
 
 

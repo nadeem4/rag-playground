@@ -40,10 +40,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
+from pandion.errors import FormatTooNew
 from pandion.ids import canonical_json
 
 MANIFEST = "manifest.json"
@@ -72,8 +73,13 @@ def recipe_hash(index_settings: Any) -> str:
     return hashlib.sha256(canonical_json(settings).encode("utf-8")).hexdigest()
 
 
+FORMAT_VERSION: int = 1
+
+
 @dataclass
 class Manifest:
+    #: Older files are read as they are; a newer one is refused.
+    format_version: int = FORMAT_VERSION
     index_recipe: str | None = None
     index_artifact: str | None = None
     #: document id -> {"content_hash", "chunk_set", "category", "reason", ...}
@@ -85,7 +91,15 @@ class Manifest:
         path = Path(path)
         if not path.is_file():
             return cls()
-        return cls(**json.loads(path.read_text(encoding="utf-8")))
+        data = json.loads(path.read_text(encoding="utf-8"))
+        version = data.get("format_version", 1)
+        if version > FORMAT_VERSION:
+            raise FormatTooNew(
+                f"{path} was written by a newer Pandion (manifest format {version}; "
+                f"this one reads up to {FORMAT_VERSION}). Upgrade pandion."
+            )
+        known = {f.name for f in fields(cls)}
+        return cls(**{k: v for k, v in data.items() if k in known})
 
     def save(self, path: str | Path) -> None:
         """Write to a side file and rename it into place, so a reader never

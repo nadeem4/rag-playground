@@ -30,6 +30,7 @@ is missing tells you which one to install:
 | `local` | sentence-transformers and torch | the local embedders, and the `mmr` and `cross_encoder` rerankers |
 | `anthropic` | the Anthropic SDK | `llm_rewrite`, `llm_rerank` and `chat` with Claude |
 | `openai` | the OpenAI SDK | the same steps with OpenAI, OpenRouter or a compatible server |
+| `files` | fsspec (plus gcsfs or s3fs for a bucket) | FilesSource, sync from a source |
 
 `pandion install pipeline.yaml` installs the extras a pipeline file needs.
 

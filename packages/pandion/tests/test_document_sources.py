@@ -56,7 +56,7 @@ def test_the_same_file_name_in_two_folders_keeps_two_ids(folder):
 
 
 def test_a_missing_location_says_so(tmp_path):
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises(ValueError, match="does not exist, so check"):
         list(FilesSource(str(tmp_path / "nope")).list())
 
 

@@ -14,6 +14,7 @@ loads nothing heavy.
 from __future__ import annotations
 
 import mimetypes
+import posixpath
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Iterable, Protocol, runtime_checkable
 
@@ -104,12 +105,12 @@ class FilesSource:
     def list(self) -> Iterable[SourceEntry]:
         fs, root = self._open()
         if not fs.exists(root):
-            raise ValueError(f"The location {self.location} does not exist. Check the path or address.")
+            raise ValueError(f"The location {self.location} does not exist, so check the path or address.")
         found = fs.find(root, detail=True)
         entries = []
         for path, info in found.items():
-            doc_id = str(path).replace("\\", "/")[len(root):].lstrip("/")
-            if not doc_id:
+            doc_id = posixpath.relpath(str(path).replace("\\", "/"), root)
+            if doc_id in (".", "") or doc_id.startswith(".."):
                 continue
             entries.append(SourceEntry(doc_id, _version(info), _labels(doc_id, info)))
         return sorted(entries, key=lambda e: e.doc_id)

@@ -139,3 +139,14 @@ def test_a_source_given_to_a_pipeline_with_another_source_step_is_refused(setup)
     p.config.index.source = ("path", {})
     with pytest.raises(ValueError, match="local files"):
         p.index.sync(source)
+
+
+def test_the_same_file_name_in_two_folders_indexes_both(tmp_path):
+    config = write_config(tmp_path)
+    docs = tmp_path / "docs"
+    for folder, text in (("a", "Paris is in France."), ("b", "Rome is in Italy.")):
+        (docs / folder).mkdir(parents=True)
+        (docs / folder / "report.pdf").write_bytes(build_pdf([[text]]))
+    report = sync(config, FilesSource(str(docs)))
+    assert report.added == ["a/report.pdf", "b/report.pdf"]
+    assert sorted(manifest(config)["documents"]) == ["a/report.pdf", "b/report.pdf"]

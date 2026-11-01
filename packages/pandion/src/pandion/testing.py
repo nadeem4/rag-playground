@@ -123,18 +123,25 @@ def check_any_of_roles_matches_any_overlap(store):
 
 @_check
 def check_a_row_with_no_roles_is_never_returned(store):
-    col = _col(store, [_row("open", "d", [1, 0, 0], roles=["a"], text="shared word"),
-                       _row("none", "d", [1, 0, 0], roles=[], text="shared word")])
-    where = AnyOf("roles", ("a", "b"))
-    _expect(_ids(col.search_dense([1, 0, 0], 10, where)) == ["open"], "dense search returned a row with no roles")
-    if store.capabilities().lexical:
-        _expect(_ids(col.search_lexical("shared", 10, where)) == ["open"], "lexical search returned a row with no roles")
+    meta = {"category": "x"}
+    col = _col(store, [_row("open", "d", [1, 0, 0], roles=["a"], text="shared word", metadata=meta),
+                       _row("none", "d", [1, 0, 0], roles=[], text="shared word", metadata=meta)])
+    roles = AnyOf("roles", ("a", "b"))
+    for label, where in (("alone", roles), ("inside and", And((roles, Eq("category", "x"))))):
+        _expect(_ids(col.search_dense([1, 0, 0], 10, where)) == ["open"],
+                f"dense search returned a row with no roles ({label})")
+        if store.capabilities().lexical:
+            _expect(_ids(col.search_lexical("shared", 10, where)) == ["open"],
+                    f"lexical search returned a row with no roles ({label})")
 
 
 @_check
 def check_empty_any_of_matches_nothing(store):
-    col = _col(store, [_row("1", "d", [1, 0, 0])])
-    _expect(col.search_dense([1, 0, 0], 10, AnyOf("roles", ())) == [], "an empty any_of must match nothing")
+    col = _col(store, [_row("1", "d", [1, 0, 0], text="plain words")])
+    where = AnyOf("roles", ())
+    _expect(col.search_dense([1, 0, 0], 10, where) == [], "an empty any_of must match nothing")
+    if store.capabilities().lexical:
+        _expect(col.search_lexical("plain", 10, where) == [], "an empty any_of must match nothing in lexical search")
 
 
 @_check
@@ -192,3 +199,5 @@ def store_conformance(factory: Callable[[], IndexStore]) -> None:
             check(factory())
         except AssertionError as e:
             raise AssertionError(f"{name}: {e}") from None
+        except Exception as e:
+            raise AssertionError(f"{name}: {type(e).__name__}: {e}") from None

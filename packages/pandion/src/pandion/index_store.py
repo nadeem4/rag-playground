@@ -81,6 +81,11 @@ def _read(row: IndexRow, field: str):
     return row.metadata.get(field)
 
 
+def _same(a, b) -> bool:
+    """Equal, except that a bool never equals a number (True is not 1)."""
+    return isinstance(a, bool) == isinstance(b, bool) and a == b
+
+
 def matches(row: IndexRow, where: Filter) -> bool:
     """Whether a row passes a filter. A missing field matches nothing."""
     if isinstance(where, And):
@@ -89,9 +94,9 @@ def matches(row: IndexRow, where: Filter) -> bool:
     if value is None:
         return False
     if isinstance(where, Eq):
-        return value == where.value
+        return _same(value, where.value)
     if isinstance(where, In):
-        return value in where.values
+        return any(_same(value, v) for v in where.values)
     items = value if isinstance(value, list) else [value]
     return any(v in where.values for v in items)
 

@@ -711,7 +711,9 @@ again. `add` and `move` take no lock.
 A file that cannot be indexed does not stop the sync. A PDF behind a `.docx` name, or a file
 whose parse fails, is left out of the index and the manifest. It is listed in `report.failed`,
 which maps the document id to a one-line reason, and the next sync tries it again. The other
-documents are committed, and they cost only cache hits. If every file fails, nothing is
+documents are committed, and they cost only cache hits. A document that was indexed before
+and now fails is dropped from the manifest, so you must set its category and labels again once
+it is fixed. If every file fails, nothing is
 written. `report.ok` means every step ran for the documents that were committed.
 `report.complete` also needs `failed` to be empty, so use it for an exit code:
 

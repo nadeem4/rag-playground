@@ -107,3 +107,53 @@ def test_the_good_documents_cost_only_cache_hits_after_a_failure(setup):
     sync(config, docs)
     report = sync(config, docs)
     assert report.documents["good.pdf"].stages["parse"].status == "cached"
+
+
+def test_a_folder_of_only_disguised_files_reports_failed_and_does_not_crash(tmp_path):
+    config = write_config(tmp_path)
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "notes.docx").write_bytes(build_pdf(SAMPLE_PAGES))
+    report = sync(config, docs)
+    assert "notes.docx" in report.failed
+    assert not report.ok
+    assert not (config.parent / "index" / MANIFEST).exists()
+
+
+def test_every_document_failing_keeps_the_existing_manifest(setup):
+    config, docs = setup
+    sync(config, docs)
+    before = manifest(config)
+    (docs / "good.pdf").unlink()
+    (docs / "notes.docx").write_bytes(build_pdf(SAMPLE_PAGES))
+    report = sync(config, docs)
+    assert "notes.docx" in report.failed and not report.ok
+    assert manifest(config) == before
+
+
+def test_a_failed_step_with_no_error_text_still_gets_a_reason(setup, monkeypatch):
+    from pandion import pipeline as module
+    from pandion.results import StageResult
+
+    config, docs = setup
+    real = module.Pipeline  # noqa: F841
+    p = Pipeline.from_file(config)
+    original = p.index._index
+
+    def blank(documents, **kwargs):
+        report = original(documents, **kwargs)
+        for r in report.documents.values():
+            r.stages["parse"] = StageResult("parse", "pdfium", None, status="failed", error="  \n ")
+        return report
+
+    monkeypatch.setattr(p.index, "_index", blank)
+    report = p.index.sync(docs)
+    assert report.failed == {"good.pdf": "A step failed."}
+
+
+def test_the_reason_is_a_plain_sentence(setup):
+    config, docs = setup
+    (docs / "bad.pdf").write_bytes(BAD)
+    reason = sync(config, docs).failed["bad.pdf"]
+    assert not reason.startswith("pypdfium2.")
+    assert reason.startswith("Failed to load document")

@@ -26,8 +26,10 @@ def sync_lock(folder: Path) -> Iterator[None]:
             f"If none is running, delete {lock} and run it again."
         ) from None
     try:
-        os.write(fd, str(os.getpid()).encode())
-        os.close(fd)
+        try:
+            os.write(fd, str(os.getpid()).encode())
+        finally:
+            os.close(fd)
         yield
     finally:
         lock.unlink(missing_ok=True)

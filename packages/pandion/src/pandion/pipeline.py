@@ -37,6 +37,7 @@ keeps `sources/` (each file once, by its fingerprint), `artifacts/` (the store),
 
 from __future__ import annotations
 
+import re
 import threading
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
@@ -825,7 +826,11 @@ class IndexPipeline:
         `SyncBusy`. A file that cannot be indexed is left out of the index,
         listed in `report.failed` with a one-line reason, and tried again on the
         next sync; the other documents are committed. `report.complete` is true
-        when none was left out.
+        when none was left out. A document indexed before that now fails is
+        dropped from the manifest, so its category and labels must be set again
+        once it is fixed. After a failure the index run repeats for the
+        documents that remain, so a listener on `add` or `move` sees their
+        steps twice.
         """
         if not self._uploads():
             raise ValueError(
@@ -937,6 +942,8 @@ class IndexPipeline:
         }
         failed = self._unreadable(documents) if self._uploads() else {}
         documents = {d: f for d, f in documents.items() if d not in failed}
+        if not documents:
+            return SyncReport(documents={}, index=None, failed=dict(sorted(failed.items())))
 
         def run() -> IndexReport:
             return self._index(
@@ -945,11 +952,9 @@ class IndexPipeline:
 
         report = run()
         broken = {
-            d: next(s.error for s in r.stages.values() if s.status == "failed").strip().splitlines()[-1]
-            if any(s.status == "failed" and s.error for s in r.stages.values())
-            else "A step failed."
+            d: self._reason(r)
             for d, r in report.documents.items()
-            if any(s.status == "failed" for s in r.stages.values())
+            if any(st.status == "failed" for st in r.stages.values())
         }
         if broken:
             failed.update(broken)
@@ -1177,6 +1182,16 @@ class IndexPipeline:
             url, public_only=self.config.models.public_endpoints_only, max_bytes=URL_MAX_BYTES
         )
         return self.sources.add_bytes(data, filename)
+
+    @staticmethod
+    def _reason(report: DocumentReport) -> str:
+        """One plain sentence for the first failed step that said why: its last
+        line, without a leading `module.Class: `."""
+        for step in report.stages.values():
+            lines = (step.error or "").strip().splitlines()
+            if step.status == "failed" and lines:
+                return re.sub(r"^(?:\w+\.)+\w+: |^\w*(?:Error|Exception): ", "", lines[-1].strip())
+        return "A step failed."
 
     def _unreadable(self, documents: dict[str, SourceFile | str]) -> dict[str, str]:
         """The documents whose stored file holds a PDF or an image behind

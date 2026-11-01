@@ -87,8 +87,10 @@ export function DocumentTabs({
           >
             <FileDot slot={f.slot} />
             {st ? <span aria-hidden data-testid="tab-status" data-status={st} className={cn("size-[7px] shrink-0 rounded-full border", DOT[st] ?? DOT.pending)} /> : null}
-            <span className="truncate">{f.filename}</span>
-            {st ? <span className="sr-only">, {STATUS_WORD[st] ?? st}</span> : null}
+            <span className="truncate">
+              {f.filename}
+              {st ? <span className="sr-only">{`, ${STATUS_WORD[st] ?? st}`}</span> : null}
+            </span>
             {line ? <span className="text-xs text-fg-muted">{line}</span> : null}
           </button>
         )

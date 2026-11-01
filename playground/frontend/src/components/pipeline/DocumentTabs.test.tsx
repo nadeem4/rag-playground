@@ -85,6 +85,7 @@ describe("DocumentTabs category line", () => {
     render(<DocumentTabs files={FILES} value="a" onChange={() => {}} status={(sha) => st[sha as "a"]} />)
     expect(screen.getAllByTestId("tab-status").map((e) => e.getAttribute("data-status"))).toEqual(["done", "running", "failed"])
     expect(screen.getByRole("tab", { name: "notes.md, running" })).toBeTruthy()
+    expect(screen.getByRole("tab", { name: "notes.md, running" }).textContent).toContain("notes.md, running")
     expect(screen.getByRole("tab", { name: /notes.md/ }).getAttribute("title")).toBe("notes.md: running")
   })
 

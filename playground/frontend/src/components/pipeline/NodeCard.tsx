@@ -604,6 +604,19 @@ export function NodeCard(p: NodeCardProps) {
         </p>
       )}
 
+      {perDoc && perDoc.total > 1 ? (
+        <div className="text-xs text-fg-muted">
+          <p data-testid="doc-progress">
+            {[`${perDoc.done} of ${perDoc.total} documents done`, perDoc.running && `${perDoc.running} running`, perDoc.waiting && `${perDoc.waiting} waiting`, perDoc.skipped && `${perDoc.skipped} skipped`, perDoc.failed && `${perDoc.failed} failed`].filter(Boolean).join(", ")}
+          </p>
+          {perDoc.failed ? (
+            <p data-testid="doc-failed" className="text-danger">
+              Failed: {perDoc.failedNames.join(", ")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* Closed, the result shows here; open, it shows under the Run button instead. */}
       {ready?.outcome && !isSource && !open ? <ResultLine outcome={ready.outcome} onShow={p.onShowOutput} /> : null}
       {ready && p.node.stage === "chunk" ? <ChunkBar data={ready.data} /> : null}
@@ -725,18 +738,6 @@ export function NodeCard(p: NodeCardProps) {
         {p.actions}
       </footer>
       {/* The outcome again, right under the buttons, so it shows where Run was pressed. */}
-      {perDoc && perDoc.total > 1 ? (
-        <div className="px-3 pb-2 text-xs text-fg-muted">
-          <p data-testid="doc-progress">
-            {[`${perDoc.done} of ${perDoc.total} documents done`, perDoc.running && `${perDoc.running} running`, perDoc.waiting && `${perDoc.waiting} waiting`, perDoc.skipped && `${perDoc.skipped} skipped`, perDoc.failed && `${perDoc.failed} failed`].filter(Boolean).join(", ")}
-          </p>
-          {perDoc.failed ? (
-            <p data-testid="doc-failed" className="text-danger">
-              Failed: {perDoc.failedNames.join(", ")}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
       {ready?.outcome ? <ResultLine ref={resultRef} outcome={ready.outcome} testId="run-result" onShow={p.onShowOutput} /> : null}
       {completed ? (
         <WhatItDid stage={p.node.stage} type={info?.output} artifactId={completed} previousId={p.previousArtifactId} stale={p.stale} />

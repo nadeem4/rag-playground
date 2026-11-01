@@ -826,6 +826,11 @@ describe("NodeCard documents line", () => {
     expect(screen.getByTestId("doc-progress").textContent).toBe("2 of 3 documents done, 1 skipped")
   })
 
+  it("shows the line on a collapsed card, outside the folded settings", () => {
+    renderCard({ selected: false, result: withDocs({ "a.pdf": d("done"), "b.pdf": d("failed") }) })
+    for (const id of ["doc-progress", "doc-failed"]) expect(screen.getByTestId(id).closest("[class*='grid-rows-[0fr]']")).toBeNull()
+  })
+
   it("shows no line when the result has no documents", () => {
     renderCard({ result: { id: "chunk", status: "done", artifact_id: "z" } })
     expect(screen.queryByTestId("doc-progress")).toBeNull()

@@ -11,6 +11,7 @@ import {
   documentOf,
   documentsOf,
   loadSampleDocument,
+  refetchLink,
   removeDocument,
   resetDocumentForTests,
   setUploadState,
@@ -368,5 +369,58 @@ describe("a sample saved with an old fingerprint", () => {
     expect(result.current.recoveredNote).toBeNull()
     act(() => release())
     await waitFor(() => expect(result.current.doc).toEqual(ref(SAMPLE_SHA, "chunking-primer.pdf")))
+  })
+})
+
+describe("a link document whose stored copy is gone", () => {
+  const OLD = "ef".repeat(32)
+  const NEW = "34".repeat(32)
+  const LINKED = { sha: OLD, filename: "page.html", url: "https://example.com/page" }
+  const FETCHED = { sha: NEW, filename: "page.html", size: 9, content_type: "text/html", origin_url: "https://example.com/page" }
+  let refetches: unknown[]
+  let refuse: boolean
+
+  beforeEach(() => {
+    refetches = []
+    refuse = false
+    const base = fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/v2/documents/url") {
+          refetches.push(JSON.parse(String(init?.body)))
+          return refuse ? new Response(JSON.stringify({ detail: "Too many links" }), { status: 429 }) : new Response(JSON.stringify(FETCHED), { status: 200 })
+        }
+        return base(url, init)
+      }),
+    )
+    storeGraph(withDocument(sampleGraph(registry, ref(OLD, "page.html")), LINKED))
+  })
+
+  it("fetches the link again and swaps in the new sha", async () => {
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.doc?.sha).toBe(NEW))
+    expect(refetches).toEqual([{ url: "https://example.com/page" }])
+    expect(documentOf(readStoredGraph(registry))).toEqual({ sha: NEW, filename: "page.html", url: "https://example.com/page" })
+    expect(result.current.status).toBe("ready")
+  })
+
+  it("keeps it missing when the fetch is refused, and fetches again on request", async () => {
+    refuse = true
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.refused.has(OLD)).toBe(true))
+    expect(result.current.status).toBe("missing")
+    expect(refetches).toHaveLength(1)
+    refuse = false
+    await act(async () => void (await refetchLink(LINKED)))
+    await waitFor(() => expect(result.current.doc?.sha).toBe(NEW))
+    expect(result.current.refused.has(OLD)).toBe(false)
+  })
+
+  it("leaves a document with no link missing, and asks for nothing", async () => {
+    storeGraph(withDocument(sampleGraph(registry, ref(OLD, "page.html")), ref(OLD, "page.html")))
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.status).toBe("missing"))
+    expect(refetches).toEqual([])
   })
 })

@@ -9,7 +9,7 @@ import { hasPages } from "@/lib/formats"
 
 import { followSample, setCurrentId, STARTER_ID } from "./pipelines"
 import { initialGraph, readStoredGraph, sampleGraph, storedGraphJson, storeGraph, subscribeGraph, type PipelineGraph } from "./graph"
-import { docsOfSource, sourceConfigWith, type DocRef } from "./sourceDocs"
+import { docsOfSource, refOf, sourceConfigWith, type DocRef } from "./sourceDocs"
 import { parseWorking, readWorking, storeWorking } from "./working"
 
 /**
@@ -51,7 +51,7 @@ export function withDocuments<G extends Pick<PipelineGraph, "nodes">>(g: G, docs
 
 /** `docs` with `doc` added at the end, unless it is there already. */
 export function addedDocument(docs: readonly DocRef[], doc: DocRef): DocRef[] {
-  return docs.some((d) => d.sha === doc.sha) ? [...docs] : [...docs, { sha: doc.sha, filename: doc.filename }]
+  return docs.some((d) => d.sha === doc.sha) ? [...docs] : [...docs, refOf(doc)]
 }
 
 /** `docs` without the document `sha`. */
@@ -100,6 +100,8 @@ interface State {
   sampleLoading: string | null
   /** The filenames of the samples whose old fingerprints were swapped for the current ones, until the next choice. */
   recovered: string[] | null
+  /** The shas of link documents whose fetch was refused: the app stops trying by itself and offers "Fetch again". */
+  refused: ReadonlySet<string>
 }
 
 const FRESH: State = {
@@ -113,6 +115,7 @@ const FRESH: State = {
   uploadError: null,
   sampleLoading: null,
   recovered: null,
+  refused: new Set(),
 }
 
 let state: State = FRESH
@@ -133,6 +136,7 @@ function fetchSources() {
       if (gen !== generation) return
       set(Array.isArray(s) ? { sources: s, sourcesFailed: false } : { sources: null, sourcesFailed: true })
       recoverStaleSample()
+      recoverLinks()
     },
     () => gen === generation && set({ sources: null, sourcesFailed: true }),
   )
@@ -145,6 +149,7 @@ function fetchSamples() {
       if (gen !== generation) return
       set(Array.isArray(s) ? { samples: s, samplesFailed: false } : { samples: null, samplesFailed: true })
       recoverStaleSample()
+      recoverLinks()
     },
     () => gen === generation && set({ samples: null, samplesFailed: true }),
   )
@@ -218,6 +223,48 @@ function recoverStaleSample(): void {
     })
 }
 
+const fetching = new Set<string>()
+
+/**
+ * Fetch a link document again (`POST /api/v2/documents/url`) and swap its new
+ * sha into the working pipeline. True when it came back. A refusal (the demo's
+ * limits, a page that is gone) is remembered in `refused`, so the app shows
+ * "Fetch again" instead of retrying on its own.
+ */
+export async function refetchLink(doc: DocRef): Promise<boolean> {
+  if (!doc.url || fetching.has(doc.sha)) return false
+  fetching.add(doc.sha)
+  const gen = generation
+  const without = new Set(state.refused)
+  without.delete(doc.sha)
+  set({ refused: without })
+  try {
+    const src = await v2.addLink(doc.url)
+    if (gen !== generation) return false
+    // Known first, so the store write below finds the new copy ready.
+    set({ known: new Set(state.known).add(src.sha) })
+    const working = readWorking()
+    if (working) {
+      const swap = (d: DocRef) => (d.sha === doc.sha ? { ...d, sha: src.sha, filename: src.filename } : d)
+      storeWorking({ ...working, documents: docsOfSource({ documents: working.documents.map(swap) }) })
+    }
+    refreshUploads()
+    return true
+  } catch {
+    if (gen === generation) set({ refused: new Set(state.refused).add(doc.sha) })
+    return false
+  } finally {
+    fetching.delete(doc.sha)
+  }
+}
+
+/** Fetch again, by itself, every link document of the working pipeline whose stored copy is gone. */
+function recoverLinks(): void {
+  for (const d of readWorking()?.documents ?? []) {
+    if (d.url && !state.refused.has(d.sha) && docStatus(d, state.sources, state.samples, state.samplesFailed, state.known) === "missing") void refetchLink(d)
+  }
+}
+
 // Watches the working graph, so a saved pipeline or experiment opened with an old sample fingerprint recovers too.
 let unwatchGraph: (() => void) | null = null
 
@@ -225,7 +272,10 @@ function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   if (!started) {
     started = true
-    unwatchGraph = subscribeGraph(recoverStaleSample)
+    unwatchGraph = subscribeGraph(() => {
+      recoverStaleSample()
+      recoverLinks()
+    })
     fetchSources()
     fetchSamples()
   }
@@ -320,7 +370,7 @@ export async function chooseDocuments(docs: readonly DocRef[]): Promise<void> {
   const current = readWorking()
   if (docs.length < 2 || !current) return
   // Not marked known: each file is checked against the lists, so one that expired since the save shows as missing.
-  storeWorking({ ...current, documents: docs.map((d) => ({ sha: d.sha, filename: d.filename })) })
+  storeWorking({ ...current, documents: docs.map(refOf) })
 }
 
 /** The server indexes documents by their names, so two with one name cannot run together. */
@@ -405,6 +455,8 @@ export interface DocumentState {
   sampleLoading: string | null
   /** A one-time note when a sample saved with an old fingerprint was switched to its current copy. */
   recoveredNote: string | null
+  /** The shas of link documents whose fetch was refused (see `refetchLink`). */
+  refused: ReadonlySet<string>
 }
 
 /** The one-time note for the samples that were switched to their current copies. */
@@ -427,7 +479,8 @@ export function useDocument(): DocumentState {
   // A doc ref that keeps its identity while the file is the same.
   const sha = doc?.sha
   const filename = doc?.filename
-  const stable = useMemo(() => (sha ? { sha, filename: filename ?? "" } : null), [sha, filename])
+  const url = doc?.url
+  const stable = useMemo(() => (sha ? { sha, filename: filename ?? "", ...(url ? { url } : {}) } : null), [sha, filename, url])
   return {
     doc: stable,
     documents,
@@ -442,6 +495,7 @@ export function useDocument(): DocumentState {
     uploadError: s.uploadError,
     sampleLoading: s.sampleLoading,
     recoveredNote: recoveredNote(s.recovered),
+    refused: s.refused,
   }
 }
 
@@ -467,6 +521,7 @@ export function useHasPages(): (sha: string) => boolean {
 /** Tests only: forget the lists, the files chosen and the menu, and fetch again on the next subscriber. */
 export function resetDocumentForTests(): void {
   generation += 1
+  fetching.clear()
   started = false
   recovering = false
   unwatchGraph?.()

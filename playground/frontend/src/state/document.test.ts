@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import liveRegistry from "@/api/fixtures/registry.json"
+import { resetAppSettingsForTests } from "@/api/useDemo"
 import type { Registry } from "@/api/types"
 
 import {
@@ -11,6 +12,8 @@ import {
   documentOf,
   documentsOf,
   loadSampleDocument,
+  refreshUploads,
+  refetchLink,
   removeDocument,
   resetDocumentForTests,
   setUploadState,
@@ -46,6 +49,7 @@ beforeEach(() => {
   window.localStorage.clear()
   resetStoredGraphForTests()
   resetDocumentForTests()
+  resetAppSettingsForTests()
   resetPipelinesForTests()
   registryFails = false
   posts = []
@@ -324,6 +328,18 @@ describe("a sample saved with an old fingerprint", () => {
     expect(isEdited(p, readStoredGraph(registry)!)).toBe(false)
   })
 
+  it("keeps a sample's category pin when it recovers, so the saved pipeline is not edited", async () => {
+    const pinned = { ...ref(OLD, "chunking-primer.pdf"), category: "text" }
+    const opened = withDocument(sampleGraph(registry, ref(OLD, "chunking-primer.pdf")), pinned)
+    const { saved } = savePipeline("Pinned", opened)!
+    storeGraph(opened)
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.recoveredNote).toBe(NOTE))
+    const p = readPipelines().find((x) => x.id === saved.id)!
+    expect(p.documents).toEqual([{ ...ref(SAMPLE_SHA, "chunking-primer.pdf"), category: "text" }])
+    expect(isEdited(p, readStoredGraph(registry)!)).toBe(false)
+  })
+
   it.each([
     ["first", (stale: { sha: string; filename: string }, other: { sha: string; filename: string }) => [stale, other]],
     ["second", (stale: { sha: string; filename: string }, other: { sha: string; filename: string }) => [other, stale]],
@@ -368,5 +384,134 @@ describe("a sample saved with an old fingerprint", () => {
     expect(result.current.recoveredNote).toBeNull()
     act(() => release())
     await waitFor(() => expect(result.current.doc).toEqual(ref(SAMPLE_SHA, "chunking-primer.pdf")))
+  })
+})
+
+describe("a link document whose stored copy is gone", () => {
+  const OLD = "ef".repeat(32)
+  const NEW = "34".repeat(32)
+  const LINKED = { sha: OLD, filename: "page.html", url: "https://example.com/page" }
+  const FETCHED = { sha: NEW, filename: "page.html", size: 9, content_type: "text/html", origin_url: "https://example.com/page" }
+  let refetches: unknown[]
+  let refuse: boolean
+  let demo: boolean
+
+  beforeEach(() => {
+    refetches = []
+    refuse = false
+    demo = true
+    resetAppSettingsForTests()
+    const base = fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/settings/app") return new Response(JSON.stringify({ demo }), { status: 200 })
+        if (url === "/api/v2/documents/url") {
+          const asked = JSON.parse(String(init?.body)) as { url: string }
+          refetches.push(asked)
+          const fetched = asked.url.endsWith("/other") ? { ...FETCHED, sha: "88".repeat(32), filename: "other.html", origin_url: asked.url } : FETCHED
+          return refuse ? new Response(JSON.stringify({ detail: "Too many links" }), { status: 429 }) : new Response(JSON.stringify(fetched), { status: 200 })
+        }
+        return base(url, init)
+      }),
+    )
+    storeGraph(withDocument(sampleGraph(registry, ref(OLD, "page.html")), LINKED))
+  })
+
+  it("fetches the link again and swaps in the new sha", async () => {
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.doc?.sha).toBe(NEW))
+    expect(refetches).toEqual([{ url: "https://example.com/page" }])
+    expect(documentOf(readStoredGraph(registry))).toEqual({ sha: NEW, filename: "page.html", url: "https://example.com/page" })
+    expect(result.current.status).toBe("ready")
+  })
+
+  it("keeps it missing when the fetch is refused, and fetches again on request", async () => {
+    refuse = true
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.refused.has(OLD)).toBe(true))
+    expect(result.current.status).toBe("missing")
+    expect(refetches).toHaveLength(1)
+    refuse = false
+    await act(async () => void (await refetchLink(LINKED)))
+    await waitFor(() => expect(result.current.doc?.sha).toBe(NEW))
+    expect(result.current.refused.has(OLD)).toBe(false)
+  })
+
+  it("keeps a saved pipeline's document in step, link and pin included, so it does not open as edited", async () => {
+    const pinned = { ...LINKED, category: "text" }
+    const g = withDocument(sampleGraph(registry, ref(OLD, "page.html")), pinned)
+    const { saved } = savePipeline("Linked", g)!
+    storeGraph(g)
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.doc?.sha).toBe(NEW))
+    const p = readPipelines().find((x) => x.id === saved.id)!
+    expect(p.documents).toEqual([{ sha: NEW, filename: "page.html", url: LINKED.url, category: "text" }])
+    expect(isEdited(p, readStoredGraph(registry)!)).toBe(false)
+  })
+
+  it("fetches nothing by itself off the demo, and fetches when asked", async () => {
+    demo = false
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.refused.has(OLD)).toBe(true))
+    expect(refetches).toEqual([])
+    expect(result.current.status).toBe("missing")
+    await act(async () => void (await refetchLink(LINKED)))
+    await waitFor(() => expect(result.current.doc?.sha).toBe(NEW))
+    expect(refetches).toHaveLength(1)
+  })
+
+  it("does not offer Fetch again while a click-started fetch is in flight", async () => {
+    demo = false
+    let release: () => void = () => {}
+    const base = fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/v2/documents/url") {
+          refetches.push(1)
+          await new Promise<void>((r) => (release = r))
+          return new Response(JSON.stringify(FETCHED), { status: 200 })
+        }
+        return base(url, init)
+      }),
+    )
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.refused.has(OLD)).toBe(true))
+    let done: Promise<boolean> = Promise.resolve(false)
+    act(() => void (done = refetchLink(LINKED)))
+    expect(result.current.refused.has(OLD)).toBe(false)
+    await act(async () => {
+      refreshUploads()
+      await new Promise((r) => setTimeout(r, 20))
+    })
+    expect(result.current.refused.has(OLD)).toBe(false)
+    await act(async () => {
+      release()
+      await done
+    })
+    await waitFor(() => expect(result.current.doc?.sha).toBe(NEW))
+  })
+
+  it("keeps the server's sentence when a fetch is refused", async () => {
+    refuse = true
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.refused.get(OLD)).toBe("Too many links"))
+  })
+
+  it("fetches two link documents again when both are gone", async () => {
+    const two = { sha: "99".repeat(32), filename: "other.html", url: "https://example.com/other" }
+    storeGraph(withDocuments(sampleGraph(registry, ref(OLD, "page.html")), [LINKED, two]))
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.documents.map((d) => d.sha)).toEqual([NEW, "88".repeat(32)]))
+    expect(refetches).toHaveLength(2)
+    expect(result.current.documents.map((d) => d.url)).toEqual([LINKED.url, two.url])
+  })
+
+  it("leaves a document with no link missing, and asks for nothing", async () => {
+    storeGraph(withDocument(sampleGraph(registry, ref(OLD, "page.html")), ref(OLD, "page.html")))
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.status).toBe("missing"))
+    expect(refetches).toEqual([])
   })
 })

@@ -65,7 +65,7 @@ to 5 MB.
 
 **Or paste a link to a web page or PDF** takes the address of a web page or a PDF. Paste it and press **Add**. The
 server fetches the page once and keeps it like an upload: it counts as one of your uploads,
-expires with them on the demo, and is never fetched again for a question. On the demo only
+expires with them on the demo, and is never fetched again for a question. When the stored copy is gone, on the demo the app fetches the link again by itself; if that is refused, or anywhere else, the note shows a **Fetch again** button and waits for your click. On the demo only
 public https addresses work. When a link is refused, the menu shows the server's own
 sentence, such as "That address is not on the public internet, so it was not fetched."
 
@@ -116,7 +116,7 @@ Ask waits until there is a question.
 When a saved upload has expired, or was uploaded in another browser, the document keeps its
 name with the tag **Removed from the server**, and its Preview is off until you upload it
 again. Build, Compare and Evaluate then say so in one
-note with a **Pick a file or link** button, and their run buttons wait and say "Needs a
+note with a **Pick a file or link** button (a document added from a link gets a **Fetch again** button too, and on the demo is fetched again by itself), and their run buttons wait and say "Needs a
 document." A sample saved with an older copy of its PDF is not missing: when its filename
 is exactly a current sample's, and no upload in this browser has that filename, the page
 switches to the sample's current copy and says so once. In a pipeline with several

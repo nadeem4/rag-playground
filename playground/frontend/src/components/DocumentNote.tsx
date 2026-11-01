@@ -1,7 +1,7 @@
 import { useDemo } from "@/api/useDemo"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { openDocumentMenu, useDocStatus, useDocument, type DocRef, type DocStatus } from "@/state/document"
+import { openDocumentMenu, refetchLink, useDocStatus, useDocument, type DocRef, type DocStatus } from "@/state/document"
 
 /** A run needs a document that exists: none, or a missing one, blocks it. */
 export function needsDocument(status: DocStatus): boolean {
@@ -39,6 +39,9 @@ export function DocumentNote({
   const recoveredNote = store.recoveredNote
   const demo = useDemo()
   const blocked = needsDocument(status)
+  // A document added from a link is fetched again, not uploaded again; the page's own document is not.
+  const link = own === undefined && status === "missing" && doc?.url ? doc : null
+  const refused = link ? store.refused.has(link.sha) : false
   if (!blocked && !(changed && doc)) {
     return recoveredNote ? (
       <p role="status" data-testid="document-note" className={cn("rounded-control bg-surface-hover px-3 py-2 text-sm text-fg-muted", className)}>
@@ -53,7 +56,11 @@ export function DocumentNote({
       className={cn("flex flex-wrap items-center gap-x-3 gap-y-2 rounded-control bg-stale-wash px-3 py-2 text-sm text-stale", className)}
     >
       <p className="min-w-0 flex-[1_1_260px]">
-        {status === "missing" ? (
+        {link ? (
+          <>
+            <b className="font-semibold">{link.filename} is missing.</b> {refused ? store.refused.get(link.sha) || "Fetch it again, or pick another document." : "Fetching it again."}
+          </>
+        ) : status === "missing" ? (
           <>
             <b className="font-semibold">{doc?.filename} is missing.</b>
             {demo ? " Uploads on the demo expire." : ""} Pick a document {where} to {action}.
@@ -67,6 +74,11 @@ export function DocumentNote({
           </>
         )}
       </p>
+      {link && refused ? (
+        <Button variant="outline" size="sm" className="border-stale bg-transparent text-stale hover:bg-surface-hover" onClick={() => void refetchLink(link)}>
+          Fetch again
+        </Button>
+      ) : null}
       {blocked ? (
         <Button variant="outline" size="sm" className="border-stale bg-transparent text-stale hover:bg-surface-hover" onClick={openDocumentMenu}>
           Pick a file or link

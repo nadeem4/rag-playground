@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it } from "vitest"
 
 import { addedDocument, documentOf, documentsOf, removedDocument, withDocument, withDocuments } from "./document"
+import { columnOf, graphToConfig } from "./config"
 import { initialGraph, signature } from "./graph"
+import { buildExport, libraryItems, parseImport } from "./library"
+import { fromOld, resetPipelinesForTests, savePipeline } from "./pipelines"
 import { docsOfSource, pinsOf, sourceConfigWith } from "./sourceDocs"
 import { TEST_REGISTRY as R } from "./testRegistry"
 
@@ -73,5 +76,44 @@ describe("a document with a category", () => {
   it("lists the pins by sha, or nothing when none is pinned", () => {
     expect(pinsOf([pinned, B])).toEqual({ categories: { [A.sha]: "reports" } })
     expect(pinsOf([A, B])).toEqual({})
+  })
+})
+
+describe("a document added from a link", () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    resetPipelinesForTests()
+  })
+  const L = { sha: "d".repeat(64), filename: "page.html", url: "https://example.com/page" }
+
+  it("keeps its link through the source node, even alone, and drops a link that is not text", () => {
+    expect(docsOfSource({ documents: [L, { ...B, url: 5 }] })).toEqual([L, B])
+    expect(docsOfSource(sourceConfigWith({}, [L]))).toEqual([L])
+    expect(docsOfSource(sourceConfigWith({}, [L, A]))).toEqual([L, A])
+    // A document saved before links existed still loads.
+    expect(docsOfSource(sourceConfigWith({}, [A]))).toEqual([A])
+  })
+
+  it("survives a graph, a saved pipeline and a share link", () => {
+    const g = withDocuments(initialGraph(R), [L])
+    expect(documentsOf(g)).toEqual([L])
+    const p = savePipeline("Mine", g)!.saved
+    expect(p.documents).toEqual([L])
+    expect(fromOld({ ...p, graph: g }, 0).documents).toEqual([L])
+    const c = graphToConfig(g)
+    if (!c.ok) throw new Error("not a pipeline")
+    expect(columnOf(c.pipeline, R).nodes.find((n) => n.stage === "source")?.config.documents).toEqual([L])
+  })
+
+  it("survives a Library export and import", () => {
+    const g = withDocuments(initialGraph(R), [L])
+    const p = savePipeline("Mine", g)!.saved
+    const back = parseImport(JSON.stringify(buildExport(libraryItems([p], []), [], 0)))
+    if (!back.ok) throw new Error("not readable")
+    expect(back.pipelines[0].documents).toEqual([L])
+  })
+
+  it("is kept when a document is added", () => {
+    expect(addedDocument([A], L)).toEqual([A, L])
   })
 })

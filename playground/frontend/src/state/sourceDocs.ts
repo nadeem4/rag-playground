@@ -7,7 +7,8 @@
  */
 
 /** `category` is a pin: the category the document was put in (by a sort, or by hand). Absent means not pinned yet. */
-export type DocRef = { sha: string; filename: string; category?: string }
+/** `url` is the link a document was added from, so the app can fetch it again when the stored copy expires. */
+export type DocRef = { sha: string; filename: string; category?: string; url?: string }
 
 type SourceConfig = Record<string, unknown> | undefined
 
@@ -17,7 +18,12 @@ const isDoc = (v: unknown): v is DocRef => {
 }
 
 /** A document as the browser holds it: the category only when it is a pin. */
-const refOf = (d: DocRef): DocRef => ({ sha: d.sha, filename: d.filename, ...(typeof d.category === "string" && d.category ? { category: d.category } : {}) })
+export const refOf = (d: DocRef): DocRef => ({
+  sha: d.sha,
+  filename: d.filename,
+  ...(typeof d.category === "string" && d.category ? { category: d.category } : {}),
+  ...(typeof d.url === "string" && d.url ? { url: d.url } : {}),
+})
 
 /** The source node's documents, in order, each once. An older node with only `sha` and `filename` holds that one. */
 export function docsOfSource(config: SourceConfig): DocRef[] {
@@ -40,8 +46,8 @@ export function sourceConfigWith(config: SourceConfig, docs: readonly DocRef[]):
   const { documents: _list, sha: _sha, filename: _filename, ...rest } = config ?? {}
   if (!docs.length) return rest
   const first = { sha: docs[0].sha, filename: docs[0].filename }
-  // A pin needs the list: `sha` and `filename` hold no category.
-  return docs.length === 1 && !docs[0].category ? { ...rest, ...first } : { ...rest, ...first, documents: docs.map(refOf) }
+  // A pin or a link needs the list: `sha` and `filename` hold neither.
+  return docs.length === 1 && !docs[0].category && !docs[0].url ? { ...rest, ...first } : { ...rest, ...first, documents: docs.map(refOf) }
 }
 
 /** The request field for pinned documents, `{categories: {sha: id}}`, or nothing when none is pinned. */

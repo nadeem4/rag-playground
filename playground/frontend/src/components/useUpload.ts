@@ -71,12 +71,12 @@ export function useUpload(): Upload {
   const { uploading: busy, uploadError: error } = useDocument()
   const line = formatsLine(formats)
 
-  async function send(label: string, call: () => Promise<{ sha: string; filename: string }>, use: (doc: DocRef) => Promise<void> | void, fail: (why: string) => string) {
+  async function send(label: string, call: () => Promise<{ sha: string; filename: string; origin_url?: string }>, use: (doc: DocRef) => Promise<void> | void, fail: (why: string) => string) {
     setUploadState({ uploading: label, uploadError: null })
     try {
       const src = await call()
       refreshUploads()
-      await use({ sha: src.sha, filename: src.filename })
+      await use({ sha: src.sha, filename: src.filename, ...(src.origin_url ? { url: src.origin_url } : {}) })
       return true
     } catch (err) {
       setUploadState({ uploadError: fail(reason(err)) })

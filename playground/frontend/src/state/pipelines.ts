@@ -297,7 +297,7 @@ export function followSample(oldSha: string, now: DocRef): void {
   const has = (p: SavedPipeline) => p.documents.some((d) => d.sha === oldSha)
   if (!list.some(has)) return
   // A pipeline that already held the current copy too keeps it once, where it first stands.
-  const swapped = (p: SavedPipeline) => docsOfSource({ documents: p.documents.map((d) => (d.sha === oldSha ? { ...now } : d)) })
+  const swapped = (p: SavedPipeline) => docsOfSource({ documents: p.documents.map((d) => (d.sha === oldSha ? { ...d, sha: now.sha, filename: now.filename } : d)) })
   persist(list.map((p) => (has(p) ? { ...p, documents: swapped(p) } : p)))
 }
 

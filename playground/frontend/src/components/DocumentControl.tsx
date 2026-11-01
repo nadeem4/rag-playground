@@ -201,7 +201,7 @@ export function DocumentControl({
             {linked ? (
               <p role="status" className="flex items-center justify-between gap-2 rounded-control bg-stale-wash p-2 text-xs text-stale">
                 <span>
-                  {doc?.filename} is no longer on {demo ? "the demo" : "this machine"}. {refused ? "Fetching it again did not work." : "Fetching it again."}
+                  {doc?.filename} is no longer on {demo ? "the demo" : "this machine"}. {refused ? store.refused.get(linked.sha) || "Fetch it again, or pick another document." : "Fetching it again."}
                 </span>
                 {refused ? (
                   <button type="button" className="shrink-0 rounded-control border border-stale px-2 py-1 font-medium" onClick={() => void refetchLink(linked)}>

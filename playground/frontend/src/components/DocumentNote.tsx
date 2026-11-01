@@ -58,7 +58,7 @@ export function DocumentNote({
       <p className="min-w-0 flex-[1_1_260px]">
         {link ? (
           <>
-            <b className="font-semibold">{link.filename} is missing.</b> {refused ? "Fetching it again did not work." : "Fetching it again."}
+            <b className="font-semibold">{link.filename} is missing.</b> {refused ? store.refused.get(link.sha) || "Fetch it again, or pick another document." : "Fetching it again."}
           </>
         ) : status === "missing" ? (
           <>
@@ -74,13 +74,12 @@ export function DocumentNote({
           </>
         )}
       </p>
-      {link ? (
-        refused ? (
-          <Button variant="outline" size="sm" className="border-stale bg-transparent text-stale hover:bg-surface-hover" onClick={() => void refetchLink(link)}>
-            Fetch again
-          </Button>
-        ) : null
-      ) : blocked ? (
+      {link && refused ? (
+        <Button variant="outline" size="sm" className="border-stale bg-transparent text-stale hover:bg-surface-hover" onClick={() => void refetchLink(link)}>
+          Fetch again
+        </Button>
+      ) : null}
+      {blocked ? (
         <Button variant="outline" size="sm" className="border-stale bg-transparent text-stale hover:bg-surface-hover" onClick={openDocumentMenu}>
           Pick a file or link
         </Button>

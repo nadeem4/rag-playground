@@ -4,6 +4,7 @@ import type { Registry, Stage, Variant } from "@/api/types"
 
 import { MAX_RECIPES } from "./compare"
 import type { DocRef } from "./document"
+import { refOf } from "./sourceDocs"
 import { strategyIn } from "./graph"
 
 /**
@@ -128,8 +129,8 @@ const entry = (id: string, name: string, b: ExperimentBody): SavedExperiment => 
   name,
   stage: b.stage,
   recipes: structuredClone(b.recipes),
-  doc: b.doc ? { sha: b.doc.sha, filename: b.doc.filename } : null,
-  ...(b.docs && b.docs.length > 1 ? { docs: b.docs.map((d) => ({ sha: d.sha, filename: d.filename })) } : {}),
+  doc: b.doc ? refOf(b.doc) : null,
+  ...(b.docs && b.docs.length > 1 ? { docs: b.docs.map(refOf) } : {}),
   savedAt: new Date().toISOString(),
 })
 

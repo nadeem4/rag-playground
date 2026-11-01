@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore } from "react"
 
-import { api } from "@/api/client"
+import { api, ApiError } from "@/api/client"
+import { isDemo } from "@/api/useDemo"
 import { loadRegistry } from "@/api/useRegistry"
 import { v2 } from "@/api/v2"
 import { sampleQuestionTexts } from "@/api/samples"
@@ -100,8 +101,8 @@ interface State {
   sampleLoading: string | null
   /** The filenames of the samples whose old fingerprints were swapped for the current ones, until the next choice. */
   recovered: string[] | null
-  /** The shas of link documents whose fetch was refused: the app stops trying by itself and offers "Fetch again". */
-  refused: ReadonlySet<string>
+  /** Link documents the app is not fetching by itself: sha to the server's sentence ("" when none). They show "Fetch again". */
+  refused: ReadonlyMap<string, string>
 }
 
 const FRESH: State = {
@@ -115,7 +116,7 @@ const FRESH: State = {
   uploadError: null,
   sampleLoading: null,
   recovered: null,
-  refused: new Set(),
+  refused: new Map(),
 }
 
 let state: State = FRESH
@@ -235,7 +236,7 @@ export async function refetchLink(doc: DocRef): Promise<boolean> {
   if (!doc.url || fetching.has(doc.sha)) return false
   fetching.add(doc.sha)
   const gen = generation
-  const without = new Set(state.refused)
+  const without = new Map(state.refused)
   without.delete(doc.sha)
   set({ refused: without })
   try {
@@ -248,20 +249,36 @@ export async function refetchLink(doc: DocRef): Promise<boolean> {
       const swap = (d: DocRef) => (d.sha === doc.sha ? { ...d, sha: src.sha, filename: src.filename } : d)
       storeWorking({ ...working, documents: docsOfSource({ documents: working.documents.map(swap) }) })
     }
+    // Saved pipelines on the old copy follow, keeping their link and pin.
+    followSample(doc.sha, src)
     refreshUploads()
     return true
-  } catch {
-    if (gen === generation) set({ refused: new Set(state.refused).add(doc.sha) })
+  } catch (err) {
+    const why = err instanceof ApiError && typeof err.detail === "string" ? err.detail : ""
+    if (gen === generation) set({ refused: new Map(state.refused).set(doc.sha, why) })
     return false
   } finally {
     fetching.delete(doc.sha)
   }
 }
 
-/** Fetch again, by itself, every link document of the working pipeline whose stored copy is gone. */
-function recoverLinks(): void {
-  for (const d of readWorking()?.documents ?? []) {
-    if (d.url && !state.refused.has(d.sha) && docStatus(d, state.sources, state.samples, state.samplesFailed, state.known) === "missing") void refetchLink(d)
+/**
+ * Fetch again, by itself, every link document of the working pipeline whose
+ * stored copy is gone, but only on the demo, where uploads expire. Anywhere
+ * else the link may have come from a share link or an import, so nothing is
+ * fetched until the visitor clicks "Fetch again".
+ */
+async function recoverLinks(): Promise<void> {
+  const gone = () =>
+    (readWorking()?.documents ?? []).filter(
+      (d) => d.url && !state.refused.has(d.sha) && docStatus(d, state.sources, state.samples, state.samplesFailed, state.known) === "missing",
+    )
+  if (!gone().length) return
+  const demo = await isDemo()
+  // Looked at again: another call may have fetched some while this one waited.
+  for (const d of gone()) {
+    if (demo) void refetchLink(d)
+    else if (!state.refused.has(d.sha)) set({ refused: new Map(state.refused).set(d.sha, "") })
   }
 }
 
@@ -456,7 +473,7 @@ export interface DocumentState {
   /** A one-time note when a sample saved with an old fingerprint was switched to its current copy. */
   recoveredNote: string | null
   /** The shas of link documents whose fetch was refused (see `refetchLink`). */
-  refused: ReadonlySet<string>
+  refused: ReadonlyMap<string, string>
 }
 
 /** The one-time note for the samples that were switched to their current copies. */

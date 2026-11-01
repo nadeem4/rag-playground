@@ -126,22 +126,33 @@ describe("DocumentNote", () => {
   })
 
   it("fetches a link document again by itself, and drops the note once it is back", async () => {
+    demo = true
     storeGraph(withDocument(sampleGraph(registry, { sha: "ef".repeat(32), filename: "page.html" }), { sha: "ef".repeat(32), filename: "page.html", url: "https://example.com/page" }))
     render(<DocumentNote action="build the index" />)
     await waitFor(() => expect(linkCalls).toBe(1))
     await waitFor(() => expect(screen.queryByTestId("document-note")).toBeNull())
   })
 
-  it("when the link is refused, says why it is missing and offers Fetch again instead of the upload text", async () => {
+  it("when the link is refused, shows the server's sentence and offers Fetch again beside Pick a file or link", async () => {
+    demo = true
     refuseLink = true
     storeGraph(withDocument(sampleGraph(registry, { sha: "ef".repeat(32), filename: "page.html" }), { sha: "ef".repeat(32), filename: "page.html", url: "https://example.com/page" }))
     render(<DocumentNote action="build the index" />)
     const again = await screen.findByRole("button", { name: "Fetch again" })
-    expect(screen.getByTestId("document-note").textContent).not.toContain("Pick a document")
+    expect(screen.getByTestId("document-note").textContent).toContain("Too many links")
+    expect(screen.getByRole("button", { name: "Pick a file or link" })).toBeTruthy()
     refuseLink = false
     fireEvent.click(again)
     await waitFor(() => expect(screen.queryByTestId("document-note")).toBeNull())
     expect(linkCalls).toBe(2)
+  })
+
+  it("off the demo, fetches nothing until asked", async () => {
+    storeGraph(withDocument(sampleGraph(registry, { sha: "ef".repeat(32), filename: "page.html" }), { sha: "ef".repeat(32), filename: "page.html", url: "https://example.com/page" }))
+    render(<DocumentNote action="build the index" />)
+    fireEvent.click(await screen.findByRole("button", { name: "Fetch again" }))
+    await waitFor(() => expect(screen.queryByTestId("document-note")).toBeNull())
+    expect(linkCalls).toBe(1)
   })
 
   it("keeps the old note for a document with no link", async () => {

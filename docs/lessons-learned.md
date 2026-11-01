@@ -76,7 +76,7 @@ This is a working document. We keep it up to date as we build RAG Playground. Ea
 
 ### A GitHub link indexed the web page, not the file
 
-2026-11-01, branch `fix/github-blob-raw` (C14)
+2026-11-01, PR #228 (C14)
 
 **The problem.** We pasted a link to a Markdown file on GitHub. The pipeline indexed the page, and questions about the file found menus, buttons and sign-in text instead of its words.
 

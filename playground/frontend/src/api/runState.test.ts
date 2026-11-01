@@ -306,8 +306,32 @@ describe("a run over several documents", () => {
   const three = { id: "parse", status: "running" as const, documents: { "a.pdf": doc("done"), "b.pdf": doc("cached"), "c.pdf": doc("running"), "d.pdf": doc("pending"), "e.pdf": doc("failed", "x") } }
 
   it("counts a step's documents as done, running, waiting and failed", () => {
-    expect(docCounts(three)).toEqual({ total: 5, done: 2, running: 1, waiting: 1, failed: 1, failedNames: ["e.pdf"] })
-    expect(docCounts({ id: "x", status: "done" })).toEqual({ total: 0, done: 0, running: 0, waiting: 0, failed: 0, failedNames: [] })
+    expect(docCounts(three)).toEqual({ total: 5, done: 2, running: 1, waiting: 1, skipped: 0, failed: 1, failedNames: ["e.pdf"] })
+    expect(docCounts({ id: "x", status: "done" })).toEqual({ total: 0, done: 0, running: 0, waiting: 0, skipped: 0, failed: 0, failedNames: [] })
+  })
+
+  it("counts every document from the start, so the rest wait", () => {
+    const docs = ["a.pdf", "b.pdf", "c.pdf"].map((document) => ({ document, step: "parse" }))
+    const state = reduceEvents([
+      cardEvent(e({ event: "run_started", steps: docs, selected_steps: docs })),
+      step("node_started", "parse", "a.pdf", { artifact_id: "p1" }),
+    ])
+    const c = docCounts(state.variants[0].nodes.parse)
+    expect(c).toMatchObject({ total: 3, running: 1, waiting: 2 })
+  })
+
+  it("counts a skipped document on its own, and says skipped for it", () => {
+    const node = { id: "parse", status: "running" as const, documents: { "a.pdf": doc("done"), "b.pdf": doc("skipped") } }
+    expect(docCounts(node)).toMatchObject({ done: 1, skipped: 1, waiting: 0 })
+    expect(docStatusOf({ parse: node }, "b.pdf")).toBe("skipped")
+  })
+
+  it("tells two documents with one filename apart by sha", () => {
+    const [a, b] = ["aa".repeat(32), "bb".repeat(32)]
+    const node = { id: "parse", status: "running" as const, documents: { [`${a}.pdf`]: doc("done"), [`${b}.pdf`]: doc("failed", "x") } }
+    expect(docStatusOf({ parse: node }, "x.pdf", a)).toBe("done")
+    expect(docStatusOf({ parse: node }, "x.pdf", b)).toBe("failed")
+    expect(docCounts(node)).toMatchObject({ total: 2, done: 1, failed: 1 })
   })
 
   it("gives one document's status across all steps, the worst first", () => {

@@ -821,6 +821,16 @@ describe("NodeCard documents line", () => {
     expect(screen.queryByTestId("doc-progress")).toBeNull()
   })
 
+  it("counts a reused document as done, and a skipped one on its own", () => {
+    renderCard({ result: withDocs({ "a.pdf": { status: "cached" }, "b.pdf": { status: "skipped" }, "c.pdf": d("done") }) })
+    expect(screen.getByTestId("doc-progress").textContent).toBe("2 of 3 documents done, 1 skipped")
+  })
+
+  it("shows no line when the result has no documents", () => {
+    renderCard({ result: { id: "chunk", status: "done", artifact_id: "z" } })
+    expect(screen.queryByTestId("doc-progress")).toBeNull()
+  })
+
   it("counts the documents of a step with three", () => {
     renderCard({ result: withDocs({ "a.pdf": d("done"), "b.pdf": d("done"), "c.pdf": d("running") }) })
     expect(screen.getByTestId("doc-progress").textContent).toBe("2 of 3 documents done, 1 running")

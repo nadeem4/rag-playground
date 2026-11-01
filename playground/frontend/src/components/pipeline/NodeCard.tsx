@@ -728,7 +728,7 @@ export function NodeCard(p: NodeCardProps) {
       {perDoc && perDoc.total > 1 ? (
         <div className="px-3 pb-2 text-xs text-fg-muted">
           <p data-testid="doc-progress">
-            {[`${perDoc.done} of ${perDoc.total} documents done`, perDoc.running && `${perDoc.running} running`, perDoc.waiting && `${perDoc.waiting} waiting`, perDoc.failed && `${perDoc.failed} failed`].filter(Boolean).join(", ")}
+            {[`${perDoc.done} of ${perDoc.total} documents done`, perDoc.running && `${perDoc.running} running`, perDoc.waiting && `${perDoc.waiting} waiting`, perDoc.skipped && `${perDoc.skipped} skipped`, perDoc.failed && `${perDoc.failed} failed`].filter(Boolean).join(", ")}
           </p>
           {perDoc.failed ? (
             <p data-testid="doc-failed" className="text-danger">

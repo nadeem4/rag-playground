@@ -10,11 +10,12 @@ import { cn } from "@/lib/utils"
  * several documents. Every pane shares one choice, so the cards and the panes
  * all show the same file. With fewer than two files there is nothing to pick.
  */
-const STATUS_WORD: Partial<Record<NodeStatus, string>> = { done: "done", cached: "done", running: "running", failed: "failed", pending: "waiting" }
+const STATUS_WORD: Partial<Record<NodeStatus, string>> = { done: "done", cached: "done", running: "running", failed: "failed", skipped: "skipped", pending: "waiting" }
 /** The status dot's look, the same as the step cards' ring. */
 const DOT: Record<string, string> = {
-  pending: "border-field-border",
-  running: "border-primary/50 bg-primary/50",
+  pending: "border-fg-muted",
+  skipped: "border-fg-muted bg-fg-muted/30",
+  running: "border-primary bg-[linear-gradient(90deg,var(--accent)_50%,transparent_50%)]",
   done: "border-primary bg-primary",
   cached: "border-primary bg-primary",
   failed: "border-danger bg-danger",
@@ -87,6 +88,7 @@ export function DocumentTabs({
             <FileDot slot={f.slot} />
             {st ? <span aria-hidden data-testid="tab-status" data-status={st} className={cn("size-[7px] shrink-0 rounded-full border", DOT[st] ?? DOT.pending)} /> : null}
             <span className="truncate">{f.filename}</span>
+            {st ? <span className="sr-only">, {STATUS_WORD[st] ?? st}</span> : null}
             {line ? <span className="text-xs text-fg-muted">{line}</span> : null}
           </button>
         )

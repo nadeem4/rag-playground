@@ -699,6 +699,27 @@ again, even when its bytes change. `metadata` is used only for new documents, an
 `categories` naming a document that is already in the manifest raises a `ValueError` that
 points to `p.index.move`.
 
+If you remove a category from the pipeline, its documents are not refused. The next sync
+sorts them again with your route, and they show up in `report.changed`. `add` and `move`
+still refuse a pipeline whose manifest names a category that is gone.
+
+Only one sync runs at a time for an index folder. A sync makes `sync.lock` in the folder and
+removes it when it ends, even when it fails. If a lock is there, `sync` raises `SyncBusy`
+(a `ValueError`) that names the file. If no sync is running, delete the file and run it
+again. `add` and `move` take no lock.
+
+A file that cannot be indexed does not stop the sync. A PDF behind a `.docx` name, or a file
+whose parse fails, is left out of the index and the manifest. It is listed in `report.failed`,
+which maps the document id to a one-line reason, and the next sync tries it again. The other
+documents are committed, and they cost only cache hits. If every file fails, nothing is
+written. `report.ok` means every step ran for the documents that were committed.
+`report.complete` also needs `failed` to be empty, so use it for an exit code:
+
+```python
+report = pipeline.index.sync("docs/")
+raise SystemExit(0 if report.complete else 1)
+```
+
 Each sync compares the folder with the manifest:
 
 - A new file is parsed, cleaned, chunked and added to the index.

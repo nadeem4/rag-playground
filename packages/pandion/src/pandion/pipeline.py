@@ -52,7 +52,8 @@ from pandion.fetch import fetch_url, is_url
 from pandion.filters import check_where, resolve as _resolve_where
 from pandion.document_sources import Source
 from pandion.docinfo import DocumentInfo, document_info
-from pandion.formats import check_contents, check_readable, format_of
+from pandion.formats import UnreadableFormat, check_contents, check_readable, format_of
+from pandion.synclock import sync_lock
 from pandion.graph import Edge, Graph, Node
 from pandion.manifest import MANIFEST, Manifest, recipe_hash
 from pandion.payloads import ChunkSet, Hit, Output, ParsedDoc, Query, RetrievalResult
@@ -168,6 +169,20 @@ class SyncReport(IndexReport):
     unchanged: list[str] = field(default_factory=list)
     #: The index settings differ from the last sync's.
     config_changed: bool = False
+    #: Documents left out because their file or a step failed, by id, with a
+    #: one-line reason. The next sync tries them again.
+    failed: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def ok(self) -> bool:
+        """Every step asked for ran, for the documents committed. It is false
+        too when every document was left out."""
+        return super().ok and not (self.failed and not self.documents)
+
+    @property
+    def complete(self) -> bool:
+        """`ok`, and no document was left out."""
+        return self.ok and not self.failed
 
 
 @dataclass
@@ -803,16 +818,30 @@ class IndexPipeline:
         it raises ValueError that points to `p.index.move`). A new one goes
         where `categories` (a document id to a name) says, else where the route
         sends it; `metadata` gives its labels by document id. A manifest
-        document in a category the pipeline no longer has raises ValueError
-        before anything runs, even if the paths drop that document: move it
-        first, or sync without the removal first.
+        document in a category the pipeline no longer has is sorted again by
+        the route.
+
+        Only one sync runs at a time per index folder: a second raises
+        `SyncBusy`. A file that cannot be indexed is left out of the index,
+        listed in `report.failed` with a one-line reason, and tried again on the
+        next sync; the other documents are committed. `report.complete` is true
+        when none was left out.
         """
         if not self._uploads():
             raise ValueError(
                 "sync works with local files (the upload source); index.run works with any source."
             )
+        with sync_lock(self.config.path):
+            return self._sync(paths, credentials, metadata, categories)
+
+    def _sync(
+        self,
+        paths: Documents | Source,
+        credentials: dict[str, str] | None,
+        metadata: dict[str, dict[str, str]] | None,
+        categories: dict[str, str] | None,
+    ) -> SyncReport:
         before = Manifest.load(self.config.path / MANIFEST)
-        self._check_recorded(before)
         self._check_names(categories)
         held = [d for d in categories or {} if d in before.documents]
         if held:
@@ -825,7 +854,8 @@ class IndexPipeline:
             documents, versions, entry_labels = self._from_source(paths, before)
         else:
             documents = self._documents(paths)
-        known = self._recorded(before)
+        # A document in a category the pipeline no longer has goes back through the route.
+        known = {d: s for d, s in self._recorded(before).items() if s.category in self.config.index.categories}
         known.update({d: Sorting(c, "Chosen when added") for d, c in (categories or {}).items()})
         new = {d: m for d, m in (metadata or {}).items() if d not in before.documents}
         new = {**{d: m for d, m in entry_labels.items() if d not in new}, **new}
@@ -905,9 +935,27 @@ class IndexPipeline:
             **{d: e["metadata"] for d, e in before.documents.items() if e.get("metadata")},
             **(labels or {}),
         }
-        report = self._index(
-            documents, credentials=credentials, on_event=on_event, cancel=cancel, known=known, labels=labels
-        )
+        failed = self._unreadable(documents) if self._uploads() else {}
+        documents = {d: f for d, f in documents.items() if d not in failed}
+
+        def run() -> IndexReport:
+            return self._index(
+                documents, credentials=credentials, on_event=on_event, cancel=cancel, known=known, labels=labels
+            )
+
+        report = run()
+        broken = {
+            d: next(s.error for s in r.stages.values() if s.status == "failed").strip().splitlines()[-1]
+            if any(s.status == "failed" and s.error for s in r.stages.values())
+            else "A step failed."
+            for d, r in report.documents.items()
+            if any(s.status == "failed" for s in r.stages.values())
+        }
+        if broken:
+            failed.update(broken)
+            documents = {d: f for d, f in documents.items() if d not in broken}
+            if documents:
+                report = run()
         recipe = recipe_hash(self.config.index)
         after = Manifest(
             index_recipe=recipe,
@@ -941,9 +989,10 @@ class IndexPipeline:
             index=report.index,
             added=sorted(set(after.documents) - set(before.documents)),
             changed=sorted(d for d in after.documents if d in before.documents and not same(d)),
-            removed=sorted(set(before.documents) - set(after.documents)),
+            removed=sorted(set(before.documents) - set(after.documents) - set(failed)),
             unchanged=sorted(d for d in after.documents if d in before.documents and same(d)),
             config_changed=before.index_recipe is not None and before.index_recipe != recipe,
+            failed=dict(sorted(failed.items())),
         )
         if sync.ok:
             after.save(self.config.path / MANIFEST)
@@ -1129,6 +1178,21 @@ class IndexPipeline:
         )
         return self.sources.add_bytes(data, filename)
 
+    def _unreadable(self, documents: dict[str, SourceFile | str]) -> dict[str, str]:
+        """The documents whose stored file holds a PDF or an image behind
+        another format's name, by id, with the reason. A stored file that is
+        gone is not read: a cached index runs without it."""
+        found: dict[str, str] = {}
+        for doc_id in sorted(documents):
+            file = documents[doc_id]
+            path = self.sources.path(file.sha, file.filename)
+            if path.is_file():
+                try:
+                    check_contents(path, file.filename)
+                except UnreadableFormat as e:
+                    found[doc_id] = str(e)
+        return found
+
     def _index(
         self,
         documents: dict[str, SourceFile | str],
@@ -1149,11 +1213,8 @@ class IndexPipeline:
         # before docling reads it by its bytes and runs its layout or OCR models.
         # A stored file that is gone is not read: a cached index runs without it.
         if self._uploads():
-            for doc_id in sorted(documents):
-                file = documents[doc_id]
-                path = self.sources.path(file.sha, file.filename)
-                if path.is_file():
-                    check_contents(path, file.filename)
+            for message in self._unreadable(documents).values():
+                raise UnreadableFormat(message)
         sorted_ = self._sort(documents, categories, reuse=not remember, known=known, labels=labels)
         chosen = {doc_id: s.category for doc_id, s in sorted_.items()}
         graph, roles = self.graph(documents, chosen)

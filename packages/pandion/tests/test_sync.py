@@ -201,7 +201,7 @@ def test_hidden_files_and_folders_are_ignored(setup):
     assert report.added == ["guides/short.pdf", "report.pdf"]
 
 
-def test_a_failed_sync_keeps_the_last_manifest_and_index(setup):
+def test_a_broken_file_is_left_out_and_the_manifest_keeps_the_good_documents(setup):
     config, docs = setup
     first = sync(config, docs)
     before = manifest(config)
@@ -209,6 +209,7 @@ def test_a_failed_sync_keeps_the_last_manifest_and_index(setup):
 
     report = sync(config, docs)
 
-    assert not report.ok
+    assert report.ok and not report.complete
+    assert list(report.failed) == ["broken.pdf"]
     assert manifest(config) == before
     assert Pipeline.from_file(config).index.store.has(first.index.artifact_id)

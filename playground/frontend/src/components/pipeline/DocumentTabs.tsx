@@ -1,5 +1,6 @@
 import { useRef, type KeyboardEvent } from "react"
 
+import type { NodeStatus } from "@/api/runState"
 import { FileDot } from "@/components/FileTag"
 import type { FileInfo } from "@/lib/files"
 import { cn } from "@/lib/utils"
@@ -9,6 +10,16 @@ import { cn } from "@/lib/utils"
  * several documents. Every pane shares one choice, so the cards and the panes
  * all show the same file. With fewer than two files there is nothing to pick.
  */
+const STATUS_WORD: Partial<Record<NodeStatus, string>> = { done: "done", cached: "done", running: "running", failed: "failed", pending: "waiting" }
+/** The status dot's look, the same as the step cards' ring. */
+const DOT: Record<string, string> = {
+  pending: "border-field-border",
+  running: "border-primary/50 bg-primary/50",
+  done: "border-primary bg-primary",
+  cached: "border-primary bg-primary",
+  failed: "border-danger bg-danger",
+}
+
 /** The id of a tab, so the pane it controls can name it as its label. */
 export const tabIdOf = (panelId: string, sha: string) => `${panelId}-tab-${sha}`
 
@@ -18,6 +29,7 @@ export function DocumentTabs({
   onChange,
   note,
   panelId,
+  status,
 }: {
   files: readonly FileInfo[]
   value: string
@@ -26,6 +38,8 @@ export function DocumentTabs({
   note?: (sha: string) => string | null
   /** The id of the tabpanel these tabs control. */
   panelId?: string
+  /** Each document's run state, for a dot on its tab. */
+  status?: (sha: string) => NodeStatus | undefined
 }) {
   const refs = useRef<Record<string, HTMLButtonElement | null>>({})
   if (files.length < 2) return null
@@ -49,6 +63,7 @@ export function DocumentTabs({
       {files.map((f, i) => {
         const on = f.sha === value
         const line = note?.(f.sha)
+        const st = status?.(f.sha)
         return (
           <button
             key={f.sha}
@@ -61,7 +76,7 @@ export function DocumentTabs({
             aria-controls={panelId}
             aria-selected={on}
             tabIndex={on ? 0 : -1}
-            title={f.filename}
+            title={st ? `${f.filename}: ${STATUS_WORD[st] ?? st}` : f.filename}
             onClick={() => onChange(f.sha)}
             onKeyDown={(e) => move(e, i)}
             className={cn(
@@ -70,6 +85,7 @@ export function DocumentTabs({
             )}
           >
             <FileDot slot={f.slot} />
+            {st ? <span aria-hidden data-testid="tab-status" data-status={st} className={cn("size-[7px] shrink-0 rounded-full border", DOT[st] ?? DOT.pending)} /> : null}
             <span className="truncate">{f.filename}</span>
             {line ? <span className="text-xs text-fg-muted">{line}</span> : null}
           </button>

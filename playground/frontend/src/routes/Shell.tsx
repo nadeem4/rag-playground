@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExtern
 
 import { keyMissing, keyNeedFor, missingKeySteps, needsKey, useApiKey, withArticle } from "@/api/apiKey"
 import { v2 } from "@/api/v2"
-import { forDocument, type NodeState } from "@/api/runState"
+import { docStatusOf, forDocument, type NodeState, type NodeStatus } from "@/api/runState"
 import type { GraphNode, LlmProvider, LlmSettings, Registry } from "@/api/types"
 import { routeChecksOf } from "@/api/types"
 import { loadPayload, useArtifactPayload } from "@/api/useArtifact"
@@ -245,6 +245,10 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
     files,
     value: shownDoc?.sha ?? "",
     onChange: setShownSha,
+    status: (sha) => {
+      const f = fileOf(files, sha)
+      return f ? docStatusOf(results, f.filename, sha) : undefined
+    },
     note: categoried ? (sha) => (sorted[sha] ? lineOf(categoryName(sorted[sha].category), sorted[sha].reason) : null) : undefined,
     menu:
       (categoried || pipelineDocs.length > 1) && shownDoc ? <CategoryMenu categories={categories} value={currentCategory} onMove={moveShown} onNew={() => setNaming(true)} /> : undefined,
@@ -902,6 +906,8 @@ interface DocTabs {
   files: FileInfo[]
   value: string
   onChange: (sha: string) => void
+  /** Each tab's run state, for its status dot. */
+  status?: (sha: string) => NodeStatus | undefined
   /** Each tab's category line, when the pipeline has categories. */
   note?: (sha: string) => string | null
   /** The Category menu for the document on show. */
@@ -1075,7 +1081,7 @@ function CardInspector({
       <div data-testid="main-scroll" className={cn("p-3 md:min-h-0 md:flex-1 md:overflow-y-auto", roomForButton && "pb-[72px]")}>
         {tabbed ? (
           <div className="mb-3 empty:hidden">
-            <DocumentTabs files={tabs.files} value={tabs.value} onChange={tabs.onChange} note={tabs.note} panelId={panelId} />
+            <DocumentTabs files={tabs.files} value={tabs.value} onChange={tabs.onChange} note={tabs.note} status={tabs.status} panelId={panelId} />
             {tabs.files.length > 1 ? tabs.menu : null}
           </div>
         ) : null}

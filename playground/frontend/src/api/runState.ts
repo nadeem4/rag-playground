@@ -328,7 +328,35 @@ export function forDocument(results: Record<string, NodeState>, filename: string
     if (!name) continue
     const own = node.documents![name]
     if (out === results) out = { ...results }
-    out[id] = { ...node, artifact_id: own.artifact_id, cache_hit: own.cache_hit, duration_ms: own.duration_ms, started_at: own.started_at }
+    out[id] = { ...node, status: own.status, error: own.error, artifact_id: own.artifact_id, cache_hit: own.cache_hit, duration_ms: own.duration_ms, started_at: own.started_at }
   }
   return out
+}
+
+/** How many of a step's documents are done, running, waiting or failed, and who failed. */
+export function docCounts(node: NodeState) {
+  const c = { total: 0, done: 0, running: 0, waiting: 0, failed: 0, failedNames: [] as string[] }
+  for (const [name, d] of Object.entries(node.documents ?? {})) {
+    c.total++
+    if (d.status === "done" || d.status === "cached") c.done++
+    else if (d.status === "running") c.running++
+    else if (d.status === "failed") {
+      c.failed++
+      c.failedNames.push(name)
+    } else c.waiting++
+  }
+  return c
+}
+
+/** One document's state across every step: failed, else running, else done when every step is, else pending. */
+export function docStatusOf(results: Record<string, NodeState>, filename: string, sha?: string): NodeStatus | undefined {
+  const all: NodeStatus[] = []
+  for (const node of Object.values(results)) {
+    const name = node.documents ? Object.keys(node.documents).find((n) => runsAs(filename, n, sha)) : undefined
+    if (name) all.push(node.documents![name].status)
+  }
+  if (!all.length) return undefined
+  if (all.includes("failed")) return "failed"
+  if (all.includes("running")) return "running"
+  return all.every((s) => s === "done" || s === "cached") ? "done" : "pending"
 }

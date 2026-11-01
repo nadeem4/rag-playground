@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
 
 import fixtureEvents from "./fixtures/run_events.json"
-import { cardEvent, forDocument, initialRunState, reduceEvents, runReducer, runsAs } from "./runState"
+import type { NodeStatus } from "./runState"
+import { cardEvent, docCounts, docStatusOf, forDocument, initialRunState, reduceEvents, runReducer, runsAs } from "./runState"
 import type { RunEvent } from "./types"
 import { cardOfStepIn } from "@/state/config"
 import { addCleaner, initialGraph, removeNode } from "@/state/graph"
@@ -288,5 +289,32 @@ describe("a run over several documents", () => {
     expect(runsAs("chunking-primer.pdf", `${"3b".repeat(32)}.pdf`, sha)).toBe(false)
     const nodes = { parse: { id: "parse", status: "done" as const, artifact_id: "p2", documents: { [`${sha}.pdf`]: { status: "done" as const, artifact_id: "p1" }, "b.pdf": { status: "done" as const, artifact_id: "p2" } } } }
     expect(forDocument(nodes, "chunking-primer.pdf", sha).parse.artifact_id).toBe("p1")
+  })
+
+  it("copies a document's own status and error onto the step", () => {
+    const state = reduceEvents([
+      started,
+      step("node_finished", "parse", "manual.pdf", { artifact_id: "p1" }),
+      step("node_failed", "parse", "faq.md", { error: "faq.md could not be read" }),
+    ])
+    const nodes = state.variants[0].nodes
+    expect(forDocument(nodes, "manual.pdf").parse.status).toBe("done")
+    expect(forDocument(nodes, "faq.md").parse).toMatchObject({ status: "failed", error: "faq.md could not be read" })
+  })
+
+  const doc = (status: NodeStatus, error?: string) => ({ status, error })
+  const three = { id: "parse", status: "running" as const, documents: { "a.pdf": doc("done"), "b.pdf": doc("cached"), "c.pdf": doc("running"), "d.pdf": doc("pending"), "e.pdf": doc("failed", "x") } }
+
+  it("counts a step's documents as done, running, waiting and failed", () => {
+    expect(docCounts(three)).toEqual({ total: 5, done: 2, running: 1, waiting: 1, failed: 1, failedNames: ["e.pdf"] })
+    expect(docCounts({ id: "x", status: "done" })).toEqual({ total: 0, done: 0, running: 0, waiting: 0, failed: 0, failedNames: [] })
+  })
+
+  it("gives one document's status across all steps, the worst first", () => {
+    const nodes = { parse: three, clean: { id: "clean", status: "pending" as const, documents: { "a.pdf": doc("pending"), "c.pdf": doc("done") } } }
+    expect(docStatusOf(nodes, "a.pdf")).toBe("pending")
+    expect(docStatusOf(nodes, "c.pdf")).toBe("running")
+    expect(docStatusOf(nodes, "e.pdf")).toBe("failed")
+    expect(docStatusOf(nodes, "zzz.pdf")).toBeUndefined()
   })
 })

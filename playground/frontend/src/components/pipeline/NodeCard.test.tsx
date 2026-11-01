@@ -811,3 +811,24 @@ describe("the category a step card shows", () => {
     expect(screen.getByRole("article").querySelector("[data-category]")).toBeNull()
   })
 })
+
+describe("NodeCard documents line", () => {
+  const withDocs = (documents: NodeState["documents"]): NodeState => ({ id: "chunk", status: "running", documents })
+  const d = (status: "done" | "running" | "pending" | "failed") => ({ status })
+
+  it("says nothing new for one document", () => {
+    renderCard({ result: withDocs({ "a.pdf": d("done") }) })
+    expect(screen.queryByTestId("doc-progress")).toBeNull()
+  })
+
+  it("counts the documents of a step with three", () => {
+    renderCard({ result: withDocs({ "a.pdf": d("done"), "b.pdf": d("done"), "c.pdf": d("running") }) })
+    expect(screen.getByTestId("doc-progress").textContent).toBe("2 of 3 documents done, 1 running")
+  })
+
+  it("names the failed documents", () => {
+    renderCard({ result: withDocs({ "a.pdf": d("done"), "b.pdf": d("failed"), "c.pdf": d("pending") }) })
+    expect(screen.getByTestId("doc-progress").textContent).toBe("1 of 3 documents done, 1 waiting, 1 failed")
+    expect(screen.getByTestId("doc-failed").textContent).toBe("Failed: b.pdf")
+  })
+})

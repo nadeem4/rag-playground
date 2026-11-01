@@ -568,3 +568,31 @@ class FakeResponse:
 
     def close(self) -> None:
         pass
+
+
+# --- GitHub file links --------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://github.com/o/r/blob/main/docs/a.md", "https://raw.githubusercontent.com/o/r/main/docs/a.md"),
+        ("https://github.com/o/r/blob/v1.0/a.md?plain=1#L10", "https://raw.githubusercontent.com/o/r/v1.0/a.md"),
+        ("https://www.github.com/o/r/blob/main/a.md", "https://raw.githubusercontent.com/o/r/main/a.md"),
+        ("https://github.com/o/r", "https://github.com/o/r"),
+        ("https://github.com/o/r/tree/main/docs", "https://github.com/o/r/tree/main/docs"),
+        ("https://github.com/o/r/issues/1", "https://github.com/o/r/issues/1"),
+        ("https://example.com/o/r/blob/main/a.md", "https://example.com/o/r/blob/main/a.md"),
+    ],
+)
+def test_a_github_file_link_becomes_the_raw_file_link(url, expected):
+    assert fetch._raw_github(url) == expected
+
+
+def test_public_only_checks_the_raw_github_host(resolve):
+    resolve.table["raw.githubusercontent.com"] = [[PRIVATE_V4]]
+
+    message = refused("https://github.com/o/r/blob/main/a.md", public_only=True)
+
+    assert message == "That address is not on the public internet, so it was not fetched."
+    assert resolve.asked == ["raw.githubusercontent.com"]

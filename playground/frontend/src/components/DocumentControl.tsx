@@ -12,6 +12,7 @@ import {
   chooseDocument,
   documentBusy,
   loadSampleDocument,
+  refetchLink,
   refreshUploads,
   setDocumentMenuOpen,
   takeDocumentMenuOpener,
@@ -89,6 +90,9 @@ export function DocumentControl({
   const [pickError, setPickError] = useState<string | null>(null)
 
   const missing = status === "missing"
+  // A link document is fetched again, so its note says that, and offers "Fetch again" when the fetch was refused.
+  const linked = missing && !own && doc?.url ? doc : null
+  const refused = linked ? store.refused.has(linked.sha) : false
   // While an upload, a sample or a pick is in flight, every other choice waits, so two cannot race.
   const waiting = loading !== null || busy !== null || sampleLoading !== null
   const empty = !doc
@@ -98,7 +102,9 @@ export function DocumentControl({
     : adding
       ? `Add a file or link. This pipeline reads ${count} ${count === 1 ? "document" : "documents"}.`
       : missing
-        ? `Document ${doc?.filename} is missing. Pick another or upload it again.`
+        ? linked
+          ? `Document ${doc?.filename} is missing. ${refused ? "Fetch it again or pick another." : "Fetching it again."}`
+          : `Document ${doc?.filename} is missing. Pick another or upload it again.`
         : empty
           ? "Pick a file or link"
           : `${label} the document. Now ${doc.filename}.`
@@ -192,7 +198,18 @@ export function DocumentControl({
             }}
             className="menu-drop z-50 flex max-h-[min(560px,calc(100dvh-96px))] w-[min(360px,calc(100vw-32px))] flex-col gap-1 overflow-y-auto rounded-panel border border-hairline bg-surface-raised p-2 text-fg shadow-sheet"
           >
-            {missing ? (
+            {linked ? (
+              <p role="status" className="flex items-center justify-between gap-2 rounded-control bg-stale-wash p-2 text-xs text-stale">
+                <span>
+                  {doc?.filename} is no longer on {demo ? "the demo" : "this machine"}. {refused ? store.refused.get(linked.sha) || "Fetch it again, or pick another document." : "Fetching it again."}
+                </span>
+                {refused ? (
+                  <button type="button" className="shrink-0 rounded-control border border-stale px-2 py-1 font-medium" onClick={() => void refetchLink(linked)}>
+                    Fetch again
+                  </button>
+                ) : null}
+              </p>
+            ) : missing ? (
               <p role="status" className="rounded-control bg-stale-wash p-2 text-xs text-stale">
                 {doc?.filename} is no longer on {demo ? "the demo" : "this machine"}. Upload it again, or pick a sample.
               </p>

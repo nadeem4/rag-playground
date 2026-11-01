@@ -12,7 +12,7 @@ import { asIncoming, MAX_PIPELINES, type SavedPipeline } from "./pipelines"
  * one's document, and the export file's shape.
  */
 
-export type DocRef = { sha: string; filename: string }
+export type DocRef = { sha: string; filename: string; url?: string }
 
 export type LibraryItem =
   | { kind: "pipeline"; id: string; name: string; savedAt: string; documents: DocRef[]; pipeline: SavedPipeline }

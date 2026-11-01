@@ -5,7 +5,7 @@ import type { Registry } from "@/api/types"
 import { columnOf, goldsOf, graphToConfig, isConfigShape, otherSource, sameConfig, servedConfig, unknownStrategy, type AskQuestion, type Into, type PipelineConfig } from "./config"
 import { documentsOf, sameDocuments, withDocuments, type DocRef } from "./document"
 import type { PipelineGraph } from "./graph"
-import { docsOfSource } from "./sourceDocs"
+import { docsOfSource, refOf } from "./sourceDocs"
 
 /**
  * Form 2 of the owner's two: saved pipelines, named copies of the pipeline on
@@ -86,7 +86,7 @@ const isDocRef = (d: unknown): d is DocRef =>
 /** A document keeps its category only when it is text: that is its pin. */
 const docList = (listed: unknown): DocRef[] | null =>
   Array.isArray(listed) && listed.every(isDocRef)
-    ? listed.map(({ sha, filename, category }) => ({ sha, filename, ...(typeof category === "string" && category ? { category } : {}) }))
+    ? listed.map(refOf)
     : null
 
 /** One item of the old list or of an old export file, converted, or kept with the reason. Never null. */
@@ -297,7 +297,7 @@ export function followSample(oldSha: string, now: DocRef): void {
   const has = (p: SavedPipeline) => p.documents.some((d) => d.sha === oldSha)
   if (!list.some(has)) return
   // A pipeline that already held the current copy too keeps it once, where it first stands.
-  const swapped = (p: SavedPipeline) => docsOfSource({ documents: p.documents.map((d) => (d.sha === oldSha ? { ...now } : d)) })
+  const swapped = (p: SavedPipeline) => docsOfSource({ documents: p.documents.map((d) => (d.sha === oldSha ? { ...d, sha: now.sha, filename: now.filename } : d)) })
   persist(list.map((p) => (has(p) ? { ...p, documents: swapped(p) } : p)))
 }
 

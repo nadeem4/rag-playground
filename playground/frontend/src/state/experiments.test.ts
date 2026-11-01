@@ -45,6 +45,14 @@ describe("experiments", () => {
     expect(experimentDocuments({ ...one, doc: null })).toEqual([])
   })
 
+  it("keeps a document's link, and its pin", () => {
+    const linked = { sha: "cd".repeat(32), filename: "page.html", url: "https://example.com/page", category: "text" }
+    const other = { sha: "ab".repeat(32), filename: "field-guide.docx", url: "https://example.com/g" }
+    const { saved } = saveExperiment("Linked", { stage: "chunk", recipes, doc: linked, docs: [linked, other] })!
+    expect(saved.doc).toEqual(linked)
+    expect(experimentDocuments(readExperiments()[0])).toEqual([linked, other])
+  })
+
   it("leaves out an entry whose documents are not documents", () => {
     const { saved } = saveExperiment("A", { stage: "chunk", recipes, doc })!
     window.localStorage.setItem("rag-playground:experiments:v1", JSON.stringify([saved, { ...saved, id: "bad", docs: [{ sha: 1 }] }]))

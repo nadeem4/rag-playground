@@ -440,6 +440,7 @@ describe("DocumentControl", () => {
     expect(document.activeElement).toBe(box)
     await act(async () => releaseLink())
     await waitFor(() => expect(documentOf(readStoredGraph(registry))?.sha).toBe(LINK.sha))
+    expect(documentOf(readStoredGraph(registry))?.url).toBe(LINK.origin_url)
   })
 })
 

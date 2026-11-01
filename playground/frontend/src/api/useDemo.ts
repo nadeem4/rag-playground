@@ -47,6 +47,8 @@ export function useAppSettings(): AppSettings | null {
  * Is this a hosted demo (`GET /api/settings/app`)? False until the answer
  * arrives, and false if it cannot be read.
  */
+export const isDemo = (): Promise<boolean> => appSettings().then((s) => s.demo === true, () => false)
+
 export function useDemo(): boolean {
   return useAppSettings()?.demo === true
 }

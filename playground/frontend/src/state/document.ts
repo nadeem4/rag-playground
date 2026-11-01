@@ -192,7 +192,7 @@ function recoverStaleSample(): void {
   const docs = working?.documents ?? []
   const swaps = docs.flatMap((d) => {
     const card = staleSample(d, state.sources, state.samples, state.known)
-    return card ? [{ old: d, now: { sha: card.sha, filename: card.filename } }] : []
+    return card ? [{ old: d, now: { ...d, sha: card.sha, filename: card.filename } }] : []
   })
   if (!working || !swaps.length) return
   const names = swaps.map((x) => x.now.filename)
@@ -224,7 +224,7 @@ function recoverStaleSample(): void {
     })
 }
 
-const fetching = new Set<string>()
+let fetching = new Set<string>()
 
 /**
  * Fetch a link document again (`POST /api/v2/documents/url`) and swap its new
@@ -271,10 +271,12 @@ export async function refetchLink(doc: DocRef): Promise<boolean> {
 async function recoverLinks(): Promise<void> {
   const gone = () =>
     (readWorking()?.documents ?? []).filter(
-      (d) => d.url && !state.refused.has(d.sha) && docStatus(d, state.sources, state.samples, state.samplesFailed, state.known) === "missing",
+      (d) => d.url && !state.refused.has(d.sha) && !fetching.has(d.sha) && docStatus(d, state.sources, state.samples, state.samplesFailed, state.known) === "missing",
     )
   if (!gone().length) return
+  const gen = generation
   const demo = await isDemo()
+  if (gen !== generation) return
   // Looked at again: another call may have fetched some while this one waited.
   for (const d of gone()) {
     if (demo) void refetchLink(d)
@@ -538,7 +540,7 @@ export function useHasPages(): (sha: string) => boolean {
 /** Tests only: forget the lists, the files chosen and the menu, and fetch again on the next subscriber. */
 export function resetDocumentForTests(): void {
   generation += 1
-  fetching.clear()
+  fetching = new Set()
   started = false
   recovering = false
   unwatchGraph?.()

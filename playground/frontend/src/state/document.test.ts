@@ -12,6 +12,7 @@ import {
   documentOf,
   documentsOf,
   loadSampleDocument,
+  refreshUploads,
   refetchLink,
   removeDocument,
   resetDocumentForTests,
@@ -48,6 +49,7 @@ beforeEach(() => {
   window.localStorage.clear()
   resetStoredGraphForTests()
   resetDocumentForTests()
+  resetAppSettingsForTests()
   resetPipelinesForTests()
   registryFails = false
   posts = []
@@ -326,6 +328,18 @@ describe("a sample saved with an old fingerprint", () => {
     expect(isEdited(p, readStoredGraph(registry)!)).toBe(false)
   })
 
+  it("keeps a sample's category pin when it recovers, so the saved pipeline is not edited", async () => {
+    const pinned = { ...ref(OLD, "chunking-primer.pdf"), category: "text" }
+    const opened = withDocument(sampleGraph(registry, ref(OLD, "chunking-primer.pdf")), pinned)
+    const { saved } = savePipeline("Pinned", opened)!
+    storeGraph(opened)
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.recoveredNote).toBe(NOTE))
+    const p = readPipelines().find((x) => x.id === saved.id)!
+    expect(p.documents).toEqual([{ ...ref(SAMPLE_SHA, "chunking-primer.pdf"), category: "text" }])
+    expect(isEdited(p, readStoredGraph(registry)!)).toBe(false)
+  })
+
   it.each([
     ["first", (stale: { sha: string; filename: string }, other: { sha: string; filename: string }) => [stale, other]],
     ["second", (stale: { sha: string; filename: string }, other: { sha: string; filename: string }) => [other, stale]],
@@ -445,6 +459,38 @@ describe("a link document whose stored copy is gone", () => {
     await act(async () => void (await refetchLink(LINKED)))
     await waitFor(() => expect(result.current.doc?.sha).toBe(NEW))
     expect(refetches).toHaveLength(1)
+  })
+
+  it("does not offer Fetch again while a click-started fetch is in flight", async () => {
+    demo = false
+    let release: () => void = () => {}
+    const base = fetch as unknown as (url: string, init?: RequestInit) => Promise<Response>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === "/api/v2/documents/url") {
+          refetches.push(1)
+          await new Promise<void>((r) => (release = r))
+          return new Response(JSON.stringify(FETCHED), { status: 200 })
+        }
+        return base(url, init)
+      }),
+    )
+    const { result } = renderHook(() => useDocument())
+    await waitFor(() => expect(result.current.refused.has(OLD)).toBe(true))
+    let done: Promise<boolean> = Promise.resolve(false)
+    act(() => void (done = refetchLink(LINKED)))
+    expect(result.current.refused.has(OLD)).toBe(false)
+    await act(async () => {
+      refreshUploads()
+      await new Promise((r) => setTimeout(r, 20))
+    })
+    expect(result.current.refused.has(OLD)).toBe(false)
+    await act(async () => {
+      release()
+      await done
+    })
+    await waitFor(() => expect(result.current.doc?.sha).toBe(NEW))
   })
 
   it("keeps the server's sentence when a fetch is refused", async () => {

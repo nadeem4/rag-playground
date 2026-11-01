@@ -688,6 +688,10 @@ that category, and its `metadata` labels if it has any. It also records a hash o
 index settings and the id of the index. `sync` takes `metadata` (labels by document id)
 and `categories` (a document id to a category name) for the new files it finds.
 
+The manifest also records a `format_version`. Pandion reads an older manifest as it is and
+never rewrites your file just to change it. If the manifest was written by a newer Pandion,
+Pandion refuses to read it and tells you to upgrade pandion.
+
 A document keeps its category, reason and labels until you move it. Its checks do not run
 again, even when its bytes change. `metadata` is used only for new documents, and
 `categories` naming a document that is already in the manifest raises a `ValueError` that

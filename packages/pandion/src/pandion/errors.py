@@ -12,6 +12,10 @@ import importlib
 from types import ModuleType
 
 
+class FormatTooNew(ValueError):
+    """A file was written by a newer pandion than this one."""
+
+
 class MissingExtra(ImportError):
     """A step needs a package that was not installed with pandion."""
 

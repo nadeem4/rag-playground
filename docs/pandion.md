@@ -37,6 +37,7 @@ installs the built package in new environments, with and without extras, and tes
 - [Models](#models)
 - [Install what a file needs](#install-what-a-file-needs)
 - [The pandion command](#the-pandion-command)
+- [Index stores](#index-stores)
 - [Write your own strategy](#write-your-own-strategy)
 - [Loading your strategies](#loading-your-strategies)
 - [Errors](#errors)
@@ -2088,6 +2089,42 @@ The command exits with 0 when it is done, 1 when a step failed (the line for tha
 says why) or `pandion eval --baseline` found more newly missed questions than `--allow`,
 and 2 when the file, a flag or the baseline file is wrong (the message starts with
 `pandion: `).
+
+## Index stores
+
+An index store is the place where an index keeps its rows. Pandion defines one contract, `IndexStore` and `Collection`, and you can write a store for the database your team already runs. This contract is **Stable**, and so is `register_store`. The memory store that comes with Pandion is the reference, and LanceDB and Qdrant move onto the contract in later releases.
+
+A row (`IndexRow`) holds an id, the document id and version, the text, the vector, the `roles` that may see it, some metadata, and the chunk as JSON. A row with an empty `roles` list is visible to nobody. A search takes a filter built from `Eq`, `In`, `AnyOf` and `And`, and the store must apply it before it ranks. Roles use `AnyOf("roles", (...))`, so every store must support `any_of`.
+
+A store says what it can do in `Capabilities`: whether it can change one document at a time, whether it has text search, which filters it has, and which metrics it has. Pandion refuses a pairing the store cannot serve. A store with no text search cannot be used with BM25 or hybrid retrieval.
+
+```python
+from pydantic import BaseModel
+from pandion.extend import register_store
+
+
+class MySettings(BaseModel):
+    url: str = "http://localhost:6333"
+
+
+@register_store
+class MyStore:
+    name = "mine"
+    settings_model = MySettings
+
+    def __init__(self, settings: MySettings): ...
+    # capabilities, create, open, drop and list, as in pandion.index_store.IndexStore
+```
+
+Prove your store with the conformance suite, the same one the memory store passes. It includes the check that a row with no roles is never returned.
+
+```python
+from pandion.testing import store_conformance
+
+store_conformance(lambda: MyStore(MySettings()))
+```
+
+`pandion plugins` lists every store, with the kind `store`.
 
 ## Write your own strategy
 

@@ -155,4 +155,8 @@ def plugin_listing() -> list[dict[str, str]]:
         rows.append(
             {"kind": "route check", "name": name, "module": check.fn.__module__, "level": "stable"}
         )
+    from pandion.index_store import store_class, store_names
+
+    for name in store_names():
+        rows.append({"kind": "store", "name": name, "module": store_class(name).__module__, "level": "stable"})
     return rows

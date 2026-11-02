@@ -479,6 +479,8 @@ nothing.
 The memory routes work even while `ServeSettings.chat.memory` is off, so a user can still
 see and delete memories kept while it was on.
 
+Answers are made safer by Pandion, not by the route: sources are fenced in the prompt, and a reply's links and images are removed unless a source holds the same address. The `token` event, the JSON reply and the stored turn all carry the cleaned text. Even so, a client should not load images or follow links in answers automatically. See [Answer safety](pandion.md#answer-safety).
+
 ### GET /health and GET /ready
 
 `GET /health` says `{"status": "ok"}` and names no version. `GET /ready` is `200

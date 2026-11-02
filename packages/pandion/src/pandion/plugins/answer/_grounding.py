@@ -30,6 +30,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Sequence
 
+from pandion.answer_safety import fence_text, new_marker
 from pandion.text import split_sentences
 
 #: One marker, and a run of adjacent markers (spaces allowed between them).
@@ -66,17 +67,23 @@ class GroundedClaim:
     citations: list[tuple[str, float]] = field(default_factory=list)
 
 
-def number_sources(chunks: Sequence[Any]) -> tuple[str, dict[str, Sentence]]:
-    """The prompt block and the id table. `chunks` need only a `.text`."""
+def number_sources(chunks: Sequence[Any], marker: str | None = None) -> tuple[str, dict[str, Sentence]]:
+    """The prompt block and the id table. `chunks` need only a `.text`.
+
+    Each source sits inside a fence with a random marker (`answer_safety`), so
+    text in a document cannot pose as the prompt. The ids and the table are
+    the same as without the fence.
+    """
+    marker = marker or new_marker()
     table: dict[str, Sentence] = {}
     blocks: list[str] = []
     for c, chunk in enumerate(chunks, start=1):
-        lines = [f"Source {c}:"]
+        lines = []
         for s, (start, end) in enumerate(split_sentences(chunk.text), start=1):
             sid = f"{c}.{s}"
             table[sid] = Sentence(c - 1, start, end, chunk.text[start:end])
             lines.append(f"[{sid}] {' '.join(chunk.text[start:end].split())}")
-        blocks.append("\n".join(lines))
+        blocks.append(fence_text("\n".join(lines), marker, f"Source {c}"))
     return "\n\n".join(blocks), table
 
 

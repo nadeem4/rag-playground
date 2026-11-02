@@ -71,8 +71,8 @@ def test_the_port_server_stops_at_shutdown(tmp_path):
     port = free_port()
     with client(tmp_path, metrics_port=port):
         scrape(port)
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", port))  # free again
+    with pytest.raises(OSError):  # nothing listens any more; binding is not a test, TIME_WAIT keeps it busy on Linux
+        socket.create_connection(("127.0.0.1", port), timeout=2).close()
 
 
 def test_missing_extra_names_pandion_api_metrics(tmp_path, monkeypatch):

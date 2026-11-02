@@ -77,3 +77,17 @@ def test_configure_logging_twice_adds_one_handler(lines):
     configure_logging()
     ours = [h for h in logging.getLogger("pandion_api").handlers if isinstance(h.formatter, JsonFormatter)]
     assert len(ours) == 1
+
+
+def test_configure_logging_keeps_propagation_and_respects_existing_handlers():
+    logger = logging.getLogger("pandion_api")
+    saved, prop = logger.handlers[:], logger.propagate
+    try:
+        logger.handlers[:] = [logging.NullHandler()]
+        configure_logging()
+        assert not any(isinstance(h.formatter, JsonFormatter) for h in logger.handlers)
+        logger.handlers.clear()
+        configure_logging()
+        assert logger.propagate is True
+    finally:
+        logger.handlers[:], logger.propagate = saved, prop

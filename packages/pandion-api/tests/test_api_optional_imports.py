@@ -5,7 +5,8 @@ import sys
 
 import pytest
 
-from pandion_api.observability import MissingExtra, setup_tracing
+from pandion.extend import MissingExtra
+from pandion_api.observability import setup_tracing
 
 
 def test_no_endpoint_means_no_tracer_and_no_otel_import():

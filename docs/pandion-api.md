@@ -474,9 +474,9 @@ Serve mode writes one JSON object per line to standard error. Each line has `ts`
 | One per request | `route` (the route template, never the raw path), `method`, `status`, `duration_ms` |
 | One per finished or failed step | `stage`, `duration_ms`, `usage` (model and token counts) |
 | One per failure | `exc` (the traceback) |
-| One per answered turn | `question` and `answer`, only when `PANDION_LOG_CONTENT=true` |
+| One per answered turn | `Chat turn answered.` is always logged. Its `question` and `answer` fields are added only when `PANDION_LOG_CONTENT=true` |
 
-Text a user wrote or an answer gave is never logged unless you set `PANDION_LOG_CONTENT=true`.
+The server adds its JSON handler to the `pandion_api` logger only if that logger has no handler yet, so your own logging setup wins. Records still reach the root logger. Text a user wrote or an answer gave is never logged unless you set `PANDION_LOG_CONTENT=true`.
 
 Every response has an `X-Trace-Id` header. The server makes the id for each request and never
 trusts one the client sends. The same id is in the `done` event, the error sentence, the stored

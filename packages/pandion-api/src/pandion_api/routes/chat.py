@@ -148,7 +148,13 @@ async def chat(body: ChatIn, request: Request):
             if spans:
                 spans.finish(ok)
 
-    state = app.runs.get(start(request, "chat", traced)["run_id"])
+    try:
+        started = start(request, "chat", traced)
+    except BaseException:  # refused (429): the turn never ran, so end its span
+        if spans:
+            spans.finish(False)
+        raise
+    state = app.runs.get(started["run_id"])
     if not body.stream:
         await state.task
         if isinstance(state.result, dict) and state.result.get("not_found"):

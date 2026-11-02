@@ -16,16 +16,15 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
+import threading
 from typing import Any
+
+from pandion.extend import MissingExtra
 
 #: Attributes every LogRecord has; anything else on a record came from `extra=`.
 _STANDARD = set(vars(logging.LogRecord("", 0, "", 0, "", (), None))) | {"message", "asctime"}
 
 logger = logging.getLogger("pandion_api")
-
-
-class MissingExtra(ImportError):
-    """The OpenTelemetry extra is not installed."""
 
 
 def log_content() -> bool:
@@ -56,14 +55,15 @@ class JsonFormatter(logging.Formatter):
 
 
 def configure_logging(stream: Any = None) -> None:
-    """Send the `pandion_api` loggers to `stream` (stderr) as JSON, once."""
-    if any(isinstance(h.formatter, JsonFormatter) for h in logger.handlers):
+    """Send the `pandion_api` loggers to `stream` (stderr) as JSON, once. If the
+    logger already has a handler (yours, or an earlier call's), nothing is
+    added, and records still propagate to the root logger."""
+    if logger.handlers:
         return
     handler = logging.StreamHandler(stream)
     handler.setFormatter(JsonFormatter())
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
-    logger.propagate = False
 
 
 def log_event(e: dict[str, Any], conversation_id: str | None = None) -> None:
@@ -161,18 +161,25 @@ class TurnSpans:
         self._context = trace.set_span_in_context(self._root)
         self._failed = False
         self._open = True
+        self._lock = threading.Lock()
 
     def on_event(self, e: dict[str, Any]) -> None:
         kind = e.get("event")
-        if kind not in ("node_finished", "node_failed") or not self._open:
+        if kind not in ("node_finished", "node_failed"):
             return
+        with self._lock:  # a child span must not end after its root
+            if self._open:
+                self._step(kind, e)
+
+    def _step(self, kind: str, e: dict[str, Any]) -> None:
         end = float(e.get("ts") or time.time())
         start = end - float(e.get("duration_ms") or 0) / 1000
         span = self._tracer.start_span(str(e.get("stage")), context=self._context, start_time=int(start * 1e9))
         usage = e.get("usage")
         if usage:
             span.set_attribute("gen_ai.operation.name", "chat")
-            span.set_attribute("gen_ai.request.model", str(usage.get("model")))
+            if usage.get("model"):
+                span.set_attribute("gen_ai.request.model", str(usage["model"]))
             span.set_attribute("gen_ai.usage.input_tokens", usage.get("input_tokens") or 0)
             span.set_attribute("gen_ai.usage.output_tokens", usage.get("output_tokens") or 0)
         if kind == "node_failed":
@@ -182,9 +189,10 @@ class TurnSpans:
 
     def finish(self, ok: bool) -> None:
         """End the root span. A second call does nothing."""
-        if not self._open:
-            return
-        self._open = False
-        if not ok or self._failed:
-            self._root.set_status(self._trace.Status(self._trace.StatusCode.ERROR))
-        self._root.end()
+        with self._lock:
+            if not self._open:
+                return
+            self._open = False
+            if not ok or self._failed:
+                self._root.set_status(self._trace.Status(self._trace.StatusCode.ERROR))
+            self._root.end()

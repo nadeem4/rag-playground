@@ -8,6 +8,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
 
+from pandion_api import Policy
 from pandion_api.observability import TurnSpans
 from test_api_chat import StubPipeline, rewrites, say, serve  # noqa: F401
 
@@ -89,6 +90,27 @@ def test_a_chat_request_exports_spans_under_its_trace_id(exporter, tmp_path, rew
     [root] = exporter.get_finished_spans()
     assert format(root.context.trace_id, "032x") == r.headers["x-trace-id"]
     assert root.status.status_code != StatusCode.ERROR
+
+
+def test_a_refused_start_ends_the_root_span(exporter, tmp_path, rewrites):
+    class OneRun(Policy):
+        def run_owner(self, request):
+            return "me"
+
+        def max_runs_per_owner(self, request):
+            return 0
+
+    client = serve(tmp_path, StubPipeline(), policy=OneRun())
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    client.app.state.tracer = provider.get_tracer("t")
+    assert say(client).status_code == 429
+    assert [s.name for s in exporter.get_finished_spans()] == ["chat"]
+
+
+def test_a_usage_without_a_model_has_no_model_attribute(exporter):
+    step = [s for s in run(exporter, [finished("answer", {"input_tokens": 1, "output_tokens": 2})]) if s.name == "answer"][0]
+    assert "gen_ai.request.model" not in step.attributes
 
 
 def test_spans_end_even_when_the_client_disconnects(exporter):

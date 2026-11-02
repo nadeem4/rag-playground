@@ -57,3 +57,24 @@ def test_a_template_that_needs_a_key_is_refused():
 
     with pytest.raises(SystemExit, match="Chat answer needs an API key"):
         _load("run_pipeline").choose(("text", "chat"))
+
+
+def _upload(app, tmp_path):
+    pdf = EXAMPLE.parents[1] / "samples" / "chunking-primer" / "chunking-primer.pdf"
+    with TestClient(app) as client, pdf.open("rb") as f:
+        return client.post("/api/v2/documents", files={"file": (pdf.name, f, "application/pdf")})
+
+
+def test_policy_example_refuses_a_big_document(tmp_path):
+    app = _load("policy_example").make_app(tmp_path / "data", max_bytes=1000)
+
+    refused = _upload(app, tmp_path)
+
+    assert refused.status_code == 413
+    assert "1000" in refused.json()["detail"]
+
+
+def test_policy_example_accepts_a_small_document(tmp_path):
+    app = _load("policy_example").make_app(tmp_path / "data", max_bytes=50 * 1024 * 1024)
+
+    assert _upload(app, tmp_path).status_code == 200

@@ -5,7 +5,7 @@
     pandion index pipeline.yaml report.pdf notes/ [--sync] [--through chunk]
     pandion retrieve pipeline.yaml "What is chunking?" [--k 5] [--documents report.pdf]
     pandion ask pipeline.yaml "What is chunking?" [--documents report.pdf]
-    pandion eval pipeline.yaml questions.json [--documents report.pdf] [--top-k 5] [--json] [--baseline base.json [--allow 0]]
+    pandion eval pipeline.yaml questions.json [--documents report.pdf] [--top-k 5] [--json] [--baseline base.json [--allow 0] | --record-baseline base.json]
     pandion compare pipeline.yaml --vary chunk.chunk_size=200,400,800 notes/ [--questions questions.json] [--json]
     pandion install pipeline.yaml [--print]
     pandion init my-project [--index text --query balanced] [--questions questions.json] [--overwrite]
@@ -26,6 +26,7 @@ import re
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -329,13 +330,20 @@ def cost_line(cost: dict[str, Any]) -> str:
 def cmd_eval(args: argparse.Namespace) -> int:
     if args.allow is not None and args.baseline is None:
         raise ValueError("--allow counts newly missed questions against a baseline: add --baseline base.json.")
+    if args.record_baseline is not None and args.baseline is not None:
+        raise ValueError("--record-baseline writes a new baseline and --baseline compares with an old one: use one of them.")
     # Read the baseline before anything runs, so a wrong file costs nothing.
     baseline = pandion.evaluation.load_baseline(args.baseline) if args.baseline is not None else None
     p = _load(args)
+    env = pandion.evaluation.environment(p)
+    # A baseline from another platform or with other models is refused before any search is paid for.
+    env_notes = pandion.evaluation.check_environment(baseline, env) if baseline is not None else []
     report = pandion.evaluate(p, args.questions, args.top_k, documents=_documents(args), credentials=credentials_from_env())
     regression = report.against(baseline) if baseline is not None else None
+    if regression is not None:
+        regression.notes[:0] = env_notes
     if args.json:
-        data = {**report.to_dict(), "cost": report.cost()}
+        data = {**report.to_dict(), "cost": report.cost(), "environment": env}
         if regression is not None:
             data["regression"] = regression.to_dict()
         print(json.dumps(data, indent=2))
@@ -344,9 +352,17 @@ def cmd_eval(args: argparse.Namespace) -> int:
         print(cost_line(report.cost()))
         if regression is not None:
             print(regression)
+            allow = args.allow or 0
+            for name in regression.failed_categories(allow):
+                print(f'Category "{name}" newly missed: {", ".join(regression.by_category[name]["newly_missed"])}.')
     if not all(q.error is None for q in report.questions):
         return 1
-    return 0 if regression is None or regression.ok(args.allow or 0) else 1
+    if args.record_baseline is not None:
+        path = Path(args.record_baseline)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({**report.to_dict(), "environment": env}, indent=2), encoding="utf-8")
+        print(f"Baseline recorded at {args.record_baseline} (platform {env['platform']}, {len(report.questions)} questions).")
+    return 0 if regression is None or regression.gate_ok(args.allow or 0) else 1
 
 
 def cmd_compare(args: argparse.Namespace) -> int:
@@ -526,7 +542,8 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--documents", nargs="+", help="evaluate on exactly these documents, indexing them first if needed")
     sub.add_argument("--json", action="store_true", help="print the report as JSON; save it as a baseline with --json > base.json")
     sub.add_argument("--baseline", help="a report saved with --json: say which questions this run newly missed or newly found")
-    sub.add_argument("--allow", type=int, help="with --baseline, how many newly missed questions still exit 0 (default 0)")
+    sub.add_argument("--allow", type=int, help="with --baseline, how many newly missed questions per category still exit 0 (default 0)")
+    sub.add_argument("--record-baseline", dest="record_baseline", metavar="PATH", help="write this run as a baseline, with its platform and models, to PATH")
 
     sub = command("compare", "run a pipeline once per value of one setting", cmd_compare)
     sub.add_argument("config")

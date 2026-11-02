@@ -1252,6 +1252,33 @@ The `Regression` it returns has these fields:
   same number of pieces. `notes` then says so in a plain sentence.
 - `notes` holds every plain sentence about the comparison, and `print(r)` prints them
   under the counts.
+- `by_category` holds, for each category, `compared`, `found_before`, `found_now`,
+  `newly_missed` and `newly_found`. A question's category is the name in its
+  `category:<name>` tag (`pandion.evaluation.category_of(question_dict)`), else
+  `uncategorized`. `r.gate_ok(allow=0)` is True when every category has at most `allow`
+  newly missed questions, and `r.failed_categories(allow=0)` names the ones that do not.
+  So a category that lost a question fails the gate even when the total went up.
+  `ok()` still counts the whole set. A named category with fewer than 10 questions adds
+  the note `The "billing" category has 4 questions, so its gate is weak.` Baselines saved
+  before categories existed still compare: categories are read from each question's `tags`.
+  `to_dict()` carries `by_category` and `gate_ok` beside its old keys.
+
+**Tag your questions by category.** Put `category:<name>` in a question's `tags`, and keep
+one file per category as a habit, such as `evals/billing.json` and `evals/returns.json`
+(then run `pandion eval` on a merged set, or one file at a time). About 10 questions per
+category or more makes a gate that one flipped question cannot decide.
+
+**Where a baseline was made.** `pandion.evaluation.environment(p)` gives
+`{"platform": "linux-x86_64", "models": [...], "pandion": "0.7.0"}`: the lower-case
+system and machine, every model id the pipeline uses (the embedder and each chat model;
+a custom or OpenRouter endpoint records the model name typed there), and the Pandion
+version. `pandion eval --record-baseline` stores it under `"environment"`.
+`check_environment(baseline, environment(p))` raises a `ValueError` when the platform or
+the models differ ("This baseline was recorded on linux-x86_64 with models X; this run is
+on windows-amd64 with models Y, so the comparison would not be fair. Re-record it here
+with --record-baseline, or run on the machine that recorded it."), returns a note when
+the baseline has no `environment` (an older file), and returns `[]` when they match. The
+Pandion version is recorded but never compared.
 - `ok(allow=0)` is True when at most `allow` questions were newly missed.
 
 Questions are paired by their `id`. A question the set gave no id (named by its place,
@@ -2139,7 +2166,7 @@ needed. Without it, `retrieve` and `ask` search the documents the last `pandion 
 indexed, so name every document each time you index. A pipeline whose source is not local
 files remembers nothing from one command to the next, so name the documents again.
 
-**`pandion eval FILE QUESTIONS [--top-k K] [--documents DOC...] [--json] [--baseline BASE [--allow N]]`** runs
+**`pandion eval FILE QUESTIONS [--top-k K] [--documents DOC...] [--json] [--baseline BASE [--allow N] | --record-baseline PATH]`** runs
 `pandion.evaluate` on a question set (JSON or CSV, as in
 [Evaluate a pipeline](#evaluate-a-pipeline)) and prints the report as Pandion prints it:
 one line per question, then the totals. `--top-k` is how many of the top pieces are
@@ -2159,16 +2186,30 @@ be scored.
 **`--baseline FILE [--allow N]`** compares the run with an earlier one, as
 [`against`](#compare-with-a-baseline) does, and prints one more line, such as
 "Found 8 of 12; the baseline found 9 of 12. Newly missed: q4, q7.", followed by any
-notes. It exits with 1 when more than `N` questions were newly missed (0 when `--allow`
-is left out). Save a baseline with `--json`; there is no other way to save one. The
-baseline file is checked before anything runs, and a missing one exits with 2. In CI:
+notes. It is a per-category gate: it exits with 1 when any category has more than `N`
+questions newly missed (0 when `--allow` is left out), and names each failed category and
+its newly missed ids, such as `Category "billing" newly missed: q4, q7.` A gain in one
+category does not pay for a loss in another. The baseline file is checked before anything
+runs, and a missing one exits with 2.
+
+**`--record-baseline PATH`** writes this run as a baseline: the report's `to_dict()` plus an
+`environment` block (platform, model ids, Pandion version), creating the folders in `PATH`,
+and prints `Baseline recorded at PATH (platform linux-x86_64, 12 questions).` It cannot be
+combined with `--baseline`, and it writes nothing and exits 1 when a question could not be
+scored. To re-record, run it again on purpose. With `--baseline`, a baseline made on
+another platform or with other models exits 2 before any search runs, with the sentence
+"This baseline was recorded on ...; this run is on ..., so the comparison would not be
+fair. Re-record it here with --record-baseline, or run on the machine that recorded it."
+A baseline with no `environment` (saved with `--json` before) still works and prints a note.
+There is no override flag. In CI:
 
 ```bash
-pandion eval pipeline.yaml questions.json --json > base.json      # once, on the main branch
+pandion eval pipeline.yaml questions.json --record-baseline base.json      # once, where CI runs
 pandion eval pipeline.yaml questions.json --baseline base.json --allow 1   # on every change
 ```
 
-With `--json`, the comparison is under `"regression"`.
+With `--json`, the comparison is under `"regression"` (with `by_category`) and the run's
+`environment` is under `"environment"`.
 
 **`pandion compare FILE --vary SPEC DOC... [--questions QUESTIONS] [--top-k K] [--json]`**
 runs `pandion.compare`: the pipeline once per value of one setting, indexing `DOC...`
@@ -2238,9 +2279,9 @@ A model's key comes from the environment, never from the file or a flag:
 printed.
 
 The command exits with 0 when it is done, 1 when a step failed (the line for that step
-says why) or `pandion eval --baseline` found more newly missed questions than `--allow`,
-and 2 when the file, a flag or the baseline file is wrong (the message starts with
-`pandion: `).
+says why) or `pandion eval --baseline` found a category with more newly missed questions than `--allow`,
+and 2 when the file, a flag or the baseline file is wrong, or the baseline was made on
+another platform or with other models (the message starts with `pandion: `).
 
 ## Who may read a document
 

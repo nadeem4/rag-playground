@@ -253,7 +253,7 @@ it is not in `PLUGIN_MODULES`. See "Index stores" in [pandion.md](pandion.md#ind
 
 The conversation store sits beside it and is separate from the index: chats and a user's memories live there, so servers keep no state. `pandion.conversation_store` defines the Stable contract (`ConversationStore`, `Turn`, `Conversation`, `Memory` and `register_conversation_store`), `pandion.conversation_sql` is the `sql` store on SQLAlchemy (the `sql` extra, imported only inside functions), and `pandion.testing.conversation_store_conformance` proves any store keeps the contract, including that one user never reaches another's data. See "Conversations" in [pandion.md](pandion.md#conversations).
 
-`pandion.chat_turn` runs one turn on top of it. History gives meaning, sources give facts: the follow-up is rewritten into a standalone question using the summary and the last turns, and the answer step is asked only that question, so a stored answer can never reach it as a fact.
+`pandion.chat_turn` runs one turn on top of it. History gives meaning, sources give facts: the follow-up is rewritten into a standalone question using the summary and the last turns, and the answer step is asked only that question, so a stored answer can never reach it as a fact. With memory on (off by default), the user's newest memories join the rewrite prompt only, and `remember` extracts new ones from the user's own question after replying; a memory never reaches the answer step.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%
@@ -266,7 +266,8 @@ sequenceDiagram
   C->>T: question, user, conversation id
   T->>S: load (owner only)
   S-->>T: summary and turns
-  T->>M: rewrite (only with history)
+  T->>S: memories (only when memory is on)
+  T->>M: rewrite (with history or memories)
   M-->>T: standalone question
   T->>P: ask(standalone question only)
   P-->>T: answer and sources
@@ -275,6 +276,9 @@ sequenceDiagram
   C->>T: fold_summary (after replying)
   T->>M: fold older turns
   T->>S: set_summary
+  C->>T: remember (memory on only)
+  T->>M: extract facts from the question
+  T->>S: add_memory
 ```
 
 [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-strategy) walks through adding one to

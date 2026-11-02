@@ -126,6 +126,15 @@ def test_conformance_catches_a_store_that_forgets_memories_on_expire():
         conversation_store_conformance(Leaky)
 
 
+def test_conformance_catches_a_store_that_returns_memories_newest_first():
+    class Leaky(RefStore):
+        def memories(self, user_id):
+            return list(reversed(super().memories(user_id)))
+
+    with pytest.raises(AssertionError, match="memories_are_per_user_and_oldest_first"):
+        conversation_store_conformance(Leaky)
+
+
 def test_conformance_names_the_failing_check_in_the_error():
     class Broken(RefStore):
         def load(self, conversation_id, user_id):

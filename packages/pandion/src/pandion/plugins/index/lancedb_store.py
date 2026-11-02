@@ -115,6 +115,10 @@ class LanceDbIndexConfig(BaseModel):
         ),
     )
 
+    #: Roles by file hash, filled in by the pipeline when it has an `access:`
+    #: block. Not a setting to edit, so a form leaves it out.
+    doc_roles: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra={"readOnly": True})
+
     #: On by default so `bm25` and `hybrid_rrf` cannot be mis-wired to an index
     #: that has no full-text side.
     build_fts: bool = Field(
@@ -299,7 +303,7 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
                 # retrieval always agree about what a row says.
                 text=chunk.text_to_embed,
                 vector=vector,
-                roles=[],
+                roles=config.doc_roles.get(chunk.doc_id, []),
                 # What search filters read (pandion.filters). A piece with no
                 # pages has no page keys, so it never matches a pages filter.
                 metadata={

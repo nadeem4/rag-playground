@@ -52,6 +52,7 @@ from pandion.executor import NodeResult, RunResult, run
 from pandion.fetch import fetch_url, is_url
 from pandion.filters import check_where, resolve as _resolve_where
 from pandion.document_sources import Source
+from pandion.access import ALL_ROLES, AccessDenied, Resolved, resolve_roles
 from pandion.docinfo import DocumentInfo, document_info
 from pandion.formats import UnreadableFormat, check_contents, check_readable, format_of
 from pandion.synclock import sync_lock
@@ -116,6 +117,9 @@ class DocumentReport:
     category: str = "default"
     #: Why the document went to that category, in plain words.
     reason: str = ""
+    #: Who may read the document, and why. Empty when the pipeline has no `access:` block.
+    roles: list[str] = field(default_factory=list)
+    roles_reason: str = ""
 
 
 @dataclass
@@ -667,6 +671,36 @@ class IndexPipeline:
             out[doc_id] = sort_document(self.config.index.route, info, pinned=pinned)
         return out
 
+    def _access(
+        self, documents: dict[str, SourceFile | str], labels: dict[str, dict[str, str]] | None = None
+    ) -> dict[str, Resolved]:
+        """Each document's roles, worked out now from its file, folder and labels
+        (empty when the pipeline has no `access:` block). Roles are never sticky:
+        every run and sync works them out again."""
+        access = self.config.access
+        if access is None:
+            return {}
+        if not self._uploads():
+            raise AccessDenied(
+                "Access control needs documents added as files: the index step keeps each "
+                "document's roles by the file's hash. Use the upload source."
+            )
+        labels = {**self._labels, **(labels or {})}
+        return {
+            doc_id: resolve_roles(doc_id, self._info(doc_id, doc, labels.get(doc_id)), access)
+            for doc_id, doc in documents.items()
+        }
+
+    def _roles_for(self, documents: dict[str, SourceFile | str]) -> dict[str, Resolved]:
+        """The roles the index of `documents` was built with: the manifest's,
+        else worked out again."""
+        if self.config.access is None:
+            return {}
+        recorded = Manifest.load(self.config.path / MANIFEST).documents
+        if all("roles" in recorded.get(d, {}) for d in documents):
+            return {d: Resolved(recorded[d]["roles"], recorded[d].get("roles_reason", "")) for d in documents}
+        return self._access(documents)
+
     def _source_records(self, documents: dict[str, Any]) -> dict[str, dict[str, Any]]:
         """What a custom source gives for each document: its source step alone
         is run first (a cache hit later), so the labels it hands over can route
@@ -982,6 +1016,11 @@ class IndexPipeline:
                     "chunk_set": report.documents[doc_id].stages["chunk"].artifact_id,
                     "category": report.documents[doc_id].category,
                     "reason": report.documents[doc_id].reason,
+                    **(
+                        {"roles": report.documents[doc_id].roles, "roles_reason": report.documents[doc_id].roles_reason}
+                        if self.config.access is not None
+                        else {}
+                    ),
                     **({"metadata": labels[doc_id]} if labels.get(doc_id) else {}),
                     **({"version": versions[doc_id]} if versions and doc_id in versions else {}),
                     # A fetched page's file name comes from its content type.
@@ -1243,7 +1282,8 @@ class IndexPipeline:
                 raise UnreadableFormat(message)
         sorted_ = self._sort(documents, categories, reuse=not remember, known=known, labels=labels)
         chosen = {doc_id: s.category for doc_id, s in sorted_.items()}
-        graph, roles = self.graph(documents, chosen)
+        resolved = self._access(documents, labels)
+        graph, roles = self.graph(documents, chosen, resolved)
         known = self.config.index.categories
         targets = {f"{d}::{self._stop_for(stop, known[chosen[d]])}" for d in documents} if stop else None
         result = self.execute(
@@ -1255,7 +1295,15 @@ class IndexPipeline:
             force=force,
             roles=roles,
         )
-        reports = {doc_id: DocumentReport(category=chosen[doc_id], reason=sorted_[doc_id].reason) for doc_id in documents}
+        reports = {
+            doc_id: DocumentReport(
+                category=chosen[doc_id],
+                reason=sorted_[doc_id].reason,
+                roles=resolved[doc_id].roles if doc_id in resolved else [],
+                roles_reason=resolved[doc_id].reason if doc_id in resolved else "",
+            )
+            for doc_id in documents
+        }
         index = None
         for node in graph.nodes:
             if result.nodes[node.id].status == "pruned":
@@ -1354,7 +1402,10 @@ class IndexPipeline:
         return stored
 
     def graph(
-        self, documents: dict[str, SourceFile | str], categories: dict[str, str] | None = None
+        self,
+        documents: dict[str, SourceFile | str],
+        categories: dict[str, str] | None = None,
+        resolved: dict[str, Resolved] | None = None,
     ) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The graph for `documents`, and each node's (document id, step name).
 
@@ -1362,7 +1413,9 @@ class IndexPipeline:
         the one in `categories` (document id to name), else `category_of`.
         The index takes every document's chunks in document-id order. With
         the upload source a document is a stored file; with another source it
-        is the location that source is told to read.
+        is the location that source is told to read. With an `access:` block the
+        index step also gets each file's roles (`resolved`, else the manifest's),
+        by the file's hash.
         """
         index = self.config.index
         nodes: list[Node] = []
@@ -1406,9 +1459,23 @@ class IndexPipeline:
                 edges.append(Edge(chunk, enrich, "chunks"))
                 chunk = enrich
             chunk_nodes.append(chunk)
-        store = add(None, "index", Stage.INDEX, index.store_use, index.store)
+        store_settings = index.store
+        if self.config.access is not None:
+            resolved = resolved if resolved is not None else self._roles_for(documents)
+            store_settings = {**store_settings, "doc_roles": self._roles_by_sha(documents, resolved)}
+        store = add(None, "index", Stage.INDEX, index.store_use, store_settings)
         edges += [Edge(chunk, store, "chunks") for chunk in chunk_nodes]
         return Graph(nodes=nodes, edges=edges), roles
+
+    @staticmethod
+    def _roles_by_sha(documents: dict[str, SourceFile | str], resolved: dict[str, Resolved]) -> dict[str, list[str]]:
+        """Roles by file hash, which is what an index row holds. Two documents
+        with the same bytes share a hash: they keep only the roles both have."""
+        out: dict[str, list[str]] = {}
+        for doc_id, file in documents.items():
+            roles = resolved[doc_id].roles
+            out[file.sha] = roles if file.sha not in out else [r for r in out[file.sha] if r in roles]
+        return out
 
     def stage_result(self, node: Node, role: str, result: RunResult) -> StageResult:
         """What the node did in `result`, with its stored output read back."""

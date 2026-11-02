@@ -36,6 +36,10 @@ An entry also records the document's `category` and the `reason` for it, and
 its `metadata` labels when it has any. A document keeps them until it is moved,
 even when its bytes change or the route changes. An entry from before
 categories has none of the three and counts as unsorted: the next sync sorts it.
+
+When the pipeline has an `access:` block, an entry also has `roles` (who may read
+the document) and `roles_reason` (which source gave them). They are worked out
+again on every sync, so a role change shows here at the next one.
 """
 
 from __future__ import annotations

@@ -35,7 +35,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pandion.errors import FormatTooNew, require
 from pandion.index_lance import NoRows
@@ -60,7 +60,9 @@ class QdrantSettings(BaseModel):
     url: str = ""  # a Qdrant server; wins over `location`
     api_key_env: str = ""  # the NAME of an environment variable; the key is never a setting
     prefix: str = "pandion"
-    fts: bool = True  # also keep a text index; off means no text search
+    fts: bool = Field(  # also keep a text index; set from the step's build_fts, never typed
+        default=True, json_schema_extra={"x-internal": True}
+    )
 
     @field_validator("prefix")
     @classmethod

@@ -92,9 +92,10 @@ def _form_schema(model: type) -> dict[str, Any]:
     """The settings schema a form is drawn from. A setting marked
     `"x-internal": True` is set by Pandion, never typed, so it is left out."""
     schema = model.model_json_schema()
-    props = schema.get("properties", {})
-    for name in [n for n, p in props.items() if p.get("x-internal")]:
-        del props[name]
+    for node in [schema, *schema.get("$defs", {}).values()]:
+        props = node.get("properties", {})
+        for name in [n for n, p in props.items() if p.get("x-internal")]:
+            del props[name]
     return schema
 
 

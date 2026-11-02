@@ -227,6 +227,18 @@ def test_export_schema_leaves_out_internal_settings():
     assert "filters" not in schema["properties"]
 
 
+def test_export_schema_leaves_out_internal_settings_of_nested_models():
+    from pandion.plugins.index.qdrant_store import QdrantIndex
+    from pandion.registry import Registry
+
+    r = Registry()
+    r.register(QdrantIndex)
+    schema = r.export_schema()["index"]["qdrant"]["config_schema"]
+    inner = schema["$defs"]["QdrantSettings"]["properties"]
+    assert "prefix" in inner
+    assert "fts" not in inner
+
+
 class TitleEnricher(Transform[ChunkConfig]):
     summary = "A test transform."
     name = "titles"

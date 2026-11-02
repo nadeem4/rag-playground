@@ -1421,11 +1421,6 @@
                 "default": "pandion",
                 "title": "Prefix",
                 "type": "string"
-              },
-              "fts": {
-                "default": true,
-                "title": "Fts",
-                "type": "boolean"
               }
             },
             "title": "QdrantSettings",

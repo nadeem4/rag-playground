@@ -203,6 +203,10 @@ def cmd_forget_user(args: argparse.Namespace) -> int:
             f"This would delete every conversation and memory kept for {args.user_id}. "
             "Run it again with --yes to do it.", file=sys.stderr)
         return 1
+    if args.store == "sql" and not args.url_env:
+        raise ValueError(
+            "forget-user with the sql store needs --url-env, the environment variable that holds the database url. "
+            "Without it the command would open a new, empty database and delete nothing.")
     store = get_conversation_store(args.store, {"url_env": args.url_env} if args.url_env else {})
     gone = store.delete_user(args.user_id)
     print(f"Deleted {gone['conversations']} conversations and {gone['memories']} memories for {args.user_id}.")

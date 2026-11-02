@@ -257,12 +257,11 @@ class SqlStore:
         sa = self._sa()
         c, turns, m = self._t["conversations"], self._t["turns"], self._t["memories"]
         with self._engine.begin() as conn:
-            ids = conn.execute(sa.select(c.c.id).where(c.c.user_id == user_id)).scalars().all()
-            for chunk in range(0, len(ids), 500):
-                conn.execute(sa.delete(turns).where(turns.c.conversation_id.in_(ids[chunk:chunk + 500])))
-            conn.execute(sa.delete(c).where(c.c.user_id == user_id))
+            mine = sa.select(c.c.id).where(c.c.user_id == user_id)
+            conn.execute(sa.delete(turns).where(turns.c.conversation_id.in_(mine)))
+            gone_conversations = conn.execute(sa.delete(c).where(c.c.user_id == user_id)).rowcount
             gone = conn.execute(sa.delete(m).where(m.c.user_id == user_id)).rowcount
-        return {"conversations": len(ids), "memories": gone}
+        return {"conversations": gone_conversations, "memories": gone}
 
     # -- expiry ------------------------------------------------------------
 

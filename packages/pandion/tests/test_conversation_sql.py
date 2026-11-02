@@ -213,6 +213,14 @@ def test_url_env_reads_the_url_from_the_variable(tmp_path, monkeypatch):
     assert (tmp_path / "env.db").exists()
 
 
+def test_an_unreachable_url_from_the_variable_never_shows_its_password(monkeypatch):
+    monkeypatch.setenv("BAD_CONV_URL", "postgresql://user:hunter2pw@127.0.0.1:1/db")
+    store = SqlStore(SqlSettings(url_env="BAD_CONV_URL"))
+    with pytest.raises(Exception) as err:
+        store.check()
+    assert "hunter2pw" not in str(err.value)
+
+
 def test_a_missing_variable_is_named_and_its_value_never_printed(monkeypatch):
     monkeypatch.delenv("NOT_SET_CONV_URL", raising=False)
     store = SqlStore(SqlSettings(url_env="NOT_SET_CONV_URL"))

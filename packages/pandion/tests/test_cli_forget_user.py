@@ -47,6 +47,13 @@ def test_forget_user_prints_the_backups_sentence(db, capsys):
     assert "Backups" in out and "model providers" in out
 
 
+def test_forget_user_with_sql_and_no_url_env_is_refused_and_makes_no_file(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    code = cli.main(["forget-user", "alice", "--yes"])
+    assert code == 2 and "--url-env" in capsys.readouterr().err
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_forget_user_with_an_unset_variable_exits_2_naming_it(monkeypatch, capsys):
     monkeypatch.delenv("PANDION_TEST_UNSET", raising=False)
     code = cli.main(["forget-user", "alice", "--url-env", "PANDION_TEST_UNSET", "--yes"])

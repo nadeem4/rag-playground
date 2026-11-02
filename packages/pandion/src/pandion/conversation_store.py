@@ -95,7 +95,8 @@ class ConversationStore(Protocol):
     def delete_memory(self, user_id: str, memory_id: str) -> None: ...
     def delete_user(self, user_id: str) -> dict[str, int]:
         """Remove all of the user's conversations (with their turns) and memories.
-        Returns `{"conversations": n, "memories": m}`; an unknown user gives zeros."""
+        Returns `{"conversations": n, "memories": m}`; an unknown user gives zeros.
+        When trace records (T20) and feedback (T26) are stored per user, this must remove them too."""
         ...
     def expire(self, older_than_days: int) -> int: ...
 

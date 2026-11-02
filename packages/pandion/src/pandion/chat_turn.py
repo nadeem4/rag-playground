@@ -25,9 +25,6 @@ from pandion.events import event
 from pandion.conversation_store import Conversation, ConversationNotFound, ConversationStore, Turn
 from pandion.llm import CHAT_MODELS
 
-#: Recorded by the trace (T20): which prompts ran.
-PROMPT_VERSION = "1"
-
 #: A rewrite longer than this is an answer or an essay, not a question.
 MAX_REWRITE = 300
 
@@ -82,8 +79,8 @@ def _call(model_id: str, system: str, user: str, credentials: dict | None, max_t
     return "" if completion.stop_reason == "refusal" else completion.text.strip()
 
 
-def _lines(turns: list[Turn]) -> str:
-    return "\n".join(f"Q: {t.question}\nA: {t.answer}" for t in turns)
+def _lines(turns: list[Turn], standalone: bool = False) -> str:
+    return "\n".join(f"Q: {(standalone and t.rewrite) or t.question}\nA: {t.answer}" for t in turns)
 
 
 def standalone_question(
@@ -93,13 +90,15 @@ def standalone_question(
     if conversation is None or not conversation.turns:
         return question, "no history"
     recent = conversation.turns[-settings.last_turns:]
-    history = (f"Summary so far: {conversation.summary}\n" if conversation.summary else "") + _lines(recent)
+    history = (f"Summary so far: {conversation.summary}\n" if conversation.summary else "") + _lines(recent, standalone=True)
     user = f"<history>\n{history}\n</history>\n\nLatest question: {question}"
     try:
         reply = _call(settings.rewrite_model, REWRITE_SYSTEM, user, credentials, 200)
     except Exception:
         return question, "failed"
-    if not reply or len(reply) > MAX_REWRITE or "\n" in reply:
+    if not reply:
+        return question, "failed"
+    if len(reply) > MAX_REWRITE or "\n" in reply:
         return question, "too long"
     return reply, "rewritten"
 
@@ -139,13 +138,15 @@ def chat_turn(
             raise ConversationNotFound(f"There is no conversation '{conversation_id}' for this user.")
     standalone, reason = standalone_question(conversation, question, settings, credentials)
     if on_event is not None:
-        on_event(event("chat_rewrite", standalone=standalone, reason=reason))
+        extra = {"trace_id": trace_id} if trace_id is not None else {}
+        on_event(event("chat_rewrite", standalone=standalone, reason=reason, **extra))
     answer = p.ask(
         standalone, roles=roles, credentials=credentials, on_event=on_event, trace_id=trace_id
     )
-    conversation_id = conversation_id or uuid.uuid4().hex
     if not answer.ok:
-        return TurnResult(conversation_id, question, standalone, "", [], answer)
+        # Nothing was stored, so a new conversation has no id yet.
+        return TurnResult(conversation_id or "", question, standalone, "", [], answer)
+    conversation_id = conversation_id or uuid.uuid4().hex
     text, sources = answer.text, _source_ids(answer)
     store.append(
         conversation_id, user_id,
@@ -160,8 +161,6 @@ def _cap(summary: str) -> str:
         return summary
     cut = summary[:MAX_SUMMARY]
     end = max(cut.rfind(mark) for mark in (". ", "! ", "? "))
-    if end == -1 and cut[-1] in ".!?":
-        return cut
     return cut[: end + 1] if end != -1 else cut
 
 

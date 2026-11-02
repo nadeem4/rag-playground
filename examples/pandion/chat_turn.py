@@ -5,6 +5,8 @@ the reply. With ANTHROPIC_API_KEY set it also sends a follow-up ("And what about
 overlap?"), which one paid Claude Haiku 4.5 call first rewrites into a question
 that stands alone. The answer step is asked only that question.
 
+Needs `pandion[sql]` (SQLAlchemy) for the conversation store.
+
     uv run python examples/pandion/chat_turn.py
     uv run python examples/pandion/chat_turn.py --embedder fake-deterministic
 """

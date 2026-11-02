@@ -94,7 +94,22 @@ def test_a_failed_answer_stores_no_turn(store, rewrites):
     p = StubPipeline(ok=False)
     result = chat_turn(p, store, user_id="u", question="Q?")
     assert result.text == "" and result.source_ids == [] and not result.answer.ok
-    assert store.load(result.conversation_id, "u") is None
+    assert result.conversation_id == ""
+
+
+def test_a_failed_follow_up_keeps_the_conversation_id(store, rewrites):
+    first = chat_turn(StubPipeline(), store, user_id="u", question="Q?")
+    result = chat_turn(StubPipeline(ok=False), store, user_id="u", question="More?", conversation_id=first.conversation_id)
+    assert result.conversation_id == first.conversation_id
+    assert len(store.load(first.conversation_id, "u").turns) == 1
+
+
+def test_the_event_carries_the_trace_id_when_given(store, rewrites):
+    events = []
+    chat_turn(StubPipeline(), store, user_id="u", question="Q?", trace_id="t5", on_event=events.append)
+    chat_turn(StubPipeline(), store, user_id="u", question="Q?", on_event=events.append)
+    rewrite = [e for e in events if e.get("event") == "chat_rewrite"]
+    assert rewrite[0]["trace_id"] == "t5" and "trace_id" not in rewrite[1]
 
 
 def test_the_chat_rewrite_event_is_json(store, rewrites):

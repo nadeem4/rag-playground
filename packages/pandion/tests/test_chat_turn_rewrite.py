@@ -52,7 +52,19 @@ def test_a_rewrite_that_fails_falls_back_to_the_question(monkeypatch):
     assert standalone_question(conversation(), "And?", ChatSettings(), None) == ("And?", "failed")
 
 
-@pytest.mark.parametrize("reply", ["x" * 301, "two\nlines", ""])
+@pytest.mark.parametrize("reply", ["", "  "])
+def test_an_empty_reply_counts_as_failed(monkeypatch, reply):
+    monkeypatch.setattr("pandion.llm.complete", Fake(reply=reply))
+    assert standalone_question(conversation(), "And?", ChatSettings(), None) == ("And?", "failed")
+
+
+def test_history_uses_the_standalone_form_of_a_past_question(fake):
+    conv = Conversation(id="c", user_id="u", turns=[Turn(question="and it?", answer="a", rewrite="What is the rent?")])
+    standalone_question(conv, "More?", ChatSettings(), None)
+    assert "What is the rent?" in fake.calls[0]["user"] and "and it?" not in fake.calls[0]["user"]
+
+
+@pytest.mark.parametrize("reply", ["x" * 301, "two\nlines"])
 def test_a_rewrite_that_is_too_long_falls_back(monkeypatch, reply):
     monkeypatch.setattr("pandion.llm.complete", Fake(reply=reply))
     text, reason = standalone_question(conversation(), "And?", ChatSettings(), None)

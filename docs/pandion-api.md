@@ -17,6 +17,7 @@ plus the playground's teaching routes.
 - [Where it keeps files](#where-it-keeps-files)
 - [Endpoints](#endpoints)
 - [Runs](#runs)
+- [Serve mode](#serve-mode)
 - [Site rules: the Policy](#site-rules-the-policy)
 - [What a request cannot set](#what-a-request-cannot-set)
 - [The playground on pandion-api](#the-playground-on-pandion-api)
@@ -373,6 +374,95 @@ upload route gives as a 415. Cancelling the run stops it after the part in progr
 and no further model call is made. A cancel that comes during the last part does not
 stop it: the set is already paid for, so the run finishes with it.
 
+## Serve mode
+
+`create_app` has two modes. The default, `mode="lab"`, is everything above: a client sends a
+pipeline with each request. `mode="serve"` is for a site's own users. It loads one pipeline
+file once, at startup, and answers one question route, `POST /chat`. No lab route is
+mounted, so `/documents`, `/runs`, `/strategies` and the rest are a 404.
+
+```python
+from pathlib import Path
+
+from pandion_api import ApiSettings, Policy, ServeSettings, create_app
+
+class MyPolicy(Policy):
+    def user_id(self, request):
+        return request.state.user  # your own login check sets this
+
+    def roles(self, request):
+        return request.state.roles
+
+app = create_app(
+    ApiSettings(data_dir=Path("./pandion-data")),
+    MyPolicy(),
+    mode="serve",
+    pipeline="pipeline.yaml",
+    conversations=None,           # None: SQL on PANDION_CONVERSATIONS_URL, else a SQLite file in data_dir
+    serve=ServeSettings(),        # chat settings and retention_days
+)
+```
+
+The index is built beforehand with `pandion sync`, using the same pipeline file and the same
+`data_dir`. Serve does not index. At startup it runs one throwaway search so the first user
+does not wait for models to load. If that fails, the failure is logged and ignored.
+
+### Who is asking
+
+Serve asks the Policy three more questions on every `/chat` request.
+
+| Method | Default | Called |
+|---|---|---|
+| `roles(request)` | `None` | the roles of the person asking, matched against the pipeline's `access:` block, so a user only finds what their roles allow. It is never "every role" by default. |
+| `user_id(request)` | `"anonymous"` | a stable id. Conversations and memories are kept under it, and another user's conversation id is a 404. The default shares one id between everyone, which suits a demo and no real site. |
+| `limit(request)` | allows | before anything runs. Raise `HTTPException(429, "...")` to refuse, for example for a rate limit. |
+
+### POST /chat
+
+```bash
+curl -N http://127.0.0.1:8000/chat \
+  -H 'content-type: application/json' \
+  -d '{"messages": [{"role": "user", "content": "How long is the notice period?"}], "stream": true}'
+```
+
+| Field | Meaning |
+|---|---|
+| `messages` | 1 to 50 messages, each with a `role` (`user`, `assistant` or `system`) and a `content` of 1 to 8,000 characters. The last one must be from the user, or the answer is a 422. |
+| `conversation_id` | Left out, a new conversation starts. Given, the turn continues that conversation. An id that is not this user's is a 404. |
+| `stream` | `true` answers as server-sent events. `false` (the default) waits and answers as JSON. |
+
+Only the last message counts. The history is the server's own, kept in the conversation
+store, so a client cannot write it. Earlier messages in the request are ignored.
+
+Without `stream`, the answer is `200` with `conversation_id`, `trace_id`, `text`, `sources`
+(each with an `id`, a `document`, its `pages` and a `score`, and never the text) and `ok`.
+A question that could not be answered is still `200`, with `ok: false`, an empty `text` and
+one generic `error` sentence. The `trace_id` finds the reason in the server's log.
+
+With `stream`, each event is one `data:` line of JSON, in this order:
+
+| Event | Holds |
+|---|---|
+| `chat_rewrite` | `standalone` (the question as it was searched) and `reason` |
+| `sources` | the same `sources` list |
+| `token` | `text`: the whole answer. The answer step does not stream yet, so there is one `token` event. A client written now keeps working when streaming arrives. |
+| `done` | `conversation_id`, `trace_id`, `ok`, `cost` and `timings` |
+| `error` | `error` (one generic sentence) and `trace_id`, sent before `done` when the turn failed |
+| `queued`, `unqueued` | the turn waits for a free slot when the Policy's `max_active_runs` is reached (`queued` says how many are ahead), then starts |
+| `run_error` | the turn crashed in a way the route did not catch; its text goes through `Policy.scrub` |
+| `stream_end` | closes the stream |
+
+If the client disconnects, the turn is cancelled and no half turn is stored. After the reply,
+the server folds old turns into the running summary and, when `ServeSettings.chat.memory`
+is on, keeps facts the user shared. The user never waits for either. Cancel on disconnect applies to streams only: a JSON request runs to its end. A stream cannot be
+resumed on another server copy: there is no events route in serve.
+
+### GET /health and GET /ready
+
+`GET /health` says `{"status": "ok"}` and names no version. `GET /ready` is `200
+{"ready": true}` when the conversation store opens and the pipeline's index is there, else
+`503 {"ready": false}` with no reason. The reason goes to the log.
+
 ## Site rules: the Policy
 
 Subclass `pandion_api.Policy` and override what your site needs. A method that refuses
@@ -410,6 +500,7 @@ raises `fastapi.HTTPException` with the status and the sentence the caller shoul
 | `missing_key(provider)` | names the header and the variable | the key check's error when there is no key |
 | `check_provider(provider, request)` | allows | `POST /settings/models/check` |
 | `credentials(request)` | every provider whose `key` resolves | every run |
+| `roles(request)`, `user_id(request)`, `limit(request)` | no roles, `"anonymous"`, allows | serve mode's `/chat`; see [Serve mode](#serve-mode) |
 | `on_startup(app)`, `on_shutdown(app)` | nothing | once each, around serving |
 
 A document's record may hold more keys than a client is shown: a Policy keeps what it

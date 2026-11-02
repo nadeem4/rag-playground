@@ -15,6 +15,7 @@ Pandion directly, and the React web app talks only to pandion-api.
 - [Sources and sync](#sources-and-sync)
 - [Artifacts and the cache](#artifacts-and-the-cache)
 - [The run stream](#the-run-stream)
+- [Serve mode](#serve-mode)
 - [How the web app talks to the API](#how-the-web-app-talks-to-the-api)
 - [How the web app holds a pipeline](#how-the-web-app-holds-a-pipeline)
 
@@ -439,6 +440,32 @@ on the card of the same name (`clean_1`, `retrieve`, `use_case`). A comparison's
 carry `variant`, an evaluation's `question`, with a `question_finished` after each. When
 the stream ends, the web reads the run's `result` from `GET /api/v2/runs/{id}`. Stop calls
 `POST /api/v2/runs/{id}/cancel`, which answers 409 once the run has finished.
+
+## Serve mode
+
+`create_app(mode="serve")` is the second way to run pandion-api. It loads one pipeline file at
+startup and answers `POST /chat` for a site's users, with the site's `Policy` deciding who they
+are (`user_id`), what they may find (`roles`) and how often they may ask (`limit`). The
+conversation store keeps each user's turns. The route reuses the run manager, so a turn is a run
+on a worker thread, and the client's disconnect cancels it.
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%
+sequenceDiagram
+  participant C as Client
+  participant A as POST /chat
+  participant P as Policy
+  participant S as Conversation store
+  participant L as Pipeline
+  C->>A: messages, conversation_id
+  A->>P: limit, user_id, roles
+  A->>S: load the conversation (404 if not this user's)
+  A->>L: rewrite the question to stand alone, then ask with roles
+  L-->>A: answer and sources
+  A->>S: store the turn
+  A-->>C: chat_rewrite, sources, token, done
+  A->>S: after the reply, fold the summary
+```
 
 ## How the web app talks to the API
 

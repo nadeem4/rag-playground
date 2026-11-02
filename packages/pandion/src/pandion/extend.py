@@ -29,7 +29,8 @@ A team that keeps its index somewhere else writes an index store: `IndexRow`,
 
 A team that keeps its chats somewhere else writes a conversation store: `Turn`,
 `Conversation`, `ConversationInfo` and `Memory` are its words, `ConversationStore` is the
-contract, and `register_conversation_store` adds it. See docs/pandion.md, "Conversations".
+contract, and `register_conversation_store` adds it. A server runs a turn with `chat_turn`
+(`ChatSettings`, `fold_summary` and `remember` go with it) on a store from `get_conversation_store`. See docs/pandion.md, "Conversations".
 
 A team that keeps its documents somewhere else writes a `Source`: `SourceEntry`
 is what it lists, `register_source` adds it, and `index.sync(source)` reads
@@ -44,8 +45,10 @@ from typing import Any
 
 from pandion.access import ALL_ROLES, AccessDenied, access_rule
 from pandion.artifacts import ArtifactType
+from pandion.chat_turn import ChatSettings, TurnResult, chat_turn, fold_summary, remember
 from pandion.conversation_store import (
-    Conversation, ConversationInfo, ConversationNotFound, ConversationStore, Memory, Turn, register_conversation_store,
+    Conversation, ConversationInfo, ConversationNotFound, ConversationStore, Memory, Turn, get_conversation_store,
+    register_conversation_store,
 )
 from pandion.docinfo import DocumentInfo, document_info
 from pandion.document_sources import Source, SourceEntry, register_source
@@ -64,7 +67,7 @@ from pandion.sources import raw_file
 from pandion.transform import Explanation, Transform
 
 __all__ = [
-    "ALL_ROLES", "AccessDenied", "access_rule", "FORMATS", "And", "AnyOf", "ArtifactType", "Capabilities", "Chunk", "ChunkSet", "Conversation", "ConversationInfo", "ConversationNotFound", "ConversationStore", "DocumentInfo", "Element", "Embedder",
+    "ALL_ROLES", "AccessDenied", "ChatSettings", "TurnResult", "chat_turn", "fold_summary", "remember", "get_conversation_store", "access_rule", "FORMATS", "And", "AnyOf", "ArtifactType", "Capabilities", "Chunk", "ChunkSet", "Conversation", "ConversationInfo", "ConversationNotFound", "ConversationStore", "DocumentInfo", "Element", "Embedder",
     "EndpointRefused", "Eq", "Explanation", "FetchRefused", "Hit", "In", "IndexMeta", "IndexRow", "Memory", "Output", "ParsedDoc",
     "PluginError", "PortSpec", "Query", "RetrievalResult", "RunContext", "Source", "SourceEntry", "Stage", "StoreHit", "Transform", "Turn", "UnreadableFormat",
     "check_contents", "document_info", "fetch_url", "format_of", "get_embedder", "guard_endpoint", "load_plugins",

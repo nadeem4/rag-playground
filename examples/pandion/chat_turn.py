@@ -20,8 +20,7 @@ from pathlib import Path
 import yaml
 
 from pandion import Pipeline
-from pandion.chat_turn import chat_turn, fold_summary
-from pandion.conversation_store import get_conversation_store
+from pandion.extend import chat_turn, fold_summary, get_conversation_store
 
 HERE = Path(__file__).resolve().parent
 SAMPLES = HERE.parents[1] / "samples"

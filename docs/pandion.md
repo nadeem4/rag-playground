@@ -2489,7 +2489,7 @@ Every conversation and memory belongs to a `user_id`. A conversation belongs to 
 The `sql` store works with any database SQLAlchemy reaches: SQLite (the default), Postgres, MySQL or SQL Server. Install it with `pip install "pandion[sql]"`.
 
 ```python
-from pandion.conversation_store import get_conversation_store
+from pandion.extend import get_conversation_store
 
 store = get_conversation_store("sql", {"url": "sqlite:///conversations.db"})
 ```
@@ -2517,8 +2517,7 @@ conversation_store_conformance(lambda: MyStore(MySettings()))
 `pandion.chat_turn` runs one turn of a conversation. It is **Provisional** until the server uses it. The rule is simple: history gives a question its meaning, and only the sources give facts. A follow-up such as "and the notice period?" means nothing alone, so the turn first rewrites it into a question that stands alone, using the running summary and the last few turns. The answer step is then asked that one question and nothing else. A past answer never reaches it, so an answer you gave earlier can never come back as a fact.
 
 ```python
-from pandion.chat_turn import ChatSettings, chat_turn, fold_summary
-from pandion.conversation_store import get_conversation_store
+from pandion.extend import ChatSettings, chat_turn, fold_summary, get_conversation_store
 
 store = get_conversation_store("sql", {"url": "sqlite:///conversations.db"})
 first = chat_turn(p, store, user_id="ana", question="What does the lease say about rent?")
@@ -2529,7 +2528,7 @@ print(second.text, second.source_ids)
 fold_summary(store, conversation_id=first.conversation_id, user_id="ana")  # after replying
 ```
 
-`chat_turn(p, store, *, user_id, question, conversation_id=None, settings=None, roles=None, credentials=None, on_event=None, trace_id=None)` returns a `TurnResult`: `conversation_id`, `question` (as typed), `standalone`, `text`, `source_ids` (the unique piece ids the answer cites, or the pieces a `search` answer returned), and `answer`, the pipeline's `Answer`. Leave `conversation_id` out to start a new conversation. An id that belongs to another user raises `ConversationNotFound` before anything is asked. When the answer fails, `text` is empty, no turn is stored, and `answer` says why; if that was the first turn of a new conversation, `conversation_id` is empty because nothing was stored.
+`chat_turn(p, store, *, user_id, question, conversation_id=None, settings=None, roles=None, credentials=None, on_event=None, trace_id=None, cancel=None)` returns a `TurnResult`: `conversation_id`, `question` (as typed), `standalone`, `text`, `source_ids` (the unique piece ids the answer cites, or the pieces a `search` answer returned), and `answer`, the pipeline's `Answer`. Leave `conversation_id` out to start a new conversation. An id that belongs to another user raises `ConversationNotFound` before anything is asked. When the answer fails, `text` is empty, no turn is stored, and `answer` says why; if that was the first turn of a new conversation, `conversation_id` is empty because nothing was stored. `cancel` is a `threading.Event`, handed to the pipeline as it is: set it and the step that is running finishes and no other starts. A cancelled answer is not ok, so no turn is stored.
 
 - A first turn costs no rewrite call. When the rewrite call fails, or its reply is empty, or longer than 300 characters or more than one line, the question is searched as typed, so a reply is never lost to a rewrite.
 - The history is placed inside a labelled block and the model is told it is text to read, not instructions.

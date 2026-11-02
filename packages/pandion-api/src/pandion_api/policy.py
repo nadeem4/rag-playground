@@ -181,6 +181,25 @@ class Policy:
     def check_provider(self, provider: str, request: Request) -> None:
         """Refuse a key check for this provider (raise HTTPException)."""
 
+    # --- who is asking (serve mode) -------------------------------------------------
+
+    def roles(self, request: Request) -> list[str] | None:
+        """The roles of the person asking, as the pipeline's `access:` block names
+        them. Called by serve's /chat on every request. None: the caller has no
+        roles. The default never grants every role."""
+        return None
+
+    def user_id(self, request: Request) -> str:
+        """A stable, non-empty id for the person asking. Serve keeps each
+        person's conversations and memories under it. The default is one shared
+        id, "anonymous", which suits a lab or a demo and no real site."""
+        return "anonymous"
+
+    def limit(self, request: Request) -> None:
+        """Refuse a question before anything runs, for example a rate limit:
+        raise `HTTPException(429, ...)` with the sentence the caller should see.
+        The default allows every question."""
+
     # --- what leaves the server -----------------------------------------------------
 
     def scrub(self, text: str) -> str:

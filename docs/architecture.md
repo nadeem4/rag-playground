@@ -293,6 +293,15 @@ in the store is not run again.
 That is what makes changing one setting cheap. Sweeping three chunkers over one parse is
 one cached parse and three new chunk sets.
 
+An INDEX artifact is a small JSON binding, not the rows: it names the index store, its
+settings (never a secret), the collection that holds the rows, the recipe hash and the
+descriptor. The rows live in the store (for `lancedb`, `<path>/index` or its `location`
+setting), in a collection named from the recipe hash and the artifact id. Chunk sets stay
+cached as before, so a rebuild embeds nothing twice. Deleting an index artifact, as a sync
+does for the previous one, deletes only the binding; the old collection stays for a
+rollback. Retrievers open the collection through the binding and search it through the
+store contract, and check each returned row against the caller's roles again.
+
 A transform with `cacheable = False` (`llm_rewrite`, `llm_rerank`, `chat`) runs every time
 and keeps its recipe id, so its id says nothing about what it returned this run. A node
 that reads from one therefore hashes that input as its id plus a hash of the files it

@@ -63,11 +63,11 @@ def test_index_run_indexes_every_file_in_a_folder(setup):
     assert stages["clean.1"].transform == "dedupe_blocks"
     assert all(s.status == "executed" and s.artifact_id for s in stages.values())
 
-    index_dir = report.index.output
-    rows = lancedb.connect(index_dir).open_table("chunks").to_arrow().to_pylist()
+    binding = report.index.output
+    rows = lancedb.connect(str(config.parent / "index" / "index")).open_table(binding["collection"]).to_arrow().to_pylist()
     chunks = [c for d in report.documents.values() for c in d.stages["chunk"].output.chunks]
     assert sorted(r["id"] for r in rows) == sorted(c.id for c in chunks)
-    descriptor = json.loads((index_dir / "descriptor.json").read_text(encoding="utf-8"))
+    descriptor = binding["descriptor"]
     assert descriptor["embedding_model"] == "fake-deterministic"
 
 
@@ -77,7 +77,7 @@ def test_everything_is_kept_under_the_config_path(setup):
     Pipeline.from_file(config).index.run(docs)
 
     root = config.parent / "index"
-    assert sorted(p.name for p in root.iterdir()) == ["artifacts", "embeddings", "sources"]
+    assert sorted(p.name for p in root.iterdir()) == ["artifacts", "embeddings", "index", "sources"]
     assert len([p for p in (root / "sources").iterdir() if p.suffix == ".pdf"]) == 2
 
 

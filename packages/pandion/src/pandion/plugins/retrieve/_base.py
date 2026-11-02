@@ -1,7 +1,7 @@
 """What all three retrievers share.
 
 **A retriever never decides how to embed a query.** The index already made that
-decision — model, revision and vector width — and wrote it into `descriptor.json`
+decision — model, revision and vector width — and wrote it into the index descriptor
 when it was built. Every retriever reads it back from there, which is why none of
 the three config models has an `embedder` or a `truncate_dim` field: with no way
 to say it, there is no way to say something different from the index. Otherwise a
@@ -22,14 +22,24 @@ import hashlib
 import json
 import time
 from contextlib import contextmanager
-from pathlib import Path
+import logging
 from typing import Any, Iterator, Mapping
 
 from pandion import filters as _filters
-from pandion.errors import require
 from pandion.ids import canonical_json
+from pandion.index_store import (
+    AnyOf,
+    Binding,
+    Collection,
+    Filter,
+    StoreHit,
+    binding_settings,
+    check_store,
+    get_store,
+    matches,
+    open_binding,
+)
 from pandion.payloads import Chunk, Hit, Query, RetrievalResult
-from pandion.plugins.index.lancedb_store import DESCRIPTOR, TABLE, TEXT_COLUMN
 from pandion.embedding_cache import embed_cached
 from pandion.embeddings import EmbedKind, EmbeddingProvider, get_embedder
 from pandion.models import ModelSettings
@@ -58,24 +68,29 @@ TOP_K_TRADEOFF = (
 )
 
 
-def open_index(raw: Any) -> tuple[Any, dict[str, Any]]:
-    """Return `(table, descriptor)` for the index directory the executor loaded.
+#: Rows the expansion step weighs words against: a bounded search, because the
+#: store contract has no scan.
+PRF_POOL = 1000
 
-    The `index` port arrives as a `Path`: `DirectorySerializer.read` hands back
-    the committed directory and the consumer opens it, so the store never holds
-    a database handle of its own.
+_access_log = logging.getLogger("pandion.access")
+
+
+def open_index(raw: Any, extras: Mapping[str, Any] | None = None) -> tuple[Collection, dict[str, Any]]:
+    """Return `(collection, descriptor)` for the index binding the executor loaded.
+
+    The `index` port arrives as the small JSON binding the index step wrote:
+    the store, its settings and the collection that holds the rows.
     """
-    lancedb = require("lancedb", extra="lancedb", step="A retriever")
-    directory = Path(raw)
-    return lancedb.connect(directory).open_table(TABLE), read_descriptor(directory)
+    location = (extras or {}).get("index_location")
+    return open_binding(raw, location), read_descriptor(raw)
 
 
 def read_descriptor(raw: Any) -> dict[str, Any]:
-    """The index's `descriptor.json`, without opening the database.
+    """The index's descriptor, from its binding, without opening the store.
 
     For consumers such as MMR that need the model and width but no search.
     """
-    return json.loads((Path(raw) / DESCRIPTOR).read_text(encoding="utf-8"))
+    return dict(raw["descriptor"])
 
 
 def require_backend(descriptor: dict[str, Any], backend: str, retriever: str) -> None:
@@ -89,6 +104,44 @@ def require_backend(descriptor: dict[str, Any], backend: str, retriever: str) ->
             f"did not build it. Rebuild with build_fts=True (for 'fts'), or "
             f"wire a retriever that does not need '{backend}'."
         )
+
+
+def check_pairing(
+    raw: Any,
+    descriptor: dict[str, Any],
+    backend: str,
+    retriever: str,
+    roles: list[str] | None,
+    query: Query | None = None,
+    extras: Mapping[str, Any] | None = None,
+) -> None:
+    """Refuse an index this retriever cannot read, with one plain sentence.
+
+    The index must have built the side the retriever reads, and its store must
+    be able to serve it: a text search for `fts`, the index's distance metric,
+    and, when access is on, filtering by any of a list of roles. There is no
+    Pandion-side text-search fallback.
+    """
+    require_backend(descriptor, backend, retriever)
+    binding = Binding.model_validate(raw)
+    caps = get_store(
+        binding.store, binding_settings(raw, (extras or {}).get("index_location"))
+    ).capabilities()
+    # The filters the retrievers send are combined with "and"; a document
+    # filter is a list, so it needs "in".
+    if "and" not in caps.filters:
+        raise ValueError(
+            f"The {binding.store} store cannot combine filters, so it cannot serve a search. Use another store."
+        )
+    if (query is not None and (query.filters or {}).get("doc_ids")) and "in" not in caps.filters:
+        raise ValueError(
+            f"The {binding.store} store cannot filter by a list, so it cannot serve a document filter. "
+            "Use another store."
+        )
+    if roles is None and "any_of" not in caps.filters:
+        # Access is off: the store need not filter by roles.
+        caps = caps.model_copy(update={"filters": caps.filters | {"any_of"}})
+    check_store(binding.store, caps, lexical=backend == "fts", metric=descriptor.get("metric"))
 
 
 def embedder_for(
@@ -152,55 +205,69 @@ def embed_query(
     return vectors[0]
 
 
-def where_sql(query: Query, descriptor: dict[str, Any]) -> str | None:
-    """The SQL condition for the question's filters on this index, or None.
+def caller_roles(query: Query, extras: Mapping[str, Any] | None) -> list[str] | None:
+    """The roles to limit the search to, or None for no limit.
 
-    Built by `pandion.filters` from checked values only; see there for the rules.
+    The pipeline puts them in the run's extras; they are taken from there so a
+    step that rewrites the question cannot lose them. Only a run with none
+    (a step called on its own) falls back to the roles on the question.
     """
-    return _filters.where_sql(query.filters, descriptor)
+    extras = extras or {}
+    if "roles" in extras:
+        return extras["roles"]
+    return (query.filters or {}).get("roles")
 
 
-def filter_note(table: Any, query: Query) -> str | None:
-    """The sentence for pieces a pages filter left out for having no pages."""
-    sql = _filters.no_pages_sql(query.filters)
-    if sql is None:
-        return None
-    return _filters.no_pages_note(table.count_rows(sql))
+def search_filter(query: Query, descriptor: dict[str, Any], roles: list[str] | None) -> Filter:
+    """The store filter for the question's filters on this index and the roles."""
+    return _filters.store_filter(query.filters, roles, descriptor)
 
 
-def _filtered(search: Any, where: str | None) -> Any:
-    """The search limited to rows matching `where`, before ranking: a filter
-    applied after would leave fewer than `limit` hits, or none."""
-    return search if where is None else search.where(where, prefilter=True)
+def recheck(hits: list[StoreHit], roles: list[str] | None, *, retriever: str) -> list[StoreHit]:
+    """Keep only the rows the caller may read, whatever the store returned.
+
+    The store was asked to filter by roles, and a buggy plugin may not have.
+    A dropped row is logged by id, never by text.
+    """
+    if roles is None:
+        return hits
+    allowed = AnyOf("roles", tuple(roles))
+    kept = []
+    for hit in hits:
+        if matches(hit.row, allowed):
+            kept.append(hit)
+        else:
+            _access_log.warning(
+                "dropped row %s of %s: roles did not match (retriever %s)",
+                hit.row.id, hit.row.doc_id, retriever,
+            )
+    return kept
 
 
-def dense_rows(
-    table: Any,
+def dense_hits(
+    collection: Collection,
     vector: list[float] | None,
-    descriptor: dict[str, Any],
     limit: int,
-    where: str | None = None,
-) -> list[dict[str, Any]]:
-    """Vector search, using the distance type the index declared.
-
-    No ANN index is built, so the distance type is chosen per query — and it must
-    be the one the index was *declared* with, or the ranking is measured against
-    a geometry the vectors were never normalized for.
-    """
+    where: Filter,
+    roles: list[str] | None,
+    retriever: str,
+) -> list[StoreHit]:
+    """Vector search through the store, then the role re-check."""
     if vector is None:
         return []
-    search = table.search(vector).distance_type(descriptor["metric"])
-    return _filtered(search, where).limit(limit).to_list()
+    return recheck(collection.search_dense(vector, limit, where), roles, retriever=retriever)
 
 
-def fts_rows(
-    table: Any,
+def lexical_hits(
+    collection: Collection,
     query: Query,
     limit: int,
+    where: Filter,
+    roles: list[str] | None,
+    retriever: str,
     text: str | None = None,
-    where: str | None = None,
-) -> list[dict[str, Any]]:
-    """Full-text search on the same rows the vectors were built from.
+) -> list[StoreHit]:
+    """Full-text search through the store, then the role re-check.
 
     Lexical matching runs on `query.text`, never on `embed_text`: a hypothetical
     document is useful as a vector and actively harmful as a bag of keywords.
@@ -210,36 +277,11 @@ def fts_rows(
     if not query.text.strip():
         return []
     terms = query.text if text is None else text
-    search = table.search(terms, query_type="fts")
-    return _filtered(search, where).limit(limit).to_list()
-
-
-def indexed_texts(table: Any, where: str | None = None) -> list[str]:
-    """Every row's indexed text: the chunk set the full-text index was built on,
-    or only the rows matching `where`, so a filtered search weighs words
-    against the pieces it can find.
-
-    A plain scan with only the text column selected, so the vectors are never
-    read: PRF needs the words, and the vectors are most of the table's bytes.
-    """
-    rows = table.count_rows(where) if where is not None else table.count_rows()
-    if not rows:
-        return []
-    scan = _filtered(table.search(), where).select([TEXT_COLUMN]).limit(rows).to_arrow()
-    return scan.column(TEXT_COLUMN).to_pylist()
-
-
-def similarity(distance: float, metric: str) -> float:
-    """A distance turned into a score where higher is better.
-
-    `Hit.score` is sorted descending everywhere downstream, so the sign has to be
-    fixed here rather than at each consumer.
-    """
-    return 1.0 - distance if metric == "cosine" else -distance
+    return recheck(collection.search_lexical(terms, limit, where), roles, retriever=retriever)
 
 
 def make_hit(
-    row: dict[str, Any],
+    hit: StoreHit,
     *,
     rank: int,
     score: float,
@@ -248,16 +290,16 @@ def make_hit(
 ) -> Hit:
     """Rebuild the full chunk, so the citation carries the *original* text.
 
-    The indexed `text` column holds `chunk.text_to_embed`, which under contextual
-    retrieval is an augmented string that was never in the document. `chunk_json`
-    is the canonical chunk, offsets and provenance included.
+    The indexed `text` holds `chunk.text_to_embed`, which under contextual
+    retrieval is an augmented string that was never in the document. The row's
+    `chunk` is the canonical chunk, offsets and provenance included.
     """
-    chunk = Chunk.model_validate(json.loads(row["chunk_json"]))
+    chunk = Chunk.model_validate(json.loads(hit.row.chunk))
     return Hit(
         chunk=chunk,
         score=float(score),
         rank=rank,
-        matched_chunk_id=row["id"],
+        matched_chunk_id=hit.row.id,
         retriever=retriever,
         component_scores=component_scores or {},
     )

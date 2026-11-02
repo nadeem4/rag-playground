@@ -61,13 +61,37 @@ def manifest(config: Path) -> dict:
     return json.loads((config.parent / "index" / MANIFEST).read_text(encoding="utf-8"))
 
 
-def index_rows(report) -> list[str]:
-    table = lancedb.connect(report.index.output).open_table("chunks")
+def index_rows(report, config) -> list[str]:
+    binding = report.index.output
+    table = lancedb.connect(str(config.parent / "index" / "index")).open_table(binding["collection"])
     return sorted(r["id"] for r in table.to_arrow().to_pylist())
 
 
 def chunk_ids(report, doc_id: str) -> list[str]:
     return sorted(c.id for c in report.documents[doc_id].stages["chunk"].output.chunks)
+
+
+def collections(config: Path) -> set[str]:
+    db = lancedb.connect(str(config.parent / "index" / "index"))
+    return set(db.table_names())
+
+
+def test_a_sync_keeps_the_previous_collection_for_rollback(setup):
+    config, docs = setup
+    first = sync(config, docs)
+    (docs / "extra.pdf").write_bytes(build_pdf([["Berlin is the capital of Germany."]]))
+    second = sync(config, docs)
+
+    assert first.index.output["collection"] != second.index.output["collection"]
+    assert {first.index.output["collection"], second.index.output["collection"]} <= collections(config)
+
+
+def test_clearing_the_artifact_store_does_not_delete_collections(setup):
+    config, docs = setup
+    report = sync(config, docs)
+    Pipeline.from_file(config).index.store.delete(report.index.artifact_id)
+
+    assert report.index.output["collection"] in collections(config)
 
 
 def statuses(report) -> set[str]:
@@ -115,7 +139,7 @@ def test_a_new_file_is_added_to_the_index(setup):
     assert report.added == ["new.pdf"]
     assert report.unchanged == ["guides/short.pdf", "report.pdf"]
     assert report.documents["report.pdf"].stages["parse"].status == "cached"
-    assert set(chunk_ids(report, "new.pdf")) <= set(index_rows(report))
+    assert set(chunk_ids(report, "new.pdf")) <= set(index_rows(report, config))
     assert "new.pdf" in manifest(config)["documents"]
 
 
@@ -129,7 +153,7 @@ def test_a_changed_file_replaces_its_old_pieces(setup):
 
     assert report.changed == ["guides/short.pdf"]
     assert report.unchanged == ["report.pdf"]
-    rows = index_rows(report)
+    rows = index_rows(report, config)
     assert set(chunk_ids(report, "guides/short.pdf")) <= set(rows)
     assert not set(old_pieces) & set(rows)
     pipeline = Pipeline.from_file(config)
@@ -147,7 +171,7 @@ def test_a_removed_file_has_its_pieces_deleted(setup):
     assert report.removed == ["guides/short.pdf"]
     assert report.unchanged == ["report.pdf"]
     assert sorted(report.documents) == ["report.pdf"]
-    assert not set(gone) & set(index_rows(report))
+    assert not set(gone) & set(index_rows(report, config))
     assert sorted(manifest(config)["documents"]) == ["report.pdf"]
     # The old index held the removed pieces; it is gone from the store too.
     assert not Pipeline.from_file(config).index.store.has(first.index.artifact_id)
@@ -213,3 +237,22 @@ def test_a_broken_file_is_left_out_and_the_manifest_keeps_the_good_documents(set
     assert list(report.failed) == ["broken.pdf"]
     assert manifest(config) == before
     assert Pipeline.from_file(config).index.store.has(first.index.artifact_id)
+
+
+def test_the_index_still_works_after_the_pipeline_folder_moves(setup, tmp_path):
+    import shutil
+
+    config, docs = setup
+    first = sync(config, docs)
+    assert "location" not in first.index.output["settings"]
+    moved = tmp_path.parent / (tmp_path.name + "-moved")
+    shutil.copytree(tmp_path, moved)
+    shutil.rmtree(config.parent / "index")
+
+    new_config = moved / "pipeline.yaml"
+    new_config.write_text(
+        new_config.read_text(encoding="utf-8") + "retrieve:\n  search:\n    use: dense\n", encoding="utf-8"
+    )
+    result = Pipeline.from_file(new_config).retrieve("capital of France", k=3)
+
+    assert result.hits

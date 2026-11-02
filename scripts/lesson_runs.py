@@ -48,8 +48,7 @@ def run_pipeline(pipeline: dict[str, Any], pdf: Path, root: Path, question: str 
     if not report.ok:
         _fail(f"indexing {pdf.name}", {**steps, "index": report.index})
     out: dict[str, Any] = {name: store.get(s.artifact_id) for name, s in steps.items() if s.artifact_id}
-    descriptor = Path(store.get(report.index.artifact_id)) / "descriptor.json"
-    out["index"] = json.loads(descriptor.read_text(encoding="utf-8"))
+    out["index"] = store.get(report.index.artifact_id)["descriptor"]
     durations = {name: s.duration_ms for name, s in steps.items()}
     durations["index"] = report.index.duration_ms
     if question is not None:

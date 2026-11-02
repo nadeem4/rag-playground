@@ -53,8 +53,8 @@ def context(**keys) -> RunContext:
 
 
 @pytest.fixture
-def index(tmp_path) -> str:
-    return str(write_index(tmp_path / "index"))
+def index(tmp_path) -> dict:
+    return write_index(tmp_path / "index")
 
 
 def ask(pipeline, index=None, ctx=None, **config) -> Output:

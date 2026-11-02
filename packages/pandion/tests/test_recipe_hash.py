@@ -97,17 +97,18 @@ def test_the_moved_upload_node_keeps_its_id():
 @pytest.mark.parametrize(
     "config,expected",
     [
-        ({}, "6d0cc9ccecb775158deb6d5c90e96953458764a430e3ed486246b270f6d2c852"),
+        ({}, "aa1dfb454d749355cc944a2a0bec9899e816ef3067a93504c07e3c6f68918d8b"),
         (
             {"embedder": "fake-deterministic"},
-            "e778a82b114ae2113a3768c3b0d72360afa49a1b1ed1551e36104293613e95fe",
+            "218ea5b35dcaaea399d5f6aea51bc404e0ff72521a16269a66b0677c2e54b22f",
         ),
     ],
 )
 def test_a_lancedb_index_node_keeps_its_id(config, expected):
     """Computed on main at 8894d6d, while the index still lived in the app, and
     again for version 2, which added the columns search filters read, and
-    for version 3, which builds through the LanceDB index store."""
+    for version 3, which builds through the LanceDB index store, and again
+    for version 4, whose result is a binding to the store (T9)."""
     discover()
     cls = registry.get(Stage.INDEX, "lancedb")
     settings = cls.config_model(**config)

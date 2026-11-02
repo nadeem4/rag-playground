@@ -18,7 +18,6 @@ from pandion.artifacts import ArtifactType
 from pandion.payloads import Chunk, Hit, Query, RetrievalResult
 from pandion.ports import RunContext, Stage
 from pandion.registry import registry
-from pandion.plugins.index.lancedb_store import DESCRIPTOR
 from pandion.plugins.rerank.mmr import MmrRerank, MmrRerankConfig
 from pandion.embeddings import FakeDeterministicEmbedder, get_embedder
 
@@ -80,13 +79,12 @@ def result(
     ).model_dump(mode="json")
 
 
-def write_index(directory: Path, **descriptor) -> Path:
-    """An index directory as far as MMR reads one: its `descriptor.json`.
+def write_index(directory: Path, **descriptor) -> dict:
+    """An index binding as far as MMR reads one: its descriptor.
 
     MMR never searches the table, it only needs to know which embedder and
     which width the hits were retrieved in.
     """
-    directory.mkdir(parents=True, exist_ok=True)
     desc = {
         "backends": ["dense", "fts"],
         "native_dim": 384,
@@ -99,12 +97,11 @@ def write_index(directory: Path, **descriptor) -> Path:
         "embeddings_computed": 0,
         "embeddings_cached": 0,
     } | descriptor
-    (directory / DESCRIPTOR).write_text(json.dumps(desc), encoding="utf-8")
-    return directory
+    return {"store": "lancedb", "settings": {}, "collection": "none", "recipe_hash": "", "descriptor": desc}
 
 
 #: Set per test by `_index`; the fake embedder at native width by default.
-INDEX: dict[str, Path] = {}
+INDEX: dict[str, dict] = {}
 
 
 @pytest.fixture(autouse=True)

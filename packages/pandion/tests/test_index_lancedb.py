@@ -20,8 +20,6 @@ from pandion.payloads import Chunk, ChunkSet
 from pandion.ports import RunContext
 from pandion.storage import Store
 from pandion.plugins.index.lancedb_store import (
-    DESCRIPTOR,
-    TABLE,
     LanceDbIndex,
     LanceDbIndexConfig,
 )
@@ -51,11 +49,12 @@ def chunk_set(*texts: str, doc_id: str = "doc-1", embed_texts=None) -> dict:
 
 
 def build(
-    tmp_path: Path, *sets: dict, cache: Path | None = None, **config
-) -> tuple[Path, RunContext, Store]:
+    tmp_path: Path, *sets: dict, cache: Path | None = None, artifact_id: str = "a" * 64,
+    recipe_hash: str = "r" * 64, location: Path | None = None, **config
+) -> tuple[dict, RunContext, Store]:
     """Run the transform the way the executor does, and read the payload back.
 
-    Returns the *directory* the store hands downstream, so every assertion is
+    Returns the *binding* the store hands downstream, so every assertion is
     made against what a retriever will really see. Embeddings go through the
     cache in `cache`, else a fresh one beside the store.
     """
@@ -68,30 +67,34 @@ def build(
         output_dir=tmp_path / "scratch" / "out",
         emit=lambda e: None,
         tmp=tmp_path / "scratch" / "tmp",
-        extras={"embedding_cache": EmbeddingCache(cache or tmp_path / "embcache")},
+        extras={
+            "embedding_cache": EmbeddingCache(cache or tmp_path / "embcache"),
+            "index_location": str(location or tmp_path / "lancedb"),
+            "artifact_id": artifact_id,
+            "recipe_hash": recipe_hash,
+        },
     )
     ctx.output_dir.mkdir(parents=True, exist_ok=True)
     ctx.tmp.mkdir(parents=True, exist_ok=True)
 
     payload = tf.apply({"chunks": list(sets)}, cfg, ctx)
-    assert callable(payload), (
-        "an index payload must be a callable taking the destination directory — "
-        "that is what DirectorySerializer.write expects"
-    )
+    assert isinstance(payload, dict), "an index payload is a small JSON binding, not a directory"
 
-    aid = "a" * 64
-    store.put(Artifact(id=aid, type=ArtifactType.INDEX), payload)
-    loaded = store.load(aid, ArtifactType.INDEX)
-    assert isinstance(loaded, Path)
+    store.put(Artifact(id=artifact_id, type=ArtifactType.INDEX), payload)
+    loaded = store.load(artifact_id, ArtifactType.INDEX)
+    assert isinstance(loaded, dict)
+    assert "location" not in loaded["settings"], "the pipeline's own place is not kept in the binding"
+    # A retriever is told where the pipeline's index folder is; so is this helper.
+    loaded = {**loaded, "settings": {**loaded["settings"], "location": str(location or tmp_path / "lancedb")}}
     return loaded, ctx, store
 
 
-def descriptor_of(index_dir: Path) -> dict:
-    return json.loads((index_dir / DESCRIPTOR).read_text(encoding="utf-8"))
+def descriptor_of(binding: dict) -> dict:
+    return binding["descriptor"]
 
 
-def open_table(index_dir: Path):
-    return lancedb.connect(index_dir).open_table(TABLE)
+def open_table(binding: dict):
+    return lancedb.connect(binding["settings"]["location"]).open_table(binding["collection"])
 
 
 # --------------------------------------------------------------------------
@@ -155,22 +158,17 @@ def test_no_chunk_sets_at_all_does_not_crash(tmp_path):
     assert open_table(index_dir).count_rows() == 0
 
 
-def test_artifact_directory_survives_a_store_round_trip_and_reopens(tmp_path):
-    """The store *moves* the built directory into place. Reopening it after that
-    move is the whole point of the directory payload — and the place a Windows
-    file lock would show up."""
-    index_dir, ctx, store = build(
+def test_the_binding_survives_a_store_round_trip_and_reopens(tmp_path):
+    """The rows live in the store's own location, so reopening the collection
+    after the artifact is committed must work, twice."""
+    binding, ctx, store = build(
         tmp_path, chunk_set("Paris is the capital of France")
     )
 
-    assert index_dir.is_dir()
-    assert index_dir != ctx.output_dir
-    assert str(index_dir).startswith(str(store.root))
-    assert open_table(index_dir).count_rows() == 1
-
-    # Reopening a second time must also work: nothing may hold an exclusive
-    # handle on the committed artifact.
-    assert open_table(index_dir).count_rows() == 1
+    assert isinstance(binding, dict)
+    assert not str(binding["settings"]["location"]).startswith(str(store.root))
+    assert open_table(binding).count_rows() == 1
+    assert open_table(binding).count_rows() == 1
 
 
 # --------------------------------------------------------------------------
@@ -264,6 +262,7 @@ def test_descriptor_carries_every_capability_field(tmp_path):
         "vector_kind": "dense",
         "doc_count": 1,
         "sections": 0,
+        "max_page": 0,
         "embeddings_computed": 1,
         "embeddings_cached": 0,
     }

@@ -49,7 +49,7 @@ class JsonSerializer:
 
 
 class DirectorySerializer:
-    """For payloads written in place — indexes, image sets.
+    """For payloads written in place — image sets.
 
     `payload` is a callable taking the destination directory. Reading returns the
     directory itself; the caller opens it (e.g. a LanceDB connection). The store
@@ -64,8 +64,27 @@ class DirectorySerializer:
         return d
 
 
+class IndexSerializer:
+    """An index is a JSON binding to rows kept in a store.
+
+    A custom store step may still write a folder (a callable payload); that is
+    kept as it was and read back as the folder.
+    """
+
+    def write(self, payload: Any, d: Path) -> None:
+        if callable(payload):
+            DirectorySerializer().write(payload, d)
+        else:
+            JsonSerializer().write(payload, d)
+
+    def read(self, d: Path) -> Any:
+        if (d / "payload.json").is_file():
+            return JsonSerializer().read(d)
+        return d
+
+
 SERIALIZERS: dict[ArtifactType, Serializer] = {t: JsonSerializer() for t in ArtifactType}
-SERIALIZERS[ArtifactType.INDEX] = DirectorySerializer()
+SERIALIZERS[ArtifactType.INDEX] = IndexSerializer()
 
 
 def register_serializer(t: ArtifactType, ser: Serializer) -> None:

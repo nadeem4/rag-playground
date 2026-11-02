@@ -91,6 +91,13 @@ Documents = Any
 #: The roles of the person searching: a list of names, `ALL_ROLES` for an admin run, or None.
 Roles = Any
 
+def _caller_roles(config: "PipelineConfig", roles: Roles) -> list[str] | None:
+    """The roles a search is limited to: the caller's, when access is on."""
+    if config.access is None or roles is None or roles is ALL_ROLES:
+        return None
+    return sorted(set(roles))
+
+
 #: The callback a run reports each event to (see IndexPipeline.execute).
 OnEvent = Callable[[dict[str, Any]], None]
 
@@ -1348,6 +1355,7 @@ class IndexPipeline:
         cancel: threading.Event | None = None,
         force: bool = False,
         roles: dict[str, tuple[str | None, str]] | None = None,
+        caller_roles: list[str] | None = None,
     ) -> RunResult:
         """Run `graph` through the store, with this pipeline's files and models.
 
@@ -1358,10 +1366,14 @@ class IndexPipeline:
         if it raises, the run stops and the exception goes to the caller.
         `cancel` stops the run between steps: a step that is running finishes,
         and the rest are skipped. `force` runs every step again even when its
-        result is stored.
+        result is stored. `caller_roles` are the roles of the person searching;
+        every retriever limits its search to them and checks the rows it gets
+        back against them, whatever the question's own filters say.
         """
         discover()
         extras: dict[str, Any] = {
+            "index_location": str(self.config.path / "index"),
+            "recipe_hash": recipe_hash(self.config.index),
             "sources": self.sources,
             "embedding_cache": self.embedding_cache,
             "models": self.config.models,
@@ -1369,6 +1381,8 @@ class IndexPipeline:
         }
         if credentials:
             extras["credentials"] = dict(credentials)
+        if caller_roles is not None:
+            extras["roles"] = list(caller_roles)
         emit = None
         if on_event is not None:
             names = roles or {}
@@ -1681,7 +1695,8 @@ class RetrievalPipeline:
     ) -> Retrieval:
         graph, nodes = self.graph(question, k, documents, where, roles)
         result = self.index.execute(
-            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=nodes
+            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=nodes,
+            caller_roles=_caller_roles(self.config, roles),
         )
         return self._retrieval(graph, result)
 
@@ -1821,7 +1836,8 @@ class QueryPipeline:
         resolved = self.index._documents(documents) if documents is not None else None
         graph, nodes = self.graph(question, k, resolved, where, roles)
         result = self.index.execute(
-            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=nodes
+            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=nodes,
+            caller_roles=_caller_roles(self.config, roles),
         )
         answer = next(node for node in graph.nodes if node.id == "answer")
         return Answer(

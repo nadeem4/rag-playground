@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from pandion.artifacts import ArtifactType
 from pandion.payloads import Query
-from pandion.ports import PortSpec, RunContext, Stage, set_note
+from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion.plugins.retrieve import _base
@@ -67,25 +67,21 @@ class Bm25Retriever(Transform[Bm25Config]):
         self, inputs: Mapping[str, Any], config: Bm25Config, ctx: RunContext
     ) -> dict[str, Any]:
         query = Query.model_validate(inputs["query"])
-        table, descriptor = _base.open_index(inputs["index"])
+        collection, descriptor = _base.open_index(inputs["index"], ctx.extras)
         # Checked here and not only at graph validation: `provides` says what the
         # index transform *can* build, the descriptor says what it *did*.
-        _base.require_backend(descriptor, "fts", self.name)
-        where = _base.where_sql(query, descriptor)
+        roles = _base.caller_roles(query, ctx.extras)
+        _base.check_pairing(inputs["index"], descriptor, "fts", self.name, roles, query, ctx.extras)
+        where = _base.search_filter(query, descriptor, roles)
 
         timings: dict[str, float] = {}
         with _base.timed(timings, "search"):
-            rows = _base.fts_rows(table, query, config.top_k, where=where)
-        note = _base.filter_note(table, query)
-        if note:
-            set_note(ctx, note)
+            rows = _base.lexical_hits(collection, query, config.top_k, where, roles, self.name)
 
-        # LanceDB's `_score` is the BM25 score: already higher-is-better and
-        # already sorted, so no sign flip and no re-sort.
+        # The store's score is already higher-is-better and sorted, so no sign
+        # flip and no re-sort.
         hits = [
-            _base.make_hit(
-                row, rank=rank, score=row["_score"], retriever=self.name
-            )
+            _base.make_hit(row, rank=rank, score=row.score, retriever=self.name)
             for rank, row in enumerate(rows, start=1)
         ]
 

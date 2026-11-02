@@ -52,7 +52,7 @@ from pandion.embedding_cache import EmbeddingCache
 from pandion.executor import NodeResult, RunResult, run
 from pandion.fetch import fetch_url, is_url
 from pandion.filters import check_where, resolve as _resolve_where
-from pandion.document_sources import Source
+from pandion.document_sources import Source, get_source
 from pandion.access import ALL_ROLES, AccessDenied, Resolved, resolve_roles
 from pandion.docinfo import DocumentInfo, document_info
 from pandion.formats import UnreadableFormat, check_contents, check_readable, format_of
@@ -901,6 +901,17 @@ class IndexPipeline:
             )
         with sync_lock(self.config.path):
             return self._sync(paths, credentials, metadata, categories)
+
+    def sync_source(self, *, credentials: dict[str, str] | None = None) -> SyncReport:
+        """`sync` the source named in the pipeline file's `source:` block.
+
+        Raises ValueError when the file has no such block, and as `sync` does
+        for a source that lists nothing.
+        """
+        if self.config.source is None:
+            raise ValueError("The pipeline file has no source: block to sync from. Add one, such as source: {use: files, location: ./docs}.")
+        use, settings = self.config.source
+        return self.sync(get_source(use, **settings), credentials=credentials)
 
     def _sync(
         self,

@@ -259,6 +259,13 @@ folder, or a `Source`: a Stable contract with `name`, `list()` and `read(doc_id)
 document, and no bytes. The `files` source builds on fsspec, so one class covers a local
 folder and the common buckets. fsspec is an optional extra, `pandion[files]`.
 
+A pipeline file can name its source in a top-level `source:` block (`use` plus the source's
+settings). `config._sync_source` builds it once while the file is read, so a bad name or setting
+fails then, and keeps `(name, settings)` on `PipelineConfig.source`. It is not part of the
+recipe hash. `IndexPipeline.sync_source()` builds the source again and calls `sync`, and
+`pandion sync` wraps that call: one JSON summary line on stdout, exit 0, 1 (a document left
+out) or 2 (refused), so a scheduled job can alert on it.
+
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%
 flowchart TD

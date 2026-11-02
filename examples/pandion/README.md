@@ -26,6 +26,9 @@ templates.
 - `ask_samples.py`: indexes two samples, asks a question and prints the pieces found,
   twice, to show every step was reused. With `ANTHROPIC_API_KEY` set it asks Claude Haiku
   4.5 for an answer that cites the pieces instead, which is one paid call.
+- `chat_turn.py`: one chat turn over two samples, kept in a `sql` conversation store
+  (needs `pandion[sql]`). The first turn is offline; with `ANTHROPIC_API_KEY` set it sends a
+  follow-up that one paid Claude Haiku 4.5 call rewrites to stand alone, then folds the summary.
 - `three_styles.py`: builds the pipeline in `pipeline.yaml` as the file, as a dict per
   stage and as classes, in one folder. The first indexes and asks; the other two find every
   step already stored. It prints that the artifact ids match, then the classes pipeline

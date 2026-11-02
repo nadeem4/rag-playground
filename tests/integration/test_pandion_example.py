@@ -182,3 +182,14 @@ def test_run_template_without_a_key_says_which_template_needs_one(tmp_path, monk
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(SystemExit, match="Chat answer needs an API key.*ANTHROPIC_API_KEY"):
         _load_script("run_template").main("text", "chat", PRIMER, work=tmp_path, embedder="fake-deterministic")
+
+
+def test_chat_turn_example_answers_a_first_turn_offline_and_stores_it(tmp_path, capsys):
+    from pandion.conversation_store import get_conversation_store
+
+    (first,) = _load_script("chat_turn").main(tmp_path, embedder="fake-deterministic")
+
+    assert first.answer.ok and first.standalone == "How big should a chunk be?" and first.source_ids
+    store = get_conversation_store("sql", {"url": f"sqlite:///{tmp_path / 'chats.db'}"})
+    assert [t.question for t in store.load(first.conversation_id, "me").turns] == [first.question]
+    assert "ANTHROPIC_API_KEY" in capsys.readouterr().out

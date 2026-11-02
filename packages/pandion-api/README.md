@@ -38,6 +38,20 @@ Pass a `Policy` as the second argument to `create_app` to set your site's rules.
 that validates, uploads, indexes, asks and evaluates, the same steps as curl commands,
 and a small Policy.
 
+## Serve mode
+
+For a site's own users, `create_app(settings, policy, mode="serve", pipeline="pipeline.yaml")`
+loads one pipeline file once and answers `POST /chat`, as JSON or as server-sent events. Your
+`Policy` says who is asking (`user_id`), which roles they have (`roles`) and whether they may
+ask now (`limit`). Build the index first with `pandion sync`.
+
+```bash
+curl -N http://127.0.0.1:8000/chat -H 'content-type: application/json' \
+  -d '{"messages": [{"role": "user", "content": "How long is the notice period?"}], "stream": true}'
+```
+
+[docs/pandion-api.md](../../docs/pandion-api.md#serve-mode) has the request, the events and `/ready`.
+
 ## The routes
 
 Each path is under `prefix`.

@@ -1,9 +1,11 @@
 """Serve's /conversations and /memories: the owner only, and the limit on every call."""
 
 import pytest
+from fastapi import HTTPException
 
 from pandion.extend import Memory, Turn
 from pandion_api import Policy
+from apihelpers import make_serve_client
 from test_api_chat import ByHeader, StubPipeline, serve
 
 
@@ -70,10 +72,28 @@ def test_memories_list_and_delete_for_the_owner_only(tmp_path):
         assert len(c.app.state.conversations.memories("bob")) == 1
 
 
-def test_memory_routes_are_404_when_memory_is_off(tmp_path):
-    with serve(tmp_path, StubPipeline()) as c:
-        assert c.get("/memories").status_code == 404
-        assert c.delete("/memories/x").status_code == 404
+def test_memories_written_while_on_can_still_be_seen_and_deleted_when_off(tmp_path):
+    with serve(tmp_path, StubPipeline(), memory=True) as c:
+        add_memory(c, "anonymous", "Likes tea.")
+        store = c.app.state.conversations
+    with make_serve_client(tmp_path, indexed=False, store=store) as off:
+        rows = off.get("/memories").json()
+        assert [m["text"] for m in rows] == ["Likes tea."]
+        assert off.delete(f"/memories/{rows[0]['id']}").status_code == 204
+        assert off.get("/memories").json() == []
+
+
+class Refusing(Policy):
+    def limit(self, request):
+        raise HTTPException(status_code=429, detail="Slow down.")
+
+    def user_id(self, request):
+        raise HTTPException(status_code=401, detail="Who are you?")
+
+
+def test_limit_is_asked_before_user_id(tmp_path):
+    with serve(tmp_path, StubPipeline(), Refusing()) as c:
+        assert c.get("/conversations").status_code == 429
 
 
 class Counting(Policy):

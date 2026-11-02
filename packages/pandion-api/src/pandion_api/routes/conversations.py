@@ -3,7 +3,8 @@
 Every route asks the Policy `limit` first, then `user_id`. A conversation or memory
 that is not the caller's is a 404, the same as one that does not exist. A turn is
 shown with its question, answer, source ids and trace id, never its rewrite or
-the running summary. The memory routes are a 404 while `ServeSettings.chat.memory` is off.
+the running summary. The memory routes work even while memory is off, so a user can still
+see and delete what was kept earlier.
 """
 
 from __future__ import annotations
@@ -20,11 +21,6 @@ NO_MEMORY = "There is no memory with that id."
 def _who(request: Request) -> str:
     request.app.state.policy.limit(request)
     return request.app.state.policy.user_id(request)
-
-
-def _memory_on(request: Request) -> None:
-    if not request.app.state.serve.chat.memory:
-        raise HTTPException(status_code=404, detail="Memory is not turned on.")
 
 
 @router.get("/conversations")
@@ -62,7 +58,6 @@ async def delete_conversation(conversation_id: str, request: Request):
 @router.get("/memories")
 async def list_memories(request: Request):
     user = _who(request)
-    _memory_on(request)
     rows = await anyio.to_thread.run_sync(request.app.state.conversations.memories, user)
     return [m.model_dump() for m in rows]
 
@@ -70,7 +65,6 @@ async def list_memories(request: Request):
 @router.delete("/memories/{memory_id}", status_code=204)
 async def delete_memory(memory_id: str, request: Request):
     user = _who(request)
-    _memory_on(request)
     store = request.app.state.conversations
     if not any(m.id == memory_id for m in await anyio.to_thread.run_sync(store.memories, user)):
         raise HTTPException(status_code=404, detail=NO_MEMORY)

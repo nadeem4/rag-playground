@@ -29,7 +29,7 @@ async def ask(body: AskIn, request: Request):
     policy = app.policy
     policy.limit(request)
     roles = policy.roles(request)
-    policy.user_id(request)
+    policy.user_id(request)  # so a Policy can refuse the caller (401), though /ask stores nothing
     trace_id = uuid.uuid4().hex
 
     def work(on_event, cancel, credentials):

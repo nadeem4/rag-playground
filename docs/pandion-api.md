@@ -475,8 +475,8 @@ nothing.
 | `GET /memories` | The user's memories, oldest first. |
 | `DELETE /memories/{memory_id}` | Deletes one memory by id and answers `204`. There is no delete-all route. |
 
-The memory routes are a 404 while `ServeSettings.chat.memory` is off, because there is
-nothing to show.
+The memory routes work even while `ServeSettings.chat.memory` is off, so a user can still
+see and delete memories kept while it was on.
 
 ### GET /health and GET /ready
 

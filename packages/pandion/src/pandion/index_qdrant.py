@@ -32,7 +32,7 @@ from collections.abc import Iterable, Sequence
 from contextlib import contextmanager
 from uuid import NAMESPACE_URL, uuid5
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from pandion.errors import FormatTooNew, require
 from pandion.index_lance import NoRows
@@ -51,6 +51,8 @@ _BATCH = 256
 
 
 class QdrantSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     location: str = ":memory:"  # ":memory:" or a folder; both run with no server
     url: str = ""  # a Qdrant server; wins over `location`
     api_key_env: str = ""  # the NAME of an environment variable; the key is never a setting

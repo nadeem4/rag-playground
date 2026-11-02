@@ -40,7 +40,7 @@ from pandion.embeddings import EmbedderName, embedder_names, get_embedder
 from pandion.errors import require
 from pandion.ids import AddedSettings
 from pandion.index_lance import LanceSettings, LanceStore
-from pandion.index_store import Binding, IndexMeta, IndexRow
+from pandion.index_store import Binding, IndexMeta, IndexRow, IndexStore
 from pandion.payloads import ChunkSet
 from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
@@ -64,7 +64,7 @@ def _embedder_labels(schema: dict[str, Any]) -> None:
     schema["x-labels"] = {name: _EMBEDDER_LABELS.get(name, name) for name in sorted(embedder_names())}
 
 
-class LanceDbIndexConfig(AddedSettings):
+class StoreIndexConfig(AddedSettings):
     #: Left out of the artifact id while empty, so an index with no `access:` block keeps its id.
     added: ClassVar[tuple[str, ...]] = ("doc_roles",)
 
@@ -125,10 +125,20 @@ class LanceDbIndexConfig(AddedSettings):
     )
 
 
-@register
-class LanceDbIndex(Transform[LanceDbIndexConfig]):
-    name = "lancedb"
-    extra = "lancedb"
+class LanceDbIndexConfig(StoreIndexConfig):
+    pass
+
+
+class StoreIndex(Transform[StoreIndexConfig]):
+    """What every index step that builds through an `IndexStore` shares: chunk
+    to rows, embed through the cache, write to a store, hand on a binding.
+
+    A step differs in its name, config, extra, `provides` and in how it makes
+    its store: `_require`, `_settings` and `_make_store`.
+    """
+
+    __abstract_transform__ = True
+
     #: 2 added the page_start, page_end and section columns that search
     #: filters read. 3 builds through the LanceDB index store (doc_version,
     #: roles, _pandion_meta). 4 makes the artifact a binding to a collection and
@@ -137,18 +147,19 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
     stage = Stage.INDEX
     inputs = {"chunks": PortSpec(ArtifactType.CHUNK_SET, variadic=True)}
     output = ArtifactType.INDEX
-    #: `format` says the index is a LanceDB table, which every built-in
-    #: retriever opens; a store in another format brings its own retriever.
-    provides = {"backends": ["dense", "fts"], "format": ["lancedb"]}
-    config_model = LanceDbIndexConfig
-    summary = (
-        "Turns every piece into a vector (a list of numbers that captures its "
-        "meaning) with an embedding model, and stores it in a LanceDB table with a "
-        "keyword index over the same rows. Vector search and keyword search then "
-        "read the same pieces, which is what lets hybrid search combine them fairly."
-    )
 
-    def explain(self, config: LanceDbIndexConfig) -> Explanation:
+    def _require(self) -> None:
+        """Import the store's library, or say which extra brings it."""
+        raise NotImplementedError
+
+    def _settings(self, config: StoreIndexConfig, ctx: RunContext) -> tuple[dict[str, Any], dict[str, Any]]:
+        """(the settings to open the store now, the settings kept in the binding; never a secret)."""
+        raise NotImplementedError
+
+    def _make_store(self, settings: dict[str, Any]) -> IndexStore:
+        raise NotImplementedError
+
+    def explain(self, config: StoreIndexConfig) -> Explanation:
         # `get_embedder` only builds the provider object; no model is loaded.
         embedder = get_embedder(config.embedder)
         name, native, dim = embedder.name, embedder.native_dim, config.truncate_dim
@@ -231,7 +242,7 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
             )
         return Explanation(settings=settings, tradeoff=tradeoff, warning=warning)
 
-    def fingerprint(self, config: LanceDbIndexConfig | None = None) -> str:
+    def fingerprint(self, config: StoreIndexConfig | None = None) -> str:
         """Model identity plus truncation width.
 
         Both must be in the recipe hash. The *name* of the embedder and
@@ -253,7 +264,7 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
     def apply(
         self,
         inputs: Mapping[str, Any],
-        config: LanceDbIndexConfig,
+        config: StoreIndexConfig,
         ctx: RunContext,
     ) -> dict[str, Any]:
         # A variadic port hands over a list — this is corpus support. BM25's IDF
@@ -268,7 +279,7 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
         # Before any embedding, so a bad width fails with the reason and not
         # after a model download.
         embedder.check_dim(config.truncate_dim)
-        require("pyarrow", extra="lancedb", step="The lancedb index")
+        self._require()
         dim = config.truncate_dim or embedder.native_dim
         # Through the cache at native width: a truncate_dim sweep embeds each
         # chunk once and slices the rest.
@@ -340,27 +351,23 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
         # Where the rows go. A pipeline sets the location, the recipe and this
         # artifact's id; a run without one (the contract suite) gets a private
         # folder and an anonymous name.
-        location = str(ctx.extras.get("index_location") or ctx.output_dir / "index")
         recipe = ctx.extras.get("recipe_hash", "")
         name = f"{recipe[:16]}-{str(ctx.extras.get('artifact_id', ''))[:12]}"
-        settings = {"location": location, "fts": config.build_fts}
-        _build(settings, name, rows, dim=dim, metric=config.metric, embedder=embedder, recipe=recipe)
+        settings, kept = self._settings(config, ctx)
+        _build(self._make_store(settings), name, rows, dim=dim, metric=config.metric, embedder=embedder, recipe=recipe)
 
         # The executor owns `Artifact.meta` and merges this under its own keys,
         # so it reaches the store and the UI. The binding's descriptor remains
         # what a downstream transform actually reads.
         ctx.extras["meta"] = {"index_descriptor": descriptor}
 
-        # The pipeline's own place is not kept in the binding (the artifact id
-        # does not cover it, and the folder may move); whoever opens it says.
-        kept = {"fts": config.build_fts} if ctx.extras.get("index_location") else settings
         return Binding(
-            store="lancedb", settings=kept, collection=name, recipe_hash=recipe, descriptor=descriptor
+            store=self.name, settings=kept, collection=name, recipe_hash=recipe, descriptor=descriptor
         ).model_dump(mode="json")
 
 
 def _build(
-    settings: dict[str, Any],
+    store: IndexStore,
     name: str,
     rows: list[IndexRow],
     *,
@@ -374,7 +381,6 @@ def _build(
     A collection of the same name (a forced run of an unchanged artifact) is
     replaced. Nothing may still hold the database open when this returns.
     """
-    store = LanceStore(LanceSettings(**settings))
     store.drop(name)
     # An empty corpus is a legal index, not an error: it is what an
     # unconfigured pipeline produces on its first run.
@@ -391,3 +397,38 @@ def _build(
     # LanceDB brute-forces the vector column correctly without one. An HNSW
     # sweep is a Phase 3 concern and lands here as config, not as a new plugin.
     del collection, store
+
+
+def _here(ctx: RunContext) -> str:
+    """The pipeline's own index folder, or a private one for a run with none."""
+    return str(ctx.extras.get("index_location") or ctx.output_dir / "index")
+
+
+@register
+class LanceDbIndex(StoreIndex):
+    __abstract_transform__ = False
+    name = "lancedb"
+    extra = "lancedb"
+    #: `format` says the index is rows in a store, which every built-in
+    #: retriever reads; a step that keeps another format brings its own retriever.
+    provides = {"backends": ["dense", "fts"], "format": ["store"]}
+    config_model = LanceDbIndexConfig
+    summary = (
+        "Turns every piece into a vector (a list of numbers that captures its "
+        "meaning) with an embedding model, and stores it in a LanceDB table with a "
+        "keyword index over the same rows. Vector search and keyword search then "
+        "read the same pieces, which is what lets hybrid search combine them fairly."
+    )
+
+    def _require(self) -> None:
+        require("pyarrow", extra="lancedb", step="The lancedb index")
+
+    def _settings(self, config: StoreIndexConfig, ctx: RunContext) -> tuple[dict[str, Any], dict[str, Any]]:
+        settings = {"location": _here(ctx), "fts": config.build_fts}
+        # The pipeline's own place is not kept in the binding (the artifact id
+        # does not cover it, and the folder may move); whoever opens it says.
+        kept = {"fts": config.build_fts} if ctx.extras.get("index_location") else settings
+        return settings, kept
+
+    def _make_store(self, settings: dict[str, Any]) -> IndexStore:
+        return LanceStore(LanceSettings(**settings))

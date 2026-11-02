@@ -84,7 +84,7 @@ def test_dense_on_a_store_that_is_not_lancedb_is_refused_at_load(tmp_path):
         from_dict(_config("test_dense_only_store", "dense"), base=tmp_path)
     assert str(caught.value) == (
         "retrieve.search uses 'dense', which needs a store with backends dense and "
-        "format lancedb, but index.store uses 'test_dense_only_store', which has "
+        "format store, but index.store uses 'test_dense_only_store', which has "
         "backends dense."
     )
     assert (caught.value.step, caught.value.use) == ("retrieve.search", "dense")
@@ -101,9 +101,9 @@ def test_every_built_in_retriever_reads_lancedb(tmp_path, search):
 
 
 def test_lancedb_says_its_format_and_the_built_in_retrievers_need_it():
-    assert LanceDbIndex.provides["format"] == ["lancedb"]
+    assert LanceDbIndex.provides["format"] == ["store"]
     for cls in (DenseRetriever, Bm25Retriever, HybridRrfRetriever):
-        assert cls.requires["index"]["format"] == ["lancedb"]
+        assert cls.requires["index"]["format"] == ["store"]
 
 
 def test_no_retrieve_section_means_no_check(tmp_path):

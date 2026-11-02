@@ -31,7 +31,7 @@ class JsonlStore(Transform[JsonlStoreConfig]):
     output = ArtifactType.INDEX
     # What this store offers. A retriever's `requires` is checked against it
     # when the pipeline file is read. `format` names the files it writes: the
-    # built-in retrievers require format lancedb, so they are refused with this
+    # built-in retrievers require format store, so they are refused with this
     # store, and it comes with its own retriever, jsonl_search.
     provides = {"backends": ["dense"], "format": ["jsonl"]}
     config_model = JsonlStoreConfig

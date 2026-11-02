@@ -62,7 +62,7 @@ question as typed in `original`.
 Open `my_strategies/retrieve.py`. A retriever reads the `index` port, the folder the store
 wrote, and the `query` port, which Pandion fills from the rewrite. Its `requires` must
 match the store's `provides`, or the pipeline file is refused when it is read. It asks for
-format jsonl as well as the dense backend, so it is refused with the `lancedb` store,
+format jsonl as well as the dense backend, so it is refused with the `lancedb` and `qdrant` stores,
 whose files it cannot read.
 
 ### Rerank: `shortest_first`

@@ -230,9 +230,16 @@ what these settings will do.
 - **Prefers** is a soft lock: the strategy still runs but falls back, with a sentence
   saying what happens instead, and the app tags it "Falls back".
 
+The `lancedb` and `qdrant` index steps share one base class, `StoreIndex`
+(`plugins/index/lancedb_store.py`): it turns chunks into rows, embeds them through the
+cache, writes them to a store and hands on a binding. A step only says which store, which
+extra and which settings. Both provide `format: store`, which is what the built-in
+retrievers require.
+
 An index store is a second kind of plugin. `pandion.index_store` defines the Stable contract (`IndexStore`,
 `Collection`, the filters and `register_store`), `pandion.index_memory` is the reference store, `pandion.index_lance` is the LanceDB store that the
-`lancedb` index step builds through, and
+`lancedb` index step builds through, `pandion.index_qdrant` is the Qdrant store behind the `qdrant`
+step (an optional extra), and
 `pandion.testing.store_conformance` proves any store keeps the contract. A store is not a pipeline step, so
 it is not in `PLUGIN_MODULES`. See "Index stores" in [pandion.md](pandion.md#index-stores).
 

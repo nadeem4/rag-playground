@@ -30,10 +30,15 @@ A team that keeps its index somewhere else writes an index store: `IndexRow`,
 A team that keeps its documents somewhere else writes a `Source`: `SourceEntry`
 is what it lists, `register_source` adds it, and `index.sync(source)` reads
 only the entries that are new or changed. See docs/pandion.md, "Sync from a source".
+
+A team that decides who may read a document writes an `@access_rule`: it takes a
+`DocumentInfo` and returns role names, or None for no opinion. A rule that fails
+leaves the document visible to nobody. See docs/pandion.md, "Who may read a document".
 """
 
 from typing import Any
 
+from pandion.access import ALL_ROLES, AccessDenied, access_rule
 from pandion.artifacts import ArtifactType
 from pandion.docinfo import DocumentInfo, document_info
 from pandion.document_sources import Source, SourceEntry, register_source
@@ -52,7 +57,7 @@ from pandion.sources import raw_file
 from pandion.transform import Explanation, Transform
 
 __all__ = [
-    "FORMATS", "And", "AnyOf", "ArtifactType", "Capabilities", "Chunk", "ChunkSet", "DocumentInfo", "Element", "Embedder",
+    "ALL_ROLES", "AccessDenied", "access_rule", "FORMATS", "And", "AnyOf", "ArtifactType", "Capabilities", "Chunk", "ChunkSet", "DocumentInfo", "Element", "Embedder",
     "EndpointRefused", "Eq", "Explanation", "FetchRefused", "Hit", "In", "IndexMeta", "IndexRow", "Output", "ParsedDoc",
     "PluginError", "PortSpec", "Query", "RetrievalResult", "RunContext", "Source", "SourceEntry", "Stage", "StoreHit", "Transform", "UnreadableFormat",
     "check_contents", "document_info", "fetch_url", "format_of", "get_embedder", "guard_endpoint", "load_plugins",

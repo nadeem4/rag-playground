@@ -92,3 +92,11 @@ def test_sync_exit_codes(folder, tmp_path):
     write(bare, source=False)
     missing = pandion("sync", "pipeline.yaml", cwd=bare)
     assert missing.returncode == 2 and "source:" in missing.stderr
+
+
+def test_sync_reads_a_relative_location_from_the_pipeline_files_folder(folder, tmp_path):
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    done = pandion("sync", str(folder / "pipeline.yaml"), cwd=elsewhere)
+    assert done.returncode == 0, done.stderr
+    assert json.loads(done.stdout)["added"] == 2

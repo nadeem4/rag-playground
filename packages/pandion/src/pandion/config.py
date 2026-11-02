@@ -284,7 +284,7 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
         answer=_answer(data["answer"]) if "answer" in data else None,
         plugins=plugins,
         access=_access(data["access"]) if "access" in data else None,
-        source=_sync_source(data["source"]) if "source" in data else None,
+        source=_sync_source(data["source"], base) if "source" in data else None,
     )
     if config.access is not None and config.index.source[0] != "upload":
         raise ConfigError(
@@ -943,21 +943,24 @@ def _roles(value: Any, where: str) -> list[str]:
     return list(value)
 
 
-def _sync_source(data: Any) -> tuple[str, dict[str, Any]]:
+def _sync_source(data: Any, base: Path) -> tuple[str, dict[str, Any]]:
     """The `source:` block: `use` names a registered source, the other keys are
     its settings. It is built once here so a bad name or setting fails now."""
     from pandion.document_sources import get_source
 
     if not isinstance(data, dict):
-        raise ConfigError("source must be a mapping with a use key, such as use: files.", step="source")
+        raise ConfigError("source must be a mapping with a use key, such as use: files.")
     if not isinstance(data.get("use"), str) or not data["use"]:
-        raise ConfigError("source needs a use key naming the source, such as use: files.", step="source")
+        raise ConfigError("source needs a use key naming the source, such as use: files.")
     use = data["use"]
     settings = {key: value for key, value in data.items() if key != "use"}
+    location = settings.get("location")
+    if isinstance(location, str) and "://" not in location and not Path(location).expanduser().is_absolute():
+        settings["location"] = str(base / location)
     try:
         get_source(use, **settings)
     except (ValueError, TypeError) as exc:
-        raise ConfigError(f"source: {exc}", step="source", use=use) from None
+        raise ConfigError(f"source: {exc}", use=use) from None
     return use, settings
 
 

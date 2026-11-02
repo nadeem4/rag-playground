@@ -25,12 +25,12 @@ def load(**extra):
 
 
 def test_source_block_is_read_into_the_config():
-    config = load(source={"use": "files", "location": "./docs"})
-    assert config.source == ("files", {"location": "./docs"})
+    config = load(source={"use": "files", "location": "gs://bucket/docs"})
+    assert config.source == ("files", {"location": "gs://bucket/docs"})
 
 
 def test_source_block_round_trips_through_to_dict():
-    block = {"use": "files", "location": "./docs"}
+    block = {"use": "files", "location": "gs://bucket/docs"}
     data = to_dict(load(source=block))
     assert data["source"] == block
     assert "version" not in data
@@ -82,3 +82,21 @@ def test_index_source_still_works_beside_a_source_block():
 def test_source_block_with_an_access_block_is_allowed():
     config = load(source={"use": "files", "location": "./docs"}, access={"default": ["staff"]})
     assert config.access is not None
+
+
+def test_a_relative_location_is_read_from_the_files_folder(tmp_path):
+    config = from_dict({**BASE, "source": {"use": "files", "location": "./docs"}}, base=tmp_path)
+    assert config.source == ("files", {"location": str(tmp_path / "docs")})
+
+
+def test_an_address_and_an_absolute_location_are_kept(tmp_path):
+    absolute = str((tmp_path / "abs").resolve())
+    for location in ("gs://bucket/docs", absolute):
+        config = from_dict({**BASE, "source": {"use": "files", "location": location}}, base=tmp_path)
+        assert config.source == ("files", {"location": location})
+
+
+def test_source_errors_do_not_name_the_index_source_step():
+    with pytest.raises(ConfigError) as exc:
+        load(source="files")
+    assert exc.value.step is None

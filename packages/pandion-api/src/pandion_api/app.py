@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 
@@ -21,8 +23,28 @@ ROUTERS = (
 )
 
 
-def create_app(settings: ApiSettings, policy: Policy | None = None) -> FastAPI:
-    """The app. `policy` holds the site's rules; the default allows everything."""
+def create_app(
+    settings: ApiSettings,
+    policy: Policy | None = None,
+    *,
+    mode: str = "lab",
+    pipeline: str | Path | None = None,
+    conversations: Any = None,
+    serve: Any = None,
+) -> FastAPI:
+    """The app. `policy` holds the site's rules; the default allows everything.
+
+    `mode="lab"` (the default) takes a pipeline with each request. `mode="serve"`
+    loads the one pipeline file at `pipeline` and answers POST /chat; it keeps
+    conversations in `conversations` (a Pandion conversation store, else SQL in
+    the data folder) and takes its chat settings from `serve` (`ServeSettings`).
+    See docs/pandion-api.md, "Serve mode"."""
+    if mode == "serve":
+        from pandion_api.serve import create_serve_app
+
+        return create_serve_app(settings, policy, pipeline, conversations, serve)
+    if mode != "lab":
+        raise ValueError(f"mode must be 'lab' or 'serve', not '{mode}'.")
     policy = policy or Policy()
     manager = RunManager(limit=policy.max_active_runs)
 

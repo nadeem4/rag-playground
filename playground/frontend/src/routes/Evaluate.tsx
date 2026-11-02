@@ -17,6 +17,7 @@ import { useRun } from "@/api/useRun"
 import { DocumentNote, needsDocument } from "@/components/DocumentNote"
 import { EmptyState } from "@/components/EmptyState"
 import { EvalNumbers } from "@/components/evaluate/EvalMetrics"
+import { IndexTag } from "@/components/evaluate/IndexTag"
 import { HowScored } from "@/components/evaluate/HowScored"
 import { SideSheet } from "@/components/SideSheet"
 import { MissTrace } from "@/components/evaluate/MissTrace"
@@ -1095,6 +1096,8 @@ function Evaluation({
             </p>
           </div>
         ) : null}
+
+        {ran && !busy ? <IndexTag name={result?.index_collection} /> : null}
 
         {ran && !busy && totals && totals.total > 0 ? (
           <EvalNumbers totals={totals} before={beforeTotals} byTag={byTag} topK={shownK} rerank={rerankText} onExplain={onExplain} />

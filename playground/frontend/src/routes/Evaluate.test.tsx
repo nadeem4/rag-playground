@@ -1711,6 +1711,11 @@ describe("Best so far", { timeout: 15000 }, () => {
     expect(seen.evaluations).toHaveLength(1)
   })
 
+  it("shows the index collection the run searched", async () => {
+    await runOnce(report([found("a", A)], { ...KEYED, index_collection: "0123456789abcdef-0123456789ab" }))
+    expect(screen.getByTestId("index-tag").textContent).toBe("Index 012345-012345")
+  })
+
   it("keeps the groups from the new run, and says when it found questions differently from the saved best", async () => {
     seed(report([found("a", A), found("b", B)], KEYED))
     await runOnce(report([found("a", A), missed("b", B)], KEYED))

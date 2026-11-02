@@ -50,4 +50,10 @@ describe("RecipeHead", () => {
     rerender(<RecipeHead {...props} />)
     expect(screen.queryByTestId("recipe-cost")).toBeNull()
   })
+
+  it("shows the index collection a finished recipe searched", () => {
+    render(<RecipeHead {...props} collection="0123456789abcdef-0123456789ab" />)
+    expect(screen.getByTestId("index-tag").textContent).toBe("Index 012345-012345")
+  })
 })
+

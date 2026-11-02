@@ -258,8 +258,10 @@ def _compare_on_one_question(body: ComparisonIn, pipelines: list, documents: dic
                 report = p.retrieve(body.question, **kwargs)
                 item = {"retrieval": reports.retrieval(report)}
             ran.append(report)
+            searched = report.retrieval if body.answer else report
             out.append({
                 "stage": body.stage, "variant": variant, "ok": report.ok, "cancelled": cancel.is_set(),
+                "index_collection": reports.collection_of(searched.index),
                 **item,
             })
         stopped = stopped or cancel.is_set()

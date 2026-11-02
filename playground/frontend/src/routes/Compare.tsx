@@ -1018,6 +1018,7 @@ function Sweep({
           used={i !== submitted.base && own(submitted.variants[i])}
           best={best.has(i)}
           cost={statuses[i].kind === "done" ? variedCost(i) : null}
+          collection={statuses[i].kind === "done" ? (result?.comparisons[i]?.index_collection ?? null) : null}
         />
       {delta && target.stage !== "retrieve" && statuses[i].kind === "done" ? <p className="m-0 text-sm font-medium text-fg">{delta}</p> : null}
         {statuses[i].kind !== "done" ? (

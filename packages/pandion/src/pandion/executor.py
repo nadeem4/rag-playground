@@ -98,6 +98,7 @@ def run(
     on_event: Emit | None = None,
     cancelled: Callable[[], bool] | None = None,
     context_extras: dict[str, Any] | None = None,
+    trace_id: str | None = None,
 ) -> RunResult:
     """Execute `graph`, reusing every artifact already in `store`.
 
@@ -118,8 +119,16 @@ def run(
     `{"credentials": {"anthropic_api_key": ...}}`. Nothing here is hashed, and
     only `extras["meta"]` is ever copied into artifact meta, so a credential can
     never reach an artifact id, meta or the store.
+
+    `trace_id`, when given, is added to every event this run emits, including
+    the ones a transform emits itself. It is passed in, never read from thread
+    state, so events from a worker thread keep it. Without it the key is absent.
     """
-    emit: Emit = on_event or (lambda e: None)
+    sink: Emit = on_event or (lambda e: None)
+
+    def emit(e: dict[str, Any]) -> None:
+        sink({**e, "trace_id": trace_id} if trace_id is not None else e)
+
     overrides = overrides or {}
     resolved = graph.validate(registry)
     by_id = {nd.id: nd for nd in graph.nodes}
@@ -177,7 +186,7 @@ def run(
             usage=usage,
         )
         # A step that fails after its model call was still billed for it.
-        emit(event("node_failed", node_id=nid, error=err, usage=usage))
+        emit(event("node_failed", node_id=nid, stage=str(cls.stage), error=err, usage=usage))
 
     for nid in resolved.order:
         if nid not in selected:
@@ -194,7 +203,7 @@ def run(
         if resolved.parents.get(nid, set()) & broken:
             broken.add(nid)
             result.nodes[nid] = NodeResult(nid, NodeStatus.SKIPPED)
-            emit(event("node_skipped", node_id=nid))
+            emit(event("node_skipped", node_id=nid, stage=str(node.stage)))
             continue
 
         cls = registry.get(node.stage, node.transform)
@@ -230,7 +239,15 @@ def run(
             inputs=input_ids,
         )
 
-        emit(event("node_started", node_id=nid, transform=cls.name, artifact_id=aid))
+        emit(
+            event(
+                "node_started",
+                node_id=nid,
+                transform=cls.name,
+                stage=str(cls.stage),
+                artifact_id=aid,
+            )
+        )
         started = time.perf_counter()
 
         if cls.cacheable and not force and store.has(aid) and _rows_present(cls, store, aid, context_extras):
@@ -245,6 +262,7 @@ def run(
                 event(
                     "node_finished",
                     node_id=nid,
+                    stage=str(cls.stage),
                     artifact_id=aid,
                     cache_hit=True,
                     duration_ms=result.nodes[nid].duration_ms,
@@ -302,6 +320,7 @@ def run(
             event(
                 "node_finished",
                 node_id=nid,
+                stage=str(cls.stage),
                 artifact_id=aid,
                 cache_hit=False,
                 duration_ms=result.nodes[nid].duration_ms,

@@ -30,6 +30,7 @@ installs the built package in new environments, with and without extras, and tes
 - [Questions written for you](#questions-written-for-you)
 - [Compare settings](#compare-settings)
 - [Speed and cost](#speed-and-cost)
+- [Conversations](#conversations)
 - [Running a pipeline from an app](#running-a-pipeline-from-an-app)
 - [Three ways to write a pipeline](#three-ways-to-write-a-pipeline)
 - [Templates](#templates)
@@ -2429,6 +2430,54 @@ A folder holds one open Qdrant at a time, so use a server when more than one pro
 A filter on a list-valued field with `eq` or `in` matches if any element matches in Qdrant, where the memory store matches nothing; use `any_of` for lists (roles and pages do). `in` takes whole numbers and text, not decimals.
 
 To run the store tests against a real server, set `QDRANT_URL`, for example `QDRANT_URL=http://localhost:6333 uv run pytest packages/pandion/tests/test_index_qdrant.py`. Without it that one test is skipped.
+
+## Conversations
+
+A conversation store keeps chats and what Pandion remembers about a user. It is separate from the index, so many servers can share one. The contract, `ConversationStore`, is **Stable**, and so is `register_conversation_store`. It has nine methods:
+
+| Method | What it does |
+| --- | --- |
+| `load(conversation_id, user_id)` | The conversation (its turns and running summary), or `None` |
+| `append(conversation_id, user_id, turn)` | Adds a turn; the first one makes the conversation |
+| `set_summary(conversation_id, summary, upto_turn)` | Keeps the running summary and how many turns it covers |
+| `list(user_id)` | The user's conversations, newest first, each with a title (the first question, cut to 80 characters) |
+| `delete(conversation_id, user_id)` | Removes a conversation and its turns |
+| `memories(user_id)` | The user's memories, oldest first |
+| `add_memory(user_id, memory)` | Keeps a memory; the store gives it an id |
+| `delete_memory(user_id, memory_id)` | Removes one memory |
+| `expire(older_than_days)` | Deletes conversations whose newest turn is older than the limit and returns how many |
+
+A `Turn` holds the question, the answer, the standalone `rewrite` the turn was searched with, the `source_ids`, a `trace_id` and `created_at`. Times are UTC ISO 8601 strings, and a store fills `created_at` only when it is empty.
+
+Every conversation and memory belongs to a `user_id`. A conversation belongs to the user who first appended to it. Any other user sees it as missing: `load` returns `None`, `list` leaves it out, `delete` does nothing, and `append` raises `ConversationNotFound`. `set_summary` takes no `user_id`, so it trusts its caller, which loads the conversation first. A turn's `created_at` is converted to UTC when the turn is made. `expire` deletes conversations only. Memories are the user's own list, and go when the user deletes one.
+
+### The sql store
+
+The `sql` store works with any database SQLAlchemy reaches: SQLite (the default), Postgres, MySQL or SQL Server. Install it with `pip install "pandion[sql]"`.
+
+```python
+from pandion.conversation_store import get_conversation_store
+
+store = get_conversation_store("sql", {"url": "sqlite:///conversations.db"})
+```
+
+The `url` is a secret: it never appears in a repr, and its password is hidden in the error raised when the database cannot be opened. The tables are made on first use. A `pandion_schema` row records the format, and a database written by a newer Pandion is refused with a message that says to upgrade. The next Pandion adds columns and tables and never removes any, so an older database keeps working. `store.check()` opens the database and raises the same error, which a server can use for a readiness check.
+
+### Your own conversation store
+
+Write a class with the nine methods, a `name` and a `settings_model`, and register it. Prove it with the same suite the `sql` store passes, which includes the checks that one user can never read, list, append to or delete another user's conversation, or list or delete another user's memory.
+
+```python
+from pandion.extend import register_conversation_store
+from pandion.testing import conversation_store_conformance
+
+@register_conversation_store
+class MyStore: ...
+
+conversation_store_conformance(lambda: MyStore(MySettings()))
+```
+
+`pandion plugins` lists every conversation store, with the kind `conversation store`.
 
 ## Rolling out a new index
 

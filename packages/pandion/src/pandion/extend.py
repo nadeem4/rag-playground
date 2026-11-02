@@ -27,6 +27,10 @@ A team that keeps its index somewhere else writes an index store: `IndexRow`,
 `IndexMeta`, `StoreHit`, `Capabilities` and the filters `Eq`, `In`, `AnyOf` and
 `And` are its words, and `register_store` adds it. See docs/pandion.md, "Index stores".
 
+A team that keeps its chats somewhere else writes a conversation store: `Turn`,
+`Conversation`, `ConversationInfo` and `Memory` are its words, `ConversationStore` is the
+contract, and `register_conversation_store` adds it. See docs/pandion.md, "Conversations".
+
 A team that keeps its documents somewhere else writes a `Source`: `SourceEntry`
 is what it lists, `register_source` adds it, and `index.sync(source)` reads
 only the entries that are new or changed. See docs/pandion.md, "Sync from a source".
@@ -40,6 +44,9 @@ from typing import Any
 
 from pandion.access import ALL_ROLES, AccessDenied, access_rule
 from pandion.artifacts import ArtifactType
+from pandion.conversation_store import (
+    Conversation, ConversationInfo, ConversationNotFound, ConversationStore, Memory, Turn, register_conversation_store,
+)
 from pandion.docinfo import DocumentInfo, document_info
 from pandion.document_sources import Source, SourceEntry, register_source
 from pandion.embeddings import Embedder, get_embedder, register_embedder
@@ -57,11 +64,11 @@ from pandion.sources import raw_file
 from pandion.transform import Explanation, Transform
 
 __all__ = [
-    "ALL_ROLES", "AccessDenied", "access_rule", "FORMATS", "And", "AnyOf", "ArtifactType", "Capabilities", "Chunk", "ChunkSet", "DocumentInfo", "Element", "Embedder",
-    "EndpointRefused", "Eq", "Explanation", "FetchRefused", "Hit", "In", "IndexMeta", "IndexRow", "Output", "ParsedDoc",
-    "PluginError", "PortSpec", "Query", "RetrievalResult", "RunContext", "Source", "SourceEntry", "Stage", "StoreHit", "Transform", "UnreadableFormat",
+    "ALL_ROLES", "AccessDenied", "access_rule", "FORMATS", "And", "AnyOf", "ArtifactType", "Capabilities", "Chunk", "ChunkSet", "Conversation", "ConversationInfo", "ConversationNotFound", "ConversationStore", "DocumentInfo", "Element", "Embedder",
+    "EndpointRefused", "Eq", "Explanation", "FetchRefused", "Hit", "In", "IndexMeta", "IndexRow", "Memory", "Output", "ParsedDoc",
+    "PluginError", "PortSpec", "Query", "RetrievalResult", "RunContext", "Source", "SourceEntry", "Stage", "StoreHit", "Transform", "Turn", "UnreadableFormat",
     "check_contents", "document_info", "fetch_url", "format_of", "get_embedder", "guard_endpoint", "load_plugins",
-    "openai_client_kwargs", "plugin_listing", "raw_file", "register", "register_source", "register_store", "route_check", "set_note", "set_usage",
+    "openai_client_kwargs", "plugin_listing", "raw_file", "register", "register_conversation_store", "register_source", "register_store", "route_check", "set_note", "set_usage",
 ]
 
 

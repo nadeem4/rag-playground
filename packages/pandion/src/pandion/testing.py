@@ -1,7 +1,10 @@
-"""Checks that prove an index store keeps the contract.
+"""Checks that prove an index store, or a conversation store, keeps the contract.
 
     from pandion.testing import store_conformance
     store_conformance(lambda: MyStore(MySettings()))
+
+    from pandion.testing import conversation_store_conformance
+    conversation_store_conformance(lambda: MyConversationStore(MySettings()))
 
 Each check gets a fresh store from the factory. The first failure raises
 `AssertionError("<check name>: <why>")`.
@@ -10,7 +13,11 @@ Each check gets a fresh store from the factory. The first failure raises
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
+from pandion.conversation_store import (
+    ConversationNotFound, ConversationStore, Memory, Turn, TITLE_LENGTH,
+)
 from pandion.index_store import (
     NO_FILTER, AnyOf, And, Eq, In, IndexMeta, IndexRow, IndexStore,
 )
@@ -213,6 +220,159 @@ def check_rows_round_trip_every_field(store):
 def store_conformance(factory: Callable[[], IndexStore]) -> None:
     """Run every check on a fresh store; raise AssertionError(f"{name}: {why}") on the first failure."""
     for name, check in STORE_CHECKS.items():
+        try:
+            check(factory())
+        except AssertionError as e:
+            raise AssertionError(f"{name}: {e}") from None
+        except Exception as e:
+            raise AssertionError(f"{name}: {type(e).__name__}: {e}") from None
+
+
+CONVERSATION_CHECKS: dict[str, Callable[[ConversationStore], None]] = {}
+
+
+def _conv_check(fn):
+    CONVERSATION_CHECKS[fn.__name__.removeprefix("check_")] = fn
+    return fn
+
+
+def _ago(days: int) -> str:
+    return (datetime.now(UTC) - timedelta(days=days)).isoformat(timespec="seconds")
+
+
+def _turn(question="q", **fields) -> Turn:
+    return Turn(question=question, answer=fields.pop("answer", "a"), **fields)
+
+
+@_conv_check
+def check_load_unknown_returns_none(store):
+    _expect(store.load("nope", "u1") is None, "load of a conversation that does not exist must return None")
+
+
+@_conv_check
+def check_append_then_load_returns_turns_in_order(store):
+    store.append("c1", "u1", _turn("first"))
+    store.append("c1", "u1", _turn("second"))
+    got = store.load("c1", "u1")
+    _expect(got is not None, "load returned None after append")
+    _expect([t.question for t in got.turns] == ["first", "second"], "turns must come back in the order they were appended")
+    _expect(got.id == "c1" and got.user_id == "u1", "the conversation must carry its id and its user")
+    _expect(all(t.created_at for t in got.turns), "a turn with no created_at must be stamped")
+
+
+@_conv_check
+def check_load_by_another_user_returns_none(store):
+    store.append("c1", "u1", _turn())
+    _expect(store.load("c1", "u2") is None, "another user must not read a conversation")
+
+
+@_conv_check
+def check_append_by_another_user_is_refused(store):
+    store.append("c1", "u1", _turn("mine"))
+    try:
+        store.append("c1", "u2", _turn("theirs"))
+    except ConversationNotFound:
+        pass
+    else:
+        raise AssertionError("append by another user must raise ConversationNotFound")
+    got = store.load("c1", "u1")
+    _expect(got is not None and [t.question for t in got.turns] == ["mine"], "a refused append must change nothing")
+
+
+@_conv_check
+def check_list_shows_only_own_conversations_newest_first(store):
+    store.append("new", "u1", _turn("fresh", created_at=_ago(1)))
+    store.append("new", "u1", _turn("again", created_at=_ago(1)))
+    store.append("old", "u1", _turn("x" * 200, created_at=_ago(2)))
+    store.append("other", "u2", _turn("not yours"))
+    got = store.list("u1")
+    _expect([i.id for i in got] == ["new", "old"], "list must show the user's own conversations, newest first")
+    _expect(got[0].title == "fresh" and got[0].turns == 2, "list must give the first question as title and the turn count")
+    _expect(got[1].title == "x" * TITLE_LENGTH, f"a title is cut to {TITLE_LENGTH} characters")
+
+
+@_conv_check
+def check_delete_removes_only_the_owners_conversation(store):
+    store.append("c1", "u1", _turn("gone"))
+    store.append("c2", "u1", _turn("kept"))
+    store.delete("c1", "u2")
+    _expect(store.load("c1", "u1") is not None, "another user must not delete a conversation")
+    store.delete("nope", "u1")
+    store.delete("c1", "u1")
+    _expect(store.load("c1", "u1") is None, "the owner's delete must remove the conversation")
+    _expect(store.load("c2", "u1") is not None, "a delete must leave the user's other conversations")
+    store.append("c1", "u2", _turn("new owner"))
+    got = store.load("c1", "u2")
+    _expect(got is not None and [t.question for t in got.turns] == ["new owner"],
+            "a delete must remove the conversation's turns too, not only the conversation")
+
+
+@_conv_check
+def check_set_summary_is_returned_by_load(store):
+    store.append("c1", "u1", _turn())
+    store.set_summary("c1", "so far", 1)
+    got = store.load("c1", "u1")
+    _expect(got is not None and got.summary == "so far" and got.summary_upto == 1,
+            "load must return the summary and the turn count it covers")
+
+
+@_conv_check
+def check_memories_are_per_user_and_oldest_first(store):
+    store.add_memory("u1", Memory(text="one"))
+    store.add_memory("u1", Memory(text="two"))
+    store.add_memory("u2", Memory(text="theirs"))
+    got = store.memories("u1")
+    _expect([m.text for m in got] == ["one", "two"], "memories must be the user's own, oldest first")
+    _expect(all(m.id for m in got) and len({m.id for m in got}) == 2, "the store must give each memory its own id")
+    _expect([m.text for m in store.memories("u2")] == ["theirs"], "another user's memories must stay apart")
+
+
+@_conv_check
+def check_delete_memory_by_another_user_does_nothing(store):
+    store.add_memory("u1", Memory(text="keep"))
+    memory = store.memories("u1")[0]
+    store.delete_memory("u2", memory.id)
+    _expect(len(store.memories("u1")) == 1, "another user must not delete a memory")
+    store.delete_memory("u1", memory.id)
+    _expect(store.memories("u1") == [], "the owner's delete must remove the memory")
+
+
+@_conv_check
+def check_expire_deletes_old_conversations_and_counts_them(store):
+    store.append("old", "u1", _turn("o", created_at=_ago(100)))
+    store.append("fresh", "u1", _turn())
+    store.append("long", "u1", _turn("started long ago", created_at=_ago(100)))
+    store.append("long", "u1", _turn("still talking"))
+    _expect(store.expire(30) == 1, "expire must return how many conversations it deleted")
+    _expect(store.load("old", "u1") is None and store.load("fresh", "u1") is not None,
+            "expire must delete only conversations whose newest turn is older than the limit")
+    _expect(store.load("long", "u1") is not None, "a conversation is as old as its newest turn, not its first")
+    _expect(store.expire(30) == 0, "a second expire has nothing left to delete")
+    store.append("old", "u2", _turn("new owner"))
+    got = store.load("old", "u2")
+    _expect(got is not None and [t.question for t in got.turns] == ["new owner"],
+            "expire must remove the conversation's turns too, not only the conversation")
+
+
+@_conv_check
+def check_expire_keeps_memories(store):
+    store.add_memory("u1", Memory(text="stays", created_at=_ago(100)))
+    store.expire(30)
+    _expect([m.text for m in store.memories("u1")] == ["stays"], "expire must not delete memories")
+
+
+@_conv_check
+def check_a_turn_round_trips_every_field(store):
+    turn = Turn(question="q", answer="a", rewrite="standalone q", source_ids=["s1", "s2"],
+                trace_id="t1", created_at="2026-01-02T03:04:05+00:00")
+    store.append("c1", "u1", turn)
+    got = store.load("c1", "u1")
+    _expect(got is not None and got.turns == [turn], "a turn must come back with every field unchanged")
+
+
+def conversation_store_conformance(factory: Callable[[], ConversationStore]) -> None:
+    """Run every check on a fresh store; raise AssertionError(f"{name}: {why}") on the first failure."""
+    for name, check in CONVERSATION_CHECKS.items():
         try:
             check(factory())
         except AssertionError as e:

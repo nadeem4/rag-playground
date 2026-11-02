@@ -231,7 +231,8 @@ what these settings will do.
   saying what happens instead, and the app tags it "Falls back".
 
 An index store is a second kind of plugin. `pandion.index_store` defines the Stable contract (`IndexStore`,
-`Collection`, the filters and `register_store`), `pandion.index_memory` is the reference store, and
+`Collection`, the filters and `register_store`), `pandion.index_memory` is the reference store, `pandion.index_lance` is the LanceDB store that the
+`lancedb` index step builds through, and
 `pandion.testing.store_conformance` proves any store keeps the contract. A store is not a pipeline step, so
 it is not in `PLUGIN_MODULES`. See "Index stores" in [pandion.md](pandion.md#index-stores).
 

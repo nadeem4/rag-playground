@@ -937,7 +937,8 @@ filters existed.
 The index keeps each piece's first page, last page and headings in columns of their own
 for this. Version 2 of the `lancedb` step added those columns, so every index built
 before it is built once more on its next run. The embeddings come from the embedding
-cache, so no text is embedded again.
+cache, so no text is embedded again. Version 3 builds through the LanceDB index store and
+rebuilds the same way.
 
 ## Ask a question
 
@@ -2158,7 +2159,7 @@ and 2 when the file, a flag or the baseline file is wrong (the message starts wi
 
 ## Index stores
 
-An index store is the place where an index keeps its rows. Pandion defines one contract, `IndexStore` and `Collection`, and you can write a store for the database your team already runs. This contract is **Stable**, and so is `register_store`. The memory store that comes with Pandion is the reference, and LanceDB and Qdrant move onto the contract in later releases.
+An index store is the place where an index keeps its rows. Pandion defines one contract, `IndexStore` and `Collection`, and you can write a store for the database your team already runs. This contract is **Stable**, and so is `register_store`. The memory store that comes with Pandion is the reference. LanceDB is on the contract now, and Qdrant lands in the same batch.
 
 A row (`IndexRow`) holds an id, the document id and version, the text, the vector, the `roles` that may see it, some metadata, and the chunk as JSON. A row with an empty `roles` list is visible to nobody. A search takes a filter built from `Eq`, `In`, `AnyOf` and `And`, and the store must apply it before it ranks. Roles use `AnyOf("roles", (...))`, so every store must support `any_of`.
 
@@ -2191,6 +2192,12 @@ store_conformance(lambda: MyStore(MySettings()))
 ```
 
 `pandion plugins` lists every store, with the kind `store`.
+
+### The LanceDB store
+
+`store: lancedb` is the store behind the `lancedb` index step. Its settings are `location`, a local path, `s3://...` or `gs://...`, and `fts`, which builds the keyword index (leave it on if you use BM25 or hybrid retrieval). It is incremental, so one document can be replaced or deleted without a rebuild, and it filters by `eq`, `in`, `any_of` and `and` before it ranks. A metadata key keeps the type of its first value, and the names `id`, `doc_id`, `doc_version`, `text`, `vector`, `roles`, `chunk` and `chunk_json` are row fields, so a row refuses a metadata key with one of those names.
+
+The `lancedb` step now builds through this store (step version 3), so an index built by an older Pandion rebuilds once, from the cached embeddings. Nothing else changes in a pipeline file.
 
 ## Write your own strategy
 

@@ -29,6 +29,7 @@ none embeds every piece.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from pathlib import Path
@@ -40,6 +41,8 @@ from pandion.artifacts import ArtifactType
 from pandion.embedding_cache import embed_cached
 from pandion.embeddings import EmbedderName, embedder_names, get_embedder
 from pandion.errors import require
+from pandion.index_lance import LanceSettings, LanceStore
+from pandion.index_store import IndexMeta, IndexRow
 from pandion.payloads import ChunkSet
 from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
@@ -129,8 +132,9 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
     name = "lancedb"
     extra = "lancedb"
     #: 2 added the page_start, page_end and section columns that search
-    #: filters read. Every index rebuilds once, from cached embeddings.
-    version = "2"
+    #: filters read. 3 builds through the LanceDB index store (doc_version,
+    #: roles, _pandion_meta). Every index rebuilds once, from cached embeddings.
+    version = "3"
     stage = Stage.INDEX
     inputs = {"chunks": PortSpec(ArtifactType.CHUNK_SET, variadic=True)}
     output = ArtifactType.INDEX
@@ -265,7 +269,7 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
         # Before any embedding, so a bad width fails with the reason and not
         # after a model download.
         embedder.check_dim(config.truncate_dim)
-        pa = require("pyarrow", extra="lancedb", step="The lancedb index")
+        require("pyarrow", extra="lancedb", step="The lancedb index")
         dim = config.truncate_dim or embedder.native_dim
         # Through the cache at native width: a truncate_dim sweep embeds each
         # chunk once and slices the rest.
@@ -277,45 +281,42 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
             cache=ctx.extras.get("embedding_cache"),
         )
 
+        by_doc: dict[str, list[str]] = {}
+        for chunk in chunks:
+            by_doc.setdefault(chunk.doc_id, []).append(chunk.id)
+        versions = {
+            doc: hashlib.sha256("\n".join(ids).encode("utf-8")).hexdigest()[:16]
+            for doc, ids in by_doc.items()
+        }
+
         rows = [
-            {
-                "id": chunk.id,
-                VECTOR_COLUMN: vector,
+            IndexRow(
+                id=chunk.id,
+                doc_id=chunk.doc_id,
+                doc_version=versions[chunk.doc_id],
                 # The retrievable projection: both the vector and the full-text
                 # index are built from exactly this string, so dense and lexical
                 # retrieval always agree about what a row says.
-                TEXT_COLUMN: chunk.text_to_embed,
-                "doc_id": chunk.doc_id,
-                "ordinal": chunk.ordinal,
+                text=chunk.text_to_embed,
+                vector=vector,
+                roles=[],
                 # What search filters read (pandion.filters). A piece with no
-                # pages has nulls, so it never matches a pages filter.
-                "page_start": chunk.page_span[0] if chunk.page_span else None,
-                "page_end": chunk.page_span[1] if chunk.page_span else None,
-                "section": list(chunk.heading_path),
+                # pages has no page keys, so it never matches a pages filter.
+                metadata={
+                    "ordinal": chunk.ordinal,
+                    **(
+                        {"page_start": chunk.page_span[0], "page_end": chunk.page_span[1]}
+                        if chunk.page_span
+                        else {}
+                    ),
+                    "section": list(chunk.heading_path),
+                },
                 # The canonical chunk, so a retriever can rebuild a `Hit.chunk`
                 # with its original text, offsets and provenance.
-                "chunk_json": json.dumps(
-                    chunk.model_dump(mode="json"), ensure_ascii=False
-                ),
-            }
+                chunk=json.dumps(chunk.model_dump(mode="json"), ensure_ascii=False),
+            )
             for chunk, vector in zip(chunks, vectors)
         ]
-
-        schema = pa.schema(
-            [
-                pa.field("id", pa.string()),
-                # Fixed-size list, not a plain list: LanceDB needs the width to
-                # be part of the schema to search the column at all.
-                pa.field(VECTOR_COLUMN, pa.list_(pa.float32(), dim)),
-                pa.field(TEXT_COLUMN, pa.string()),
-                pa.field("doc_id", pa.string()),
-                pa.field("ordinal", pa.int32()),
-                pa.field("page_start", pa.int32()),
-                pa.field("page_end", pa.int32()),
-                pa.field("section", pa.list_(pa.string())),
-                pa.field("chunk_json", pa.string()),
-            ]
-        )
 
         descriptor = {
             "backends": ["dense"] + (["fts"] if config.build_fts else []),
@@ -337,7 +338,7 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
         build_dir = ctx.output_dir / "lancedb"
         if build_dir.exists():
             shutil.rmtree(build_dir)
-        _build(build_dir, rows, schema, descriptor, build_fts=config.build_fts)
+        _build(build_dir, rows, descriptor, dim=dim, metric=config.metric, embedder=embedder, build_fts=config.build_fts)
 
         # The executor owns `Artifact.meta` and merges this under its own keys,
         # so it reaches the store and the UI. `descriptor.json` above remains
@@ -353,37 +354,32 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
 
 def _build(
     directory: Path,
-    rows: list[dict[str, Any]],
-    schema: Any,
+    rows: list[IndexRow],
     descriptor: dict[str, Any],
     *,
+    dim: int,
+    metric: str,
+    embedder: Any,
     build_fts: bool,
 ) -> None:
-    """Create the table and its indexes, then drop every handle.
+    """Write the rows through the LanceDB store, then drop every handle.
 
     Nothing may still hold the database open when this returns: the store moves
     the committed directory into place, and an open LanceDB handle is exactly
     the thing that turns that move into a WinError 32.
     """
-    lancedb = require("lancedb", extra="lancedb", step="The lancedb index")
-    from lancedb.index import FTS
-
     directory.mkdir(parents=True, exist_ok=True)
-    db = lancedb.connect(directory)
-
-    # An empty corpus is a legal index, not an error — it is what an
-    # unconfigured pipeline produces on its first run. `data=[]` gives LanceDB
-    # no types to work from, so the schema-only form is used instead.
-    table = (
-        db.create_table(TABLE, data=rows, schema=schema)
-        if rows
-        else db.create_table(TABLE, schema=schema)
+    store = LanceStore(LanceSettings(location=str(directory), fts=build_fts))
+    # An empty corpus is a legal index, not an error: it is what an
+    # unconfigured pipeline produces on its first run.
+    collection = store.create(
+        TABLE,
+        IndexMeta(
+            embed_model=embedder.name, embed_revision=embedder.revision,
+            dims=dim, metric=metric, recipe_hash="",  # T9 fills the recipe hash in
+        ),
     )
-
-    if build_fts:
-        # The unified API. `create_fts_index(..., use_tantivy=False)` does the
-        # same thing and is deprecated in 0.38.
-        table.create_index(TEXT_COLUMN, config=FTS())
+    collection.write_all(rows)
 
     # No ANN index: IVF_PQ needs far more rows than a bench corpus has, and
     # LanceDB brute-forces the vector column correctly without one. An HNSW
@@ -393,4 +389,4 @@ def _build(
         json.dumps(descriptor, ensure_ascii=False), encoding="utf-8"
     )
 
-    del table, db
+    del collection, store

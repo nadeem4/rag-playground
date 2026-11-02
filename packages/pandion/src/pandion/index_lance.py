@@ -164,7 +164,7 @@ class LanceCollection:
         return pa.Table.from_pylist([self._record(r) for r in rows], schema=schema)
 
     def _rebuild_fts(self, table) -> None:
-        if self._store.settings.fts and table.count_rows():
+        if self._store.settings.fts:
             from lancedb.index import FTS
 
             table.create_index("text", config=FTS(), replace=True)

@@ -10,7 +10,7 @@ import pytest
 import yaml
 
 from pandion import cli
-from pandion.evaluation import EvaluationReport, QuestionResult
+from pandion.evaluation import EvaluationReport, QuestionResult, StaleCheck
 from test_cli_commands import PIPELINE
 
 ENV = f"{platform.system()}-{platform.machine()}".lower()
@@ -43,6 +43,7 @@ def run(tmp_path, monkeypatch, capsys):
         return state["report"]
 
     monkeypatch.setattr(cli.pandion, "evaluate", evaluate)
+    monkeypatch.setattr(cli.pandion.evaluation, "stale_check", lambda *a, **kw: StaleCheck())
 
     def go(*args: str) -> tuple[int, str, str]:
         code = cli.main(["eval", str(tmp_path / "pipeline.yaml"), "q.json", *args])

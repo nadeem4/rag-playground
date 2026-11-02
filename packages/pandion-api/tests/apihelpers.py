@@ -50,7 +50,7 @@ def make_serve_client(
         data = {**PIPELINE, "path": str(config.data_dir), "models": config.models.model_dump(mode="json")}
         Pipeline.from_dict(data, base=config.data_dir).index.sync([document])
     app = create_app(
-        config, policy, mode="serve", pipeline=file, conversations=store or default_store(config), serve=serve
+        config, policy or Policy.anonymous(), mode="serve", pipeline=file, conversations=store or default_store(config), serve=serve
     )
     return TestClient(app)
 

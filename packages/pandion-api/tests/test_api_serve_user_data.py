@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from pandion.extend import Memory, Turn
-from pandion_api import Policy
+from pandion_api.policy import AnonymousPolicy
 from apihelpers import make_serve_client
 from test_api_chat import ByHeader, StubPipeline, serve
 
@@ -83,7 +83,7 @@ def test_memories_written_while_on_can_still_be_seen_and_deleted_when_off(tmp_pa
         assert off.get("/memories").json() == []
 
 
-class Refusing(Policy):
+class Refusing(AnonymousPolicy):
     def limit(self, request):
         raise HTTPException(status_code=429, detail="Slow down.")
 
@@ -94,9 +94,10 @@ class Refusing(Policy):
 def test_limit_is_asked_before_user_id(tmp_path):
     with serve(tmp_path, StubPipeline(), Refusing()) as c:
         assert c.get("/conversations").status_code == 429
+        assert c.post("/ask", json={"question": "Q?"}).status_code == 429
 
 
-class Counting(Policy):
+class Counting(AnonymousPolicy):
     def __init__(self):
         self.limited = 0
 

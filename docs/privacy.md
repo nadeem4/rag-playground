@@ -93,7 +93,9 @@ See [models-and-keys.md](models-and-keys.md#what-happens-to-a-key).
 
 In serve mode (`create_app(mode="serve")`, for a site's own users), the question goes to the model
 provider for the rewrite and the answer, and the question and its answer are stored in the site's
-conversation store under the user's id. See [pandion-api.md](pandion-api.md#serve-mode). Text in your documents is fenced in the prompt as untrusted data, and a link or image in a reply is removed unless a source holds the same address, so a document cannot make an answer carry your question to another site. See [Answer safety](pandion.md#answer-safety).
+conversation store under the user's id. Serve takes model keys from the server's environment
+only, shows a caller a generic error with a trace id (the detail stays in the server's log), and
+limits each user's turns. See [pandion-api.md](pandion-api.md#serve-mode-hardened-defaults). Text in your documents is fenced in the prompt as untrusted data, and a link or image in a reply is removed unless a source holds the same address, so a document cannot make an answer carry your question to another site. See [Answer safety](pandion.md#answer-safety).
 
 ## Clean up now
 

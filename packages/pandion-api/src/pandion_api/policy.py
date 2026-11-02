@@ -24,6 +24,11 @@ class Policy:
     #: What a question-set report says when the set was checked but not kept.
     not_keeping_note = "This server checked your questions but did not keep them."
 
+    @classmethod
+    def anonymous(cls) -> Policy:
+        """A policy for serve mode that says on purpose: everyone is one user."""
+        return AnonymousPolicy()
+
     def dependencies(self) -> list[Any]:
         """FastAPI dependencies (`fastapi.Depends(...)`) run on every route,
         for example one that sets a visitor cookie."""
@@ -212,3 +217,18 @@ class Policy:
 
     async def on_shutdown(self, app: FastAPI) -> None:
         """Called once after the server stops taking requests."""
+
+
+class AnonymousPolicy(Policy):
+    """Everyone is one user with no roles and no limit. Serve accepts it only
+    when asked for with `Policy.anonymous()`, and never with an `access:` block.
+    Every caller shares the id "anonymous", so serve's default limits are server-wide."""
+
+    def user_id(self, request: Request) -> str:
+        return "anonymous"
+
+    def roles(self, request: Request) -> list[str] | None:
+        return None
+
+    def limit(self, request: Request) -> None:
+        return None

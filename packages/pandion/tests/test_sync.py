@@ -157,7 +157,8 @@ def test_a_changed_file_replaces_its_old_pieces(setup):
     assert set(chunk_ids(report, "guides/short.pdf")) <= set(rows)
     assert not set(old_pieces) & set(rows)
     pipeline = Pipeline.from_file(config)
-    assert not pipeline.index.store.has(first.index.artifact_id)
+    # The previous index record stays beside its collection, for a server on the old file.
+    assert pipeline.index.store.has(first.index.artifact_id)
 
 
 def test_a_removed_file_has_its_pieces_deleted(setup):
@@ -173,8 +174,8 @@ def test_a_removed_file_has_its_pieces_deleted(setup):
     assert sorted(report.documents) == ["report.pdf"]
     assert not set(gone) & set(index_rows(report, config))
     assert sorted(manifest(config)["documents"]) == ["report.pdf"]
-    # The old index held the removed pieces; it is gone from the store too.
-    assert not Pipeline.from_file(config).index.store.has(first.index.artifact_id)
+    # The previous index record stays beside its collection, for a server on the old file.
+    assert Pipeline.from_file(config).index.store.has(first.index.artifact_id)
 
 
 def test_a_changed_config_rebuilds_from_the_first_changed_step(setup):

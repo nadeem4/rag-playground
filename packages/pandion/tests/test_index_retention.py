@@ -215,3 +215,20 @@ def test_cleanup_in_one_qdrant_prefix_never_touches_another(tmp_path):
 
     assert drop_stale(mine, keep=set(), retired={name(1): ago(90)}, now=NOW) == [name(1)]
     assert theirs.list() == [name(2)]
+
+
+def test_dropping_a_collection_deletes_its_index_record(setup):
+    config, docs = setup
+    first = sync(config, docs)
+    one = first.index.output["collection"]
+    add(docs, "b.pdf", "Berlin is the capital of Germany.")
+    sync(config, docs)
+    add(docs, "c.pdf", "Rome is the capital of Italy.")
+    sync(config, docs)
+    assert Pipeline.from_file(config).index.store.has(first.index.artifact_id)  # retired but young
+    retire_long_ago(config, one)
+    add(docs, "d.pdf", "Madrid is the capital of Spain.")
+    sync(config, docs)
+
+    assert one not in lance(config).list()
+    assert not Pipeline.from_file(config).index.store.has(first.index.artifact_id)

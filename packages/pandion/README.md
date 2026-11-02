@@ -95,8 +95,10 @@ writes the same folder for any pipeline. See
 
 ## Use Pandion from the command line
 
-`pandion validate pipeline.yaml`, `pandion index pipeline.yaml report.pdf`, `pandion ask pipeline.yaml "..."`:
-the same pipeline, from the command line. See
+`pandion validate pipeline.yaml`, `pandion index pipeline.yaml report.pdf`, `pandion ask pipeline.yaml "..."`,
+and `pandion sync pipeline.yaml` (reads the `source:` block of the file, needs `pandion[files]`
+for the `files` source, prints one JSON summary line and exits non-zero when a document was
+left out): the same pipeline, from the command line. See
 [the pandion command](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#the-pandion-command).
 
 ## Learn more

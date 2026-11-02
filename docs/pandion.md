@@ -340,6 +340,13 @@ plugins: [my_company.rag_steps]
 # A relative path is read from the folder this file is in.
 path: ./my-index
 
+# Optional. The source `pandion sync` reads: `use` is a registered source (files), the
+# other keys are its settings. Not part of the recipe. Keep credentials in the
+# environment, not here. See Name the source in the pipeline file.
+source:
+  use: files
+  location: gs://bucket/docs
+
 # Optional. How local models are found and loaded. None of this changes a result,
 # so it is never part of a recipe hash.
 models:
@@ -808,6 +815,34 @@ and the index are left as they were. This stops a wrong location, or a bucket th
 briefly unreachable, from wiping the index. The pipeline's source step must be
 `upload`, as for a folder. To write your own source, give a class a `name`, a `list()`
 and a `read(doc_id)`, and add it with `register_source` from `pandion.extend`.
+
+#### Name the source in the pipeline file
+
+A team that syncs on a schedule can name the source in the file instead of in code. Add
+a top-level `source:` block: `use` is a registered source, and every other key is a
+setting of that source.
+
+```yaml
+path: ./index
+source:
+  use: files
+  location: gs://bucket/docs
+index:
+  # ...
+```
+
+`Pipeline.from_yaml("pipeline.yaml").index.sync_source()` then runs `sync` with that
+source, and `pandion sync pipeline.yaml` does the same from the command line (see
+[The pandion command](#the-pandion-command)). A source name or setting that does not
+exist is refused when the file is read. The block is not part of the index recipe, so
+adding it does not rebuild any index. It is separate from `index.source`, which is the
+pipeline's source step and stays `upload` for a sync. A file without a `source:` block
+makes `sync_source` raise a `ValueError` that says so.
+
+Keep keys and passwords out of the file, because a pipeline file is usually committed.
+`storage_options` is accepted by the `files` source, but fsspec reads credentials from the
+environment (for example `GOOGLE_APPLICATION_CREDENTIALS` or `AWS_ACCESS_KEY_ID`), and that
+is where they belong. A source that lists nothing is refused here too, with no override.
 
 ## Search an index
 
@@ -2000,6 +2035,7 @@ returns.
 pandion validate pipeline.yaml
 pandion strategies --stage chunk
 pandion index pipeline.yaml report.pdf notes/
+pandion sync pipeline.yaml
 pandion retrieve pipeline.yaml "What is chunking?" --documents report.pdf
 pandion ask pipeline.yaml "What is chunking?" --documents report.pdf
 pandion eval pipeline.yaml questions.json --documents report.pdf
@@ -2039,6 +2075,22 @@ index  lancedb  executed  310 ms
 says, per document, `added`, `changed`, `removed` or `unchanged` since the last index.
 A document the sync left out is printed as `failed: ID: REASON`, and the command exits 1
 until nothing is left out.
+
+**`pandion sync FILE`** syncs the source named in the file's `source:` block (see
+[Name the source in the pipeline file](#name-the-source-in-the-pipeline-file)) and prints
+one JSON line on stdout, so a scheduled job can log it:
+
+```text
+{"event": "sync", "ok": true, "added": 2, "changed": 0, "removed": 0, "unchanged": 5, "failed": 0, "duration_s": 3.4, "tokens": 0}
+```
+
+The keys are `event`, `ok` (every document is in), `added`, `changed`, `removed`,
+`unchanged` and `failed` (counts, never names), `duration_s`, and `tokens` (input plus
+output tokens of the run). Each document left out is printed to stderr as
+`failed: ID: REASON`. It exits with 0 when every document is in, 1 when a document was left
+out, and 2 when the sync was refused: a bad file, no `source:` block, a source that listed
+nothing, or another sync running. A cron job should alert on a non-zero exit. In the
+refused case the sentence goes to stderr and no summary line is printed.
 
 **`pandion retrieve FILE QUESTION [--k K] [--documents DOC...]`** searches the index and
 prints the hits, one per line, as the rank, the score and the start of the piece:

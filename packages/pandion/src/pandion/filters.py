@@ -163,7 +163,7 @@ def where_sql(filters: Mapping[str, Any] | None, descriptor: Mapping[str, Any]) 
     """
     if not filters:
         return None
-    unknown = set(filters) - {"doc_ids", "pages", "section"}
+    unknown = set(filters) - {"doc_ids", "pages", "section", "roles"}
     if unknown:
         raise ValueError(f"A search filter has an unknown key: {', '.join(sorted(unknown))}.")
     if ("pages" in filters or "section" in filters) and "sections" not in descriptor:
@@ -193,6 +193,11 @@ def where_sql(filters: Mapping[str, Any] | None, descriptor: Mapping[str, Any]) 
         if not isinstance(section, str):
             raise ValueError("A section filter must be text.")
         parts.append(f"array_has(section, {_quote(section)})")
+    if "roles" in filters:
+        # Set by the pipeline from the caller's roles, never by `where`. A piece
+        # with none of them, or no roles at all, is not found.
+        roles = filters["roles"]
+        parts.append(f"array_has_any(roles, [{', '.join(_quote(r) for r in roles)}])" if roles else "1 = 0")
     return " AND ".join(f"({p})" for p in parts)
 
 

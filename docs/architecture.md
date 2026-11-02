@@ -275,6 +275,14 @@ not counted as removed, and tried again next sync. If none are left, nothing is 
 Third, a document in a category the pipeline no longer has is sorted again by the route, for
 both a folder and a `Source`.
 
+When the pipeline file has an `access:` block, each sync also works out the roles of every
+document (`pandion/access.py`): the file's own `roles` label, then a folder rule, then the
+`@access_rule` functions, then the default. They are recorded in the manifest beside the
+category and handed to the index step, which writes them on each row. Roles are never sticky:
+a role change rebuilds the index step from the cached chunks and embeddings, with no parsing.
+A search filters on the caller's roles inside the store, before ranking, and a rule that fails
+leaves its document with no roles.
+
 ## Artifacts and the cache
 
 An artifact's id is a hash of its recipe: the transform, the transform's version, its

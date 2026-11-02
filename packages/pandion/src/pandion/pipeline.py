@@ -88,6 +88,8 @@ URL_MAX_BYTES = 20 * 1024 * 1024
 #: What index.run, retrieve and ask take as documents: a file, a folder, a
 #: list of both, or a mapping of document id to file.
 Documents = Any
+#: The roles of the person searching: a list of names, `ALL_ROLES` for an admin run, or None.
+Roles = Any
 
 #: The callback a run reports each event to (see IndexPipeline.execute).
 OnEvent = Callable[[dict[str, Any]], None]
@@ -493,6 +495,7 @@ class Pipeline:
         *,
         documents: Documents = None,
         where: dict[str, Any] | None = None,
+        roles: Roles = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
@@ -505,7 +508,7 @@ class Pipeline:
                 "search with. Add a retrieve section with at least a search step."
             )
         return self.retrieval.retrieve(
-            question, k, documents=documents, where=where, credentials=credentials,
+            question, k, documents=documents, where=where, roles=roles, credentials=credentials,
             on_event=on_event, cancel=cancel, force=force,
         )
 
@@ -516,6 +519,7 @@ class Pipeline:
         *,
         documents: Documents = None,
         where: dict[str, Any] | None = None,
+        roles: Roles = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
@@ -528,7 +532,7 @@ class Pipeline:
                 "with. Add answer: with any answer strategy, for example search or chat."
             )
         return self.query.ask(
-            question, k, documents=documents, where=where, credentials=credentials,
+            question, k, documents=documents, where=where, roles=roles, credentials=credentials,
             on_event=on_event, cancel=cancel, force=force,
         )
 
@@ -1519,6 +1523,7 @@ class RetrievalPipeline:
             index=base["index"],
             retrieve={"rewrite": rewrite, "search": search, "rerank": rerank},
             plugins=index.config.plugins,
+            access=base.get("access"),
         )
         self._setup(config, index)
 
@@ -1550,13 +1555,17 @@ class RetrievalPipeline:
         k: int | None = None,
         documents: dict[str, SourceFile | str] | None = None,
         where: dict[str, Any] | None = None,
+        user_roles: Roles = None,
     ) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The graph that searches the index for `question`, and each node's
         (document id, step name): the index's nodes, then rewrite, search and
         rerank.1, rerank.2 ... with no document id. `documents` (resolved by
         `IndexPipeline._documents`) are the ones to search; None means what
         the index holds. `where` is the search filter (see `pandion.filters`);
-        it travels in the rewrite step's settings like the question does."""
+        it travels in the rewrite step's settings like the question does.
+        With an `access:` block `user_roles` is required: the caller's roles (or
+        `ALL_ROLES` for an admin run) join the filter, so a cached answer is
+        keyed by question and roles."""
         retrieve = self.config.retrieve
         documents = documents if documents is not None else self.index.indexed()
         graph, roles = self.index.graph(documents)
@@ -1565,6 +1574,14 @@ class RetrievalPipeline:
         use, settings = retrieve.rewrite or ("text", {})
         settings = {**settings, "text": question}
         filters = _resolve_where(where, documents)
+        if self.config.access is not None:
+            if user_roles is None:
+                raise AccessDenied(
+                    "This pipeline has access control on, so a search needs the user's roles. "
+                    "Pass roles=[...]."
+                )
+            if user_roles is not ALL_ROLES:
+                filters = {**(filters or {}), "roles": list(user_roles)}
         if filters:
             settings["filters"] = filters
         nodes.append(Node("rewrite", Stage.QUERY, use, settings))
@@ -1594,6 +1611,7 @@ class RetrievalPipeline:
         *,
         documents: Documents = None,
         where: dict[str, Any] | None = None,
+        roles: Roles = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
@@ -1617,11 +1635,16 @@ class RetrievalPipeline:
         example `{"document": ["guide.pdf"], "pages": [10, 30], "section":
         "Installing"}`; see `pandion.filters` for the rules. A bad `where`
         raises ValueError before anything runs.
+
+        `roles` are the roles of the person searching. With an `access:` block
+        in the pipeline file a search without them is refused (`AccessDenied`),
+        `[]` finds nothing, and `ALL_ROLES` skips the filter (an admin run).
+        Without an `access:` block `roles` is ignored.
         """
         check_where(where)
         resolved = self.index._documents(documents) if documents is not None else None
         return self._retrieve(
-            question, k, resolved, where=where, credentials=credentials,
+            question, k, resolved, where=where, roles=roles, credentials=credentials,
             on_event=on_event, cancel=cancel, force=force,
         )
 
@@ -1632,14 +1655,15 @@ class RetrievalPipeline:
         documents: dict[str, SourceFile | str] | None,
         *,
         where: dict[str, Any] | None = None,
+        roles: Roles = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
         force: bool = False,
     ) -> Retrieval:
-        graph, roles = self.graph(question, k, documents, where)
+        graph, nodes = self.graph(question, k, documents, where, roles)
         result = self.index.execute(
-            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=roles
+            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=nodes
         )
         return self._retrieval(graph, result)
 
@@ -1704,6 +1728,7 @@ class QueryPipeline:
             retrieve=base["retrieve"],
             answer=answer,
             plugins=retrieval.config.plugins,
+            access=base.get("access"),
         )
         self._setup(config, retrieval)
 
@@ -1736,9 +1761,10 @@ class QueryPipeline:
         k: int | None = None,
         documents: dict[str, SourceFile | str] | None = None,
         where: dict[str, Any] | None = None,
+        user_roles: Roles = None,
     ) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The retrieval's graph for `question` with the answer step at the end."""
-        graph, roles = self.retrieval.graph(question, k, documents, where)
+        graph, roles = self.retrieval.graph(question, k, documents, where, user_roles)
         nodes, edges = list(graph.nodes), list(graph.edges)
         last = graph.nodes[-1].id
         use, settings = self.config.answer
@@ -1759,6 +1785,7 @@ class QueryPipeline:
         *,
         documents: Documents = None,
         where: dict[str, Any] | None = None,
+        roles: Roles = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
@@ -1766,7 +1793,7 @@ class QueryPipeline:
     ) -> Answer:
         """Retrieve for `question`, then run the answer step on what was found.
 
-        `k`, `documents`, `where`, `credentials`, `on_event`, `cancel` and `force` work
+        `k`, `documents`, `where`, `roles`, `credentials`, `on_event`, `cancel` and `force` work
         as for `RetrievalPipeline.retrieve`: chat's model key goes in
         `credentials`, for example `{"anthropic_api_key": ...}`. A search
         answer is cached like any step; a chat answer is a new model call
@@ -1774,9 +1801,9 @@ class QueryPipeline:
         """
         check_where(where)
         resolved = self.index._documents(documents) if documents is not None else None
-        graph, roles = self.graph(question, k, resolved, where)
+        graph, nodes = self.graph(question, k, resolved, where, roles)
         result = self.index.execute(
-            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=roles
+            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=nodes
         )
         answer = next(node for node in graph.nodes if node.id == "answer")
         return Answer(

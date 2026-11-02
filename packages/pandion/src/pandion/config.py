@@ -82,7 +82,7 @@ from typing import Any, ClassVar
 import yaml
 from pydantic import BaseModel, ValidationError
 
-from pandion.access import RULES, AccessConfig, FolderRule
+from pandion.access import ALL_ROLES, RULES, AccessConfig, FolderRule
 from pandion.embeddings import embedder_names
 from pandion.models import ModelSettings
 from pandion.plugins import PluginError, discover
@@ -301,7 +301,7 @@ def _check_compatible(config: PipelineConfig) -> None:
         index.documents = {"placeholder": SourceFile(sha="0" * 64, filename="placeholder.pdf")}
     else:
         index.documents = {"placeholder": "placeholder"}
-    graph, _ = RetrievalPipeline._of(config, index).graph("placeholder")
+    graph, _ = RetrievalPipeline._of(config, index).graph("placeholder", user_roles=ALL_ROLES)
     try:
         graph.validate(registry)
     except GraphValidationError as exc:
@@ -341,6 +341,7 @@ def build(
     plugins: list[str] | None = None,
     categories: dict[str, Any] | None = None,
     route: list[Any] | None = None,
+    access: dict[str, Any] | None = None,
 ) -> PipelineConfig:
     """Check a pipeline written in code; relative paths are read from the
     current folder.
@@ -365,6 +366,8 @@ def build(
         data["retrieve"] = {k: _block(v) for k, v in retrieve.items() if v is not None}
     if answer is not None:
         data["answer"] = _block(answer)
+    if access is not None:
+        data["access"] = access
     return from_dict(data, base=Path("."))
 
 

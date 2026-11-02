@@ -566,6 +566,16 @@ describe("after a run", () => {
     expect(screen.getByTestId("shared-cost").textContent).toBe("The shared steps came from the cache this time. Cost is an estimate, prices as of 2026-10-15.")
   })
 
+  it("shows the index collection each finished recipe searched", async () => {
+    const result = costed("chunk", 3, { steps_run: 2 })
+    Object.assign(result.comparisons[0], { index_collection: "0123456789abcdef-0123456789ab" })
+    serve({ a0: recursiveJson, a1: markdownJson, a2: tokenJson }, { "/api/v2/runs/r1": snapshot(result) })
+    render(<Compare />)
+    await waitFor(() => expect(columns()).toHaveLength(3))
+    await runWith({ chunk: ["a0", "a1", "a2"] })
+    await waitFor(() => expect(screen.getAllByTestId("index-tag")).toHaveLength(1))
+  })
+
   it("says from cache for a recipe an earlier run stored, and why under the shared line", async () => {
     const result = costed("chunk", 3, { steps_run: 2 })
     result.comparisons[1].varied_cost = costOf(0, { steps_run: 0, steps_cached: 1 })

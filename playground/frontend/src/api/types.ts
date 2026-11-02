@@ -950,6 +950,8 @@ export interface EvaluationResult extends Totals {
   document_shas?: string[]
   /** The steps that can give a different result each run, such as a model reranker. Absent from an older server. */
   nondeterministic?: string[]
+  /** The index collection the run searched; null when no index step finished. Absent from an older server. */
+  index_collection?: string | null
 }
 /** What Pandion's comparison of two runs reads of each (`POST /api/v2/evaluations/against`). */
 export interface ScoredRun extends Pick<Totals, "scored" | "found" | "hit_rate" | "mrr"> {
@@ -1020,6 +1022,8 @@ export interface ComparisonItem {
   cancelled: boolean
   outputs?: Record<string, { artifact_id: string | null; status: string; transform: string }>
   report?: EvaluationResult | null
+  /** The index collection this recipe searched. Absent from an older server. */
+  index_collection?: string | null
   retrieval?: RetrievalReport
   answer?: AnswerReport
   /** This recipe's whole cost, which depends on its place in the run. */

@@ -1,4 +1,5 @@
 import type { Cost } from "@/api/types"
+import { IndexTag } from "@/components/evaluate/IndexTag"
 import { LINK_BUTTON } from "@/components/inspectors/EvidenceSlip"
 import { cn } from "@/lib/utils"
 import { costLine } from "@/state/cost"
@@ -19,6 +20,7 @@ export function RecipeHead({
   used = false,
   best = false,
   cost = null,
+  collection = null,
 }: {
   name: string
   code: string
@@ -32,6 +34,8 @@ export function RecipeHead({
   best?: boolean
   /** Its varied step and after (pandion-api's `varied_cost`); absent on older results. */
   cost?: Cost | null
+  /** The index collection it searched (pandion-api's `index_collection`). */
+  collection?: string | null
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
@@ -46,6 +50,7 @@ export function RecipeHead({
         {best ? <> <span className="ml-1 text-xs font-medium text-fg">Best</span></> : null}
       </h2>
       <span className="font-mono text-xs break-all text-fg-muted">{code}</span>
+      <IndexTag name={collection} />
       {cost ? (
         <p data-testid="recipe-cost" className="m-0 font-mono text-xs text-fg-muted tabular-nums">
           {costLine(cost)}

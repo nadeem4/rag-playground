@@ -46,7 +46,6 @@ PLUGIN_MODULES: tuple[str, ...] = (
     "pandion.plugins.chunk.token_based",
     "pandion.plugins.chunk.sentence_window",
     "pandion.plugins.enrich.llm_context",
-    "pandion.index_lance",
     "pandion.plugins.index.lancedb_store",
     "pandion.plugins.retrieve.dense",
     "pandion.plugins.retrieve.bm25",

@@ -1,6 +1,7 @@
 """LanceStore: the LanceDB index store on the store contract."""
 
 import json
+from uuid import uuid4
 
 import pytest
 
@@ -8,8 +9,8 @@ pytest.importorskip("lancedb")
 
 from pandion.errors import FormatTooNew
 from pandion.index_lance import LanceSettings, LanceStore, NoRows, to_sql
-from pandion.index_store import NO_FILTER, AnyOf, And, Eq, In, IndexMeta, IndexRow
-from pandion.testing import STORE_CHECKS
+from pandion.index_store import NO_FILTER, AnyOf, And, Eq, In, IndexMeta, IndexRow, StoreRefused, check_store
+from pandion.testing import STORE_CHECKS, store_conformance
 
 
 def _meta(dims=3, metric="cosine") -> IndexMeta:
@@ -95,3 +96,49 @@ def test_to_sql_quotes_values():
     assert to_sql(NO_FILTER) is None
     with pytest.raises(NoRows):
         to_sql(And((Eq("a", "x"), AnyOf("roles", ()))))
+
+
+def test_lance_store_passes_the_conformance_suite(tmp_path):
+    store_conformance(lambda: LanceStore(LanceSettings(location=str(tmp_path / uuid4().hex))))
+
+
+def test_replace_document_keeps_the_other_documents_and_the_full_text_index_current(tmp_path):
+    col = LanceStore(LanceSettings(location=str(tmp_path))).create("c", _meta())
+    col.write_all([_row("1", [1, 0, 0], text="old walrus"), _row("2", [0, 1, 0], doc_id="e", text="other penguin")])
+    col.replace_document("d", [_row("3", [0, 0, 1], text="fresh giraffe")])
+    assert [h.row.id for h in col.search_lexical("giraffe", 5, NO_FILTER)] == ["3"]
+    assert col.search_lexical("walrus", 5, NO_FILTER) == []
+    assert [h.row.id for h in col.search_lexical("penguin", 5, NO_FILTER)] == ["2"]
+
+
+def test_replace_document_can_add_a_new_metadata_key(tmp_path):
+    col = LanceStore(LanceSettings(location=str(tmp_path))).create("c", _meta())
+    col.write_all([_row("1", [1, 0, 0])])
+    col.replace_document("e", [_row("2", [0, 1, 0], doc_id="e", metadata={"page_start": 4})])
+    assert [h.row.id for h in col.search_dense([0, 1, 0], 5, Eq("page_start", 4))] == ["2"]
+
+
+def test_write_all_twice_replaces_every_row(tmp_path):
+    col = LanceStore(LanceSettings(location=str(tmp_path))).create("c", _meta())
+    col.write_all([_row("1", [1, 0, 0]), _row("2", [0, 1, 0])])
+    col.write_all([_row("3", [0, 0, 1])])
+    assert [h.row.id for h in col.search_dense([1, 1, 1], 10, NO_FILTER)] == ["3"]
+
+
+def test_a_store_with_fts_off_declares_no_lexical_and_check_store_refuses_bm25(tmp_path):
+    store = LanceStore(LanceSettings(location=str(tmp_path), fts=False))
+    caps = store.capabilities()
+    assert caps.lexical is None
+    with pytest.raises(StoreRefused):
+        check_store("lancedb", caps, lexical=True)
+    col = store.create("c", _meta())
+    col.write_all([_row("1", [1, 0, 0])])
+    assert col.search_lexical("plain", 5, NO_FILTER) == []
+
+
+def test_a_wrong_width_vector_is_refused_with_the_row_id(tmp_path):
+    col = LanceStore(LanceSettings(location=str(tmp_path))).create("c", _meta())
+    with pytest.raises(ValueError, match="Row 'bad' has 2 numbers but this collection's dims is 3"):
+        col.write_all([_row("bad", [1, 0])])
+    with pytest.raises(ValueError, match="Row 'bad'"):
+        col.replace_document("d", [_row("bad", [1, 0])])

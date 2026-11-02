@@ -187,8 +187,9 @@ index run's `result` gives, per document and step, its `status` (`executed`, `ca
 
 A question's `result` gives the index it read, each retrieval step (`rewrite`, `search`, and
 `rerank`, a list) with its `result_id`, the `hits`, and when answered the `answer` step, its
-`text` and its `output`. A hit's `chunk.metadata` may hold `source` (the document's id and labels), and a chat citation has a `source` too (empty when the index kept none). The documents are indexed first, through the cache, when they were
-not yet. Its kind is `ask`, or `retrieve` when `answer` is false. A pipeline with no
+`text` and its `output`. A hit's `chunk.metadata` may hold `source` (the document's id and
+labels), and a chat citation has a `source` too (empty when the index kept none). The
+documents are indexed first, through the cache, when they were not yet. Its kind is `ask`, or `retrieve` when `answer` is false. A pipeline with no
 `retrieve` section, or with no `answer` section when `answer` is true, is a 422 before
 anything runs.
 

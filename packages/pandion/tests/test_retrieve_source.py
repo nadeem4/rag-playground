@@ -3,16 +3,21 @@
 import json
 from types import SimpleNamespace
 
-from pandion.index_store import IndexRow, StoreHit
+from pandion.index_memory import MemorySettings, MemoryStore
+from pandion.index_store import NO_FILTER, IndexMeta, IndexRow
 from pandion.payloads import Chunk
 from pandion.plugins.answer.chat import _citation
 from pandion.plugins.retrieve._base import make_hit
 
 
-def _hit(metadata) -> tuple[StoreHit, str]:
+def _hit(metadata):
+    """A hand-built row, written to a memory collection and read back by a search."""
     chunk = json.dumps(Chunk(id="c1", text="Paris", doc_id="d1").model_dump(mode="json"))
     row = IndexRow(id="c1", doc_id="d1", doc_version="v", text="Paris", vector=[1.0], metadata=metadata, chunk=chunk)
-    return StoreHit(row=row, score=0.5), chunk
+    meta = IndexMeta(embed_model="m", embed_revision="1", dims=1, metric="cosine", recipe_hash="h")
+    collection = MemoryStore(MemorySettings()).create("c", meta)
+    collection.write_all([row])
+    return collection.search_dense([1.0], 1, NO_FILTER)[0], chunk
 
 
 def test_a_hit_carries_its_documents_source_fields():

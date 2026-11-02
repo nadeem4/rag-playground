@@ -49,9 +49,12 @@ def test_sync_from_a_source_puts_the_id_and_labels_on_rows(tmp_path, docs):
     p = pipeline(tmp_path, docs)
     report = p.index.sync_source()
 
-    ids = {m["source_id"] for m in metadata_by_doc(report.index and report, tmp_path).values()}
+    ids = {m["source_id"] for m in metadata_by_doc(report, tmp_path).values()}
 
     assert ids == {"hr/pay.pdf", "report.pdf"}
+    # The files source's own labels come through too.
+    assert {m["source_content_type"] for m in metadata_by_doc(report, tmp_path).values()} == {"application/pdf"}
+    assert {m["source_path"] for m in metadata_by_doc(report, tmp_path).values()} == {"hr/pay.pdf", "report.pdf"}
 
 
 def test_retrieve_after_sync_does_not_rebuild_the_index(tmp_path, docs):

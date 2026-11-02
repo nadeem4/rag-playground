@@ -846,8 +846,8 @@ document id (for a folder, its path), and `source_<label>` for each label the so
 (`source_content_type`, `source_path` and so on). A label key is lower-cased, and any
 character that is not a letter, digit or underscore becomes `_`. The `roles` label is access
 data and is not copied. Only the document id and the labels reach a row, never a source's
-settings or `storage_options`. A document you add as a file gets `source_id` too, its name,
-so a citation can always name its document. This changes the id of every built-in index
+settings or `storage_options`. A document you sync or add as a file gets `source_id` too, its name,
+so its citations can name it. This changes the id of every built-in index
 result once, so an index built before this version rebuilds its index step on the next sync
 (the parsing and embedding stay cached).
 
@@ -1088,8 +1088,10 @@ again.
 
 With several documents in the index, `chat` finds its citations in the first document by
 name, the same rule as for a rewrite. A citation from another document is kept: its
-`source_sha` names its own piece's document, and `source` holds that document's id and labels (empty when the index kept none), its quote is checked against that piece's
-text, and its page is the piece's page when the piece is on one page (none when it spans several). Its offsets are in its own document's text.
+`source_sha` names its own piece's document, its quote is checked against that piece's
+text, and its page is the piece's page when the piece is on one page (none when it spans
+several). Its offsets are in its own document's text. A citation also has a `source`, the
+document's id and labels (empty when the index kept none).
 
 ## Evaluate a pipeline
 

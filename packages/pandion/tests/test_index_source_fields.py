@@ -37,7 +37,9 @@ def test_without_doc_sources_rows_are_as_before(tmp_path):
 
     assert not [k for k in _hit(binding, "alpha one").row.metadata if k.startswith("source_")]
     # Left out of the dump while empty, so an index built before this keeps its id.
-    assert "doc_sources" not in LanceDbIndexConfig(embedder="fake-deterministic").model_dump()
+    plain = LanceDbIndexConfig(embedder="fake-deterministic")
+    assert "doc_sources" not in plain.model_dump()
+    assert LanceDbIndexConfig(embedder="fake-deterministic", doc_sources=None).model_dump() == plain.model_dump()
     assert "doc_sources" in LanceDbIndexConfig(embedder="fake-deterministic", doc_sources={"d": {"id": "x"}}).model_dump()
 
 

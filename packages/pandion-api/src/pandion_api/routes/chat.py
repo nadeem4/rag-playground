@@ -151,7 +151,12 @@ async def chat(body: ChatIn, request: Request):
             if spans:
                 spans.finish(ok)
 
-    app.limiter.acquire(user_id)
+    try:
+        app.limiter.acquire(user_id)
+    except HTTPException:  # over the limit: the turn never ran, so end its span
+        if spans:
+            spans.finish(False)
+        raise
     try:
         started = start(request, "chat", traced)
     except BaseException:  # refused (429): the turn never ran, so end its span

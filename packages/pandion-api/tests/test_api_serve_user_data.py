@@ -94,6 +94,7 @@ class Refusing(AnonymousPolicy):
 def test_limit_is_asked_before_user_id(tmp_path):
     with serve(tmp_path, StubPipeline(), Refusing()) as c:
         assert c.get("/conversations").status_code == 429
+        assert c.post("/ask", json={"question": "Q?"}).status_code == 429
 
 
 class Counting(AnonymousPolicy):

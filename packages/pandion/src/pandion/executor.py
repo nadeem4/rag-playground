@@ -244,7 +244,7 @@ def run(
             output_dir=store.root / ".scratch" / aid[:16],
             emit=emit,
             tmp=store.root / ".scratch" / "tmp",
-            extras=dict(context_extras or {}),
+            extras={**(context_extras or {}), "artifact_id": aid},
         )
         ctx.output_dir.mkdir(parents=True, exist_ok=True)
         ctx.tmp.mkdir(parents=True, exist_ok=True)

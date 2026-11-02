@@ -55,7 +55,8 @@ def docs(tmp_path: Path) -> Path:
 
 
 def rows(report) -> list[dict]:
-    return lancedb.connect(report.index.output).open_table("chunks").to_arrow().to_pylist()
+    binding = report.index.output
+    return lancedb.connect(binding["settings"]["location"]).open_table(binding["collection"]).to_arrow().to_pylist()
 
 
 def manifest(folder: Path) -> dict:
@@ -110,7 +111,12 @@ def test_without_an_access_block_nothing_changes(tmp_path, docs):
 
 from pandion.access import ALL_ROLES, AccessDenied
 from pandion.document_sources import FilesSource, SourceEntry
-from pandion.filters import no_pages_sql, where_sql
+from pandion.filters import store_filter
+from pandion.index_store import AnyOf, And
+from pandion.plugins.query.text import TextQuery
+from pandion.payloads import Query
+from pandion.registry import register, registry
+from pandion.ports import Stage
 
 QUESTION = "salaries office opens month morning"
 
@@ -176,9 +182,9 @@ def test_two_users_with_different_roles_get_different_cached_answers(tmp_path, s
     assert again.stages["search"].status == "cached"
 
 
-def test_where_sql_adds_the_roles_condition_and_quotes_it():
-    assert where_sql({"roles": ["o'k", "hr"]}, {}) == "(array_has_any(roles, ['o''k', 'hr']))"
-    assert where_sql({"roles": []}, {}) == "(1 = 0)"
+def test_the_store_filter_adds_the_roles_it_is_given():
+    assert store_filter(None, ["o'k", "hr"], {}) == And((AnyOf("roles", ("o'k", "hr")),))
+    assert store_filter(None, [], {}) == And((AnyOf("roles", ()),))
 
 
 # --- review fixes -------------------------------------------------------------
@@ -226,10 +232,31 @@ def test_metadata_given_to_sync_replaces_the_roles_label_of_an_indexed_document(
     assert manifest(tmp_path)["handbook.pdf"]["roles"] == ["legal"]
 
 
-def test_the_no_page_count_does_not_include_rows_the_caller_cannot_read():
-    sql = no_pages_sql({"pages": [1, 2], "roles": ["hr"]})
-    assert "array_has_any(roles, ['hr'])" in sql
-    assert "1 = 0" in no_pages_sql({"pages": [1, 2], "roles": []})
+class DropFilters(TextQuery):
+    """A custom rewrite step that forgets the question's filters, roles included."""
+
+    name = "drop_filters"
+
+    def apply(self, inputs, config, ctx):
+        return Query(text=config.text).model_dump(mode="json")
+
+
+@pytest.fixture
+def drop_filters():
+    """Register the step for one test only, so no other test sees it."""
+    register(DropFilters)
+    yield
+    registry._by_stage[Stage.QUERY].pop(DropFilters.name, None)
+
+
+@pytest.mark.parametrize("search", ["dense", "bm25", "hybrid_rrf"])
+def test_a_rewrite_step_that_drops_the_filters_does_not_lift_the_roles_check(tmp_path, synced, search, drop_filters):
+    p = synced(search)
+    file = tmp_path / "pipeline.yaml"
+    file.write_text(file.read_text(encoding="utf-8").replace("retrieve:\n", "retrieve:\n  rewrite: {use: drop_filters}\n"), encoding="utf-8")
+    p = Pipeline.from_file(file)
+    assert docs_found(p.retrieve(QUESTION, roles=["staff"]), tmp_path) == {"handbook.pdf"}
+    assert docs_found(p.retrieve(QUESTION, roles=[]), tmp_path) == set()
 
 
 @pytest.mark.parametrize("bad", ["hr", ["hr", ""], ["hr", 1], {"hr"}, b"hr"])

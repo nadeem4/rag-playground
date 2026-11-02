@@ -82,7 +82,7 @@ def test_context_extras_reach_every_node(tmp_path):
 def test_default_extras_stay_empty(tmp_path):
     seen: list[dict] = []
     run(graph(), recording_registry(seen), Store(tmp_path))
-    assert seen == [{}, {}]
+    assert [{k: v for k, v in s.items() if k != "artifact_id"} for s in seen] == [{}, {}]
 
 
 def test_a_nodes_meta_does_not_bleed_into_the_next_node(tmp_path):

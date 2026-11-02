@@ -16,7 +16,6 @@ import pytest
 from pandion import llm
 from pandion.llm import Completion
 from pandion.payloads import Chunk, Hit, RetrievalResult
-from pandion.plugins.index.lancedb_store import DESCRIPTOR
 from pandion.ports import RunContext
 
 QUESTION = "What is the capital of France?"
@@ -98,5 +97,4 @@ def write_index(directory: Path, **descriptor) -> Path:
         "embeddings_computed": 0,
         "embeddings_cached": 0,
     } | descriptor
-    (directory / DESCRIPTOR).write_text(json.dumps(desc), encoding="utf-8")
-    return directory
+    return {"store": "lancedb", "settings": {}, "collection": "none", "recipe_hash": "", "descriptor": desc}

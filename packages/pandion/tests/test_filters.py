@@ -39,7 +39,7 @@ PIECES = [
 ]
 
 
-def filtered_index(tmp_path: Path, pieces=PIECES) -> Path:
+def filtered_index(tmp_path: Path, pieces=PIECES) -> dict:
     by_doc: dict[str, list[Chunk]] = {}
     for n, (cid, doc, pages, path, text) in enumerate(pieces):
         by_doc.setdefault(doc, []).append(
@@ -50,9 +50,9 @@ def filtered_index(tmp_path: Path, pieces=PIECES) -> Path:
         for doc, chunks in by_doc.items()
     ]
     store = Store(tmp_path / "store")
-    payload = LanceDbIndex().apply(
-        {"chunks": payloads}, LanceDbIndexConfig(embedder="fake-deterministic"), _ctx(tmp_path / "scratch")
-    )
+    ctx = _ctx(tmp_path / "scratch")
+    ctx.extras.update(index_location=str(tmp_path / "lancedb"), artifact_id="b" * 64, recipe_hash="r" * 64)
+    payload = LanceDbIndex().apply({"chunks": payloads}, LanceDbIndexConfig(embedder="fake-deterministic"), ctx)
     store.put(Artifact(id="b" * 64, type=ArtifactType.INDEX), payload)
     return store.load("b" * 64, ArtifactType.INDEX)
 
@@ -61,7 +61,7 @@ ALL = [DenseRetriever(), Bm25Retriever(), HybridRrfRetriever()]
 IDS = [t.name for t in ALL]
 
 
-def found(transform, index: Path, tmp_path: Path, filters: dict | None, ctx=None) -> set[str]:
+def found(transform, index: dict, tmp_path: Path, filters: dict | None, ctx=None) -> set[str]:
     query = Query(text="France", filters=filters)
     payload = transform.apply(
         {"index": index, "query": query.model_dump(mode="json")},
@@ -96,13 +96,6 @@ def test_each_filter_narrows_the_search(transform, filters, expected, tmp_path):
 
 
 @pytest.mark.parametrize("transform", ALL, ids=IDS)
-def test_pieces_without_pages_never_match_a_pages_filter_and_the_note_says_so(transform, tmp_path):
-    ctx = _ctx(tmp_path / "noted")
-    assert found(transform, filtered_index(tmp_path), tmp_path, {"pages": [1, 1000]}, ctx) == {"c0", "c1", "c2", "c4"}
-    assert "1 piece has no page numbers" in ctx.extras["meta"]["note"]
-
-
-@pytest.mark.parametrize("transform", ALL, ids=IDS)
 def test_a_quote_in_a_section_is_matched_literally(transform, tmp_path):
     index = filtered_index(tmp_path)
     assert found(transform, index, tmp_path, {"section": "It's here"}) == {"c4"}
@@ -117,18 +110,6 @@ def test_a_backslash_in_a_heading_is_matched_literally(transform, tmp_path):
     index = filtered_index(tmp_path, pieces)
     assert found(transform, index, tmp_path, {"section": "a\\"}) == {"c5"}
     assert found(transform, index, tmp_path, {"section": "a"}) == set()
-
-
-@pytest.mark.parametrize("transform", ALL, ids=IDS)
-def test_the_no_pages_note_counts_only_pieces_in_the_section(transform, tmp_path):
-    index = filtered_index(tmp_path)
-    # c3 has no pages and is under Installing; nothing under Guide lacks pages.
-    ctx = _ctx(tmp_path / "guide")
-    found(transform, index, tmp_path, {"pages": [1, 1000], "section": "Guide"}, ctx)
-    assert "note" not in ctx.extras.get("meta", {})
-    ctx = _ctx(tmp_path / "installing")
-    found(transform, index, tmp_path, {"pages": [1, 1000], "section": "Installing"}, ctx)
-    assert "1 piece has no page numbers" in ctx.extras["meta"]["note"]
 
 
 @pytest.mark.parametrize("transform", ALL, ids=IDS)

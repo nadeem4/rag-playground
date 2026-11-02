@@ -616,13 +616,13 @@ The report holds:
   has one `StageResult` for each step, under the names `source`, `parse`, `clean.1`
   (then `clean.2` and so on), and `chunk`. Its `.category` is the category the document
   went through (`default` for a file without categories).
-- `report.index`, the `StageResult` of the index. Its `.output` is the index folder.
+- `report.index`, the `StageResult` of the index. Its `.output` is the index binding (store, collection and descriptor).
 - `report.ok`, which is false if any step failed or was skipped.
 
 ```python
 report.documents["guides/chunking.pdf"].stages["chunk"].output   # the pieces
 report.documents["guides/chunking.pdf"].stages["clean.1"].note   # what the cleaner removed
-report.index.output                                              # the index folder
+report.index.output                                              # the index binding
 ```
 
 Each `StageResult` also has `status` (`executed`, `cached`, `failed` or `skipped`), `artifact_id`
@@ -913,7 +913,7 @@ Each key is optional, and when you give several, a piece must match all of them.
   matches when its pages overlap them, so a piece that runs from page 29 to page 31
   matches `[30, 40]`. A piece with no pages never matches a `pages` filter. Word, HTML,
   Markdown and the other files without pages give such pieces. The search does not fail
-  for them: its note says how many pieces it left out for having no page numbers.
+  for them; it leaves them out.
 - `section` is a heading. A piece matches when one of the headings above it, at any
   level, is exactly this text, with the same capital letters. So `"Installing"` matches
   a piece under "Guide > Installing", and `"Install"` does not. An index whose parser
@@ -1524,7 +1524,7 @@ pandion.explain("chunk", "recursive_character", {"chunk_size": 100, "chunk_overl
 
 Every `StageResult` has an `artifact_id`. `p.result(id)` reads that result back from the
 store later, for example when a page asks for one card's output: a dict for every result
-but an index, whose result is its folder. An id that is not a result id, or that has no
+but an index, whose result is its binding (also a dict). An id that is not a result id, or that has no
 stored result, is a `KeyError`.
 
 A server that keeps many pipelines under one folder does not need a pipeline to read a
@@ -2265,7 +2265,11 @@ store_conformance(lambda: MyStore(MySettings()))
 
 `store: lancedb` is the store behind the `lancedb` index step. Its settings are `location`, a local path, `s3://...` or `gs://...`, and `fts`, which builds the keyword index (leave it on if you use BM25 or hybrid retrieval). It is incremental, so one document can be replaced or deleted without a rebuild, and it filters by `eq`, `in`, `any_of` and `and` before it ranks. A metadata key keeps the type of its first value, and the names `id`, `doc_id`, `doc_version`, `text`, `vector`, `roles`, `chunk` and `chunk_json` are row fields, so a row refuses a metadata key with one of those names.
 
-The `lancedb` step now builds through this store (step version 3), so an index built by an older Pandion rebuilds once, from the cached embeddings. Nothing else changes in a pipeline file.
+The `lancedb` step builds through this store (step version 4), so an index built by an older Pandion rebuilds once, from the cached embeddings. Nothing else changes in a pipeline file.
+
+The index result is no longer a LanceDB folder. It is a small JSON binding that names the store, its settings (never a secret), the collection and the recipe hash. The collection is named from the recipe hash and the result id, so two sets of documents never share one, and a forced rerun replaces only its own. The retrievers open the collection through the binding and search it through the store contract: `dense` uses `search_dense`, `bm25` uses `search_lexical`, and `hybrid_rrf` uses both. Clearing the result store does not delete collections; they live in the store. A retriever whose store cannot serve it (for example `bm25` on an index built with `build_fts: false`) fails with a message that says what to change.
+
+When access is on, the roles of the person searching come from the pipeline (the `roles=` you pass), not from the question's filters, so a custom rewrite step that drops `filters` cannot widen a search. Every retriever filters by those roles in the store and then checks each returned row again. A row the store should not have returned is dropped, and its id (never its text) is logged on the `pandion.access` logger. `hybrid_rrf` checks before it fuses. An empty role list finds nothing.
 
 ## Write your own strategy
 

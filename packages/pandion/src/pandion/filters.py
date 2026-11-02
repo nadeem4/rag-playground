@@ -17,14 +17,16 @@ Several keys must all hold. A filter belongs to a question, so it is never
 part of the pipeline file.
 
 The filter reaches a retriever on `Query.filters`, with document names
-already turned into shas (`doc_ids`), and the retriever turns it into SQL
-here. The SQL is built only from checked values: numbers are written as
-numbers and every text is quoted, so no caller ever writes SQL.
+already turned into shas (`doc_ids`), and the retriever turns it into a store filter
+here into a store filter. It is built only from checked values, so no caller
+ever writes a query. A pages filter covers only pieces that have pages.
 """
 
 from __future__ import annotations
 
 from typing import Any, Mapping
+
+from pandion.index_store import NO_FILTER, AnyOf, And, Filter, In
 
 #: The keys `where` takes, in the order they are reported.
 KEYS = ("document", "pages", "section")
@@ -140,33 +142,22 @@ def _shas(names: list[str], documents: Mapping[str, Any]) -> list[str]:
 
 
 # --------------------------------------------------------------------------
-# SQL, for LanceDB
+# The store filter
 # --------------------------------------------------------------------------
 
 
-def _quote(text: str) -> str:
-    """A SQL string literal: inside single quotes, a quote is written twice."""
-    return "'" + str(text).replace("'", "''") + "'"
-
-
-def _whole(value: Any) -> int:
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise ValueError("A page in a filter must be a whole number.")
-    return value
-
-
-def _roles_sql(roles: Any) -> str:
-    return f"array_has_any(roles, [{', '.join(_quote(r) for r in roles)}])" if roles else "1 = 0"
-
-
-def where_sql(filters: Mapping[str, Any] | None, descriptor: Mapping[str, Any]) -> str | None:
-    """The SQL condition for `Query.filters` on a LanceDB index, or None.
+def store_filter(
+    filters: Mapping[str, Any] | None, roles: list[str] | None, descriptor: Mapping[str, Any]
+) -> Filter:
+    """The store filter for `Query.filters` and the caller's roles.
 
     `descriptor` is the index's own, which says whether it has the filter
-    columns and how many pieces have a section.
+    columns, how many pieces have a section and the last page. `roles` is None
+    when the search is not limited by role; an empty list matches nothing.
+    The roles come from the run, never from `filters`: a step that rewrites the
+    question may drop the filters, and that must not lift the role check.
     """
-    if not filters:
-        return None
+    filters = filters or {}
     unknown = set(filters) - {"doc_ids", "pages", "section", "roles"}
     if unknown:
         raise ValueError(f"A search filter has an unknown key: {', '.join(sorted(unknown))}.")
@@ -175,17 +166,18 @@ def where_sql(filters: Mapping[str, Any] | None, descriptor: Mapping[str, Any]) 
             "This index was built before page and section filters existed. "
             "Run the index again to rebuild it."
         )
-    parts: list[str] = []
+    parts: list[Filter] = []
     if "doc_ids" in filters:
         ids = filters["doc_ids"]
         if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids):
             raise ValueError("A document filter must list at least one document.")
-        parts.append(f"doc_id IN ({', '.join(_quote(i) for i in ids)})")
+        parts.append(In("doc_id", tuple(ids)))
     if "pages" in filters:
         first, last = (_whole(n) for n in filters["pages"])
-        # Overlap: the piece starts on or before the last page and ends on or
-        # after the first. A piece with no pages has nulls here and never matches.
-        parts.append(f"page_start <= {last} AND page_end >= {first}")
+        # Overlap: a piece lists every page it touches, so it matches when one
+        # of them is in the range. Pages past the last one indexed cannot match.
+        last = min(last, int(descriptor.get("max_page", 0)))
+        parts.append(AnyOf("pages", tuple(str(n) for n in range(first, last + 1))))
     if "section" in filters:
         if not descriptor.get("sections"):
             raise ValueError(
@@ -196,35 +188,13 @@ def where_sql(filters: Mapping[str, Any] | None, descriptor: Mapping[str, Any]) 
         section = filters["section"]
         if not isinstance(section, str):
             raise ValueError("A section filter must be text.")
-        parts.append(f"array_has(section, {_quote(section)})")
-    if "roles" in filters:
-        # Set by the pipeline from the caller's roles, never by `where`. A piece
-        # with none of them, or no roles at all, is not found.
-        parts.append(_roles_sql(filters["roles"]))
-    return " AND ".join(f"({p})" for p in parts)
+        parts.append(AnyOf("section", (section,)))
+    if roles is not None:
+        parts.append(AnyOf("roles", tuple(roles)))
+    return And(tuple(parts)) if parts else NO_FILTER
 
 
-def no_pages_sql(filters: Mapping[str, Any] | None) -> str | None:
-    """The condition for pieces a pages filter skipped for having no pages,
-    within the same documents and section. None when there is no pages filter."""
-    if not filters or "pages" not in filters:
-        return None
-    parts = ["page_start IS NULL"]
-    if filters.get("doc_ids"):
-        parts.append(f"doc_id IN ({', '.join(_quote(i) for i in filters['doc_ids'])})")
-    if isinstance(filters.get("section"), str):
-        parts.append(f"array_has(section, {_quote(filters['section'])})")
-    if "roles" in filters:
-        parts.append(_roles_sql(filters["roles"]))
-    return " AND ".join(parts)
-
-
-def no_pages_note(count: int) -> str | None:
-    """The sentence a search leaves when a pages filter skipped pieces with no pages."""
-    if not count:
-        return None
-    pieces = "1 piece has" if count == 1 else f"{count} pieces have"
-    return (
-        f"{pieces} no page numbers (from a file without pages, such as Word or "
-        "HTML), so the pages filter left them out."
-    )
+def _whole(value: Any) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError("A page in a filter must be a whole number.")
+    return value

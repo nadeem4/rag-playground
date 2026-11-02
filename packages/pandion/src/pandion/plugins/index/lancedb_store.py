@@ -1,25 +1,24 @@
-"""A LanceDB index: one table, dense vectors and a full-text index side by side.
+"""A LanceDB index: one collection, dense vectors and a full-text index side by side.
 
 Three things here are load-bearing and easy to get subtly wrong.
 
-*The payload is a callable, not a directory.* `DirectorySerializer.write` calls
-it with the destination the store has chosen, and the store then commits that
-destination atomically. The database is nevertheless *built* in `ctx.output_dir`
-during `apply()`, and the callable only copies the finished tree into place: a
-build that fails must fail inside `apply()`, where the executor records it as a
-node failure, rather than inside `store.put`, where it would abort the whole run.
+*The artifact is a binding, not a database.* The rows are written into a
+LanceDB store at the pipeline's index location (`<path>/index`), in a
+collection named after the recipe and this artifact's id. The artifact itself
+is a small JSON binding: the store, its settings, the collection and the
+capability descriptor. Clearing the artifact store therefore never deletes
+rows, and two document sets of one recipe get two collections side by side.
 
-*The capability descriptor is written into the directory.* Spec §5 calls it
-artifact meta, but a downstream transform is handed payloads only — it never
-sees `Artifact.meta` — so meta alone could not tell a retriever which embedder
-to query with. `descriptor.json` inside the index is the channel that actually
-reaches the consumer, and it survives a cache hit for free because it is part of
-the committed artifact. The same dict is also published on `ctx.extras["meta"]`,
-which the executor folds into `Artifact.meta` for the store and the UI.
+*The capability descriptor travels in the binding.* A downstream transform is
+handed payloads only, never `Artifact.meta`, so meta alone could not tell a
+retriever which embedder to query with. The binding's `descriptor` is the
+channel that reaches the consumer, and it survives a cache hit for free. The
+same dict is also published on `ctx.extras["meta"]`, which the executor folds
+into `Artifact.meta` for the store and the UI.
 
 *Vectors come from `chunk.text_to_embed`.* That is the contextual-retrieval
 seam: an augmented text is retrieved on while the original is cited. The full
-chunk travels alongside in `chunk_json` so the citation stays exact.
+chunk travels alongside in the row so the citation stays exact.
 
 LanceDB and pyarrow come with the `lancedb` extra and are imported inside
 `apply()`, so discovering this plugin loads neither. Vectors go through the
@@ -31,9 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shutil
-from pathlib import Path
-from typing import Any, Callable, ClassVar, Literal, Mapping
+from typing import Any, ClassVar, Literal, Mapping
 
 from pydantic import BaseModel, Field
 
@@ -43,18 +40,11 @@ from pandion.embeddings import EmbedderName, embedder_names, get_embedder
 from pandion.errors import require
 from pandion.ids import AddedSettings
 from pandion.index_lance import LanceSettings, LanceStore
-from pandion.index_store import IndexMeta, IndexRow
+from pandion.index_store import Binding, IndexMeta, IndexRow
 from pandion.payloads import ChunkSet
 from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
-
-#: The single table every backend reads. Dense and FTS are two indexes over one
-#: set of rows, not two stores — that is what makes hybrid fusion honest.
-TABLE = "chunks"
-
-#: The capability descriptor, spec §5.
-DESCRIPTOR = "descriptor.json"
 
 VECTOR_COLUMN = "vector"
 TEXT_COLUMN = "text"
@@ -141,8 +131,9 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
     extra = "lancedb"
     #: 2 added the page_start, page_end and section columns that search
     #: filters read. 3 builds through the LanceDB index store (doc_version,
-    #: roles, _pandion_meta). Every index rebuilds once, from cached embeddings.
-    version = "3"
+    #: roles, _pandion_meta). 4 makes the artifact a binding to a collection and
+    #: keeps pages as a list. Every index rebuilds once, from cached embeddings.
+    version = "4"
     stage = Stage.INDEX
     inputs = {"chunks": PortSpec(ArtifactType.CHUNK_SET, variadic=True)}
     output = ArtifactType.INDEX
@@ -264,7 +255,7 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
         inputs: Mapping[str, Any],
         config: LanceDbIndexConfig,
         ctx: RunContext,
-    ) -> Callable[[Path], None]:
+    ) -> dict[str, Any]:
         # A variadic port hands over a list — this is corpus support. BM25's IDF
         # is degenerate on one document, so concatenation is not a convenience.
         chunks = [
@@ -308,12 +299,13 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
                 text=chunk.text_to_embed,
                 vector=vector,
                 roles=(config.doc_roles or {}).get(chunk.doc_id, []),
-                # What search filters read (pandion.filters). A piece with no
-                # pages has no page keys, so it never matches a pages filter.
+                # What search filters read (pandion.filters). `pages` lists every
+                # page the piece touches, as text; a piece with no pages has no
+                # key, so it never matches a pages filter.
                 metadata={
                     "ordinal": chunk.ordinal,
                     **(
-                        {"page_start": chunk.page_span[0], "page_end": chunk.page_span[1]}
+                        {"pages": [str(n) for n in range(chunk.page_span[0], chunk.page_span[1] + 1)]}
                         if chunk.page_span
                         else {}
                     ),
@@ -339,52 +331,55 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
             # How many pieces sit under a heading. 0 means a section filter
             # can match nothing, which the retriever reports as an error.
             "sections": sum(1 for chunk in chunks if chunk.heading_path),
+            # The last page any piece touches: a pages filter lists pages up to it.
+            "max_page": max((c.page_span[1] for c in chunks if c.page_span), default=0),
             "embeddings_computed": stats.computed,
             "embeddings_cached": stats.cached,
         }
 
-        build_dir = ctx.output_dir / "lancedb"
-        if build_dir.exists():
-            shutil.rmtree(build_dir)
-        _build(build_dir, rows, descriptor, dim=dim, metric=config.metric, embedder=embedder, build_fts=config.build_fts)
+        # Where the rows go. A pipeline sets the location, the recipe and this
+        # artifact's id; a run without one (the contract suite) gets a private
+        # folder and an anonymous name.
+        location = str(ctx.extras.get("index_location") or ctx.output_dir / "index")
+        recipe = ctx.extras.get("recipe_hash", "")
+        name = f"{recipe[:16]}-{str(ctx.extras.get('artifact_id', ''))[:12]}"
+        settings = {"location": location, "fts": config.build_fts}
+        _build(settings, name, rows, dim=dim, metric=config.metric, embedder=embedder, recipe=recipe)
 
         # The executor owns `Artifact.meta` and merges this under its own keys,
-        # so it reaches the store and the UI. `descriptor.json` above remains
+        # so it reaches the store and the UI. The binding's descriptor remains
         # what a downstream transform actually reads.
         ctx.extras["meta"] = {"index_descriptor": descriptor}
 
-        def write(dest: Path) -> None:
-            # `dest` is the store's private scratch directory, already created.
-            shutil.copytree(build_dir, dest, dirs_exist_ok=True)
-
-        return write
+        return Binding(
+            store="lancedb", settings=settings, collection=name, recipe_hash=recipe, descriptor=descriptor
+        ).model_dump(mode="json")
 
 
 def _build(
-    directory: Path,
+    settings: dict[str, Any],
+    name: str,
     rows: list[IndexRow],
-    descriptor: dict[str, Any],
     *,
     dim: int,
     metric: str,
     embedder: Any,
-    build_fts: bool,
+    recipe: str,
 ) -> None:
-    """Write the rows through the LanceDB store, then drop every handle.
+    """Write the rows into a fresh collection of the LanceDB store.
 
-    Nothing may still hold the database open when this returns: the store moves
-    the committed directory into place, and an open LanceDB handle is exactly
-    the thing that turns that move into a WinError 32.
+    A collection of the same name (a forced run of an unchanged artifact) is
+    replaced. Nothing may still hold the database open when this returns.
     """
-    directory.mkdir(parents=True, exist_ok=True)
-    store = LanceStore(LanceSettings(location=str(directory), fts=build_fts))
+    store = LanceStore(LanceSettings(**settings))
+    store.drop(name)
     # An empty corpus is a legal index, not an error: it is what an
     # unconfigured pipeline produces on its first run.
     collection = store.create(
-        TABLE,
+        name,
         IndexMeta(
             embed_model=embedder.name, embed_revision=embedder.revision,
-            dims=dim, metric=metric, recipe_hash="",  # T9 fills the recipe hash in
+            dims=dim, metric=metric, recipe_hash=recipe,
         ),
     )
     collection.write_all(rows)
@@ -392,9 +387,4 @@ def _build(
     # No ANN index: IVF_PQ needs far more rows than a bench corpus has, and
     # LanceDB brute-forces the vector column correctly without one. An HNSW
     # sweep is a Phase 3 concern and lands here as config, not as a new plugin.
-
-    (directory / DESCRIPTOR).write_text(
-        json.dumps(descriptor, ensure_ascii=False), encoding="utf-8"
-    )
-
     del collection, store

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import ClassVar, Literal, Protocol
+from typing import Any, ClassVar, Literal, Protocol
 
 from pydantic import BaseModel, field_validator
 
@@ -50,6 +50,20 @@ class IndexMeta(BaseModel):
     metric: Metric
     recipe_hash: str
     format_version: int = 1
+
+
+class Binding(BaseModel):
+    """The index artifact: which store and collection hold the rows.
+
+    `settings` never holds a secret: a setting such as `api_key_env` names an
+    environment variable, not its value.
+    """
+
+    store: str
+    settings: dict[str, Any] = {}
+    collection: str
+    recipe_hash: str = ""
+    descriptor: dict[str, Any] = {}
 
 
 class StoreHit(BaseModel):
@@ -198,3 +212,15 @@ def get_store(name: str, settings: dict | None = None) -> IndexStore:
         known = ", ".join(sorted(_STORES))
         raise ValueError(f"There is no index store named '{name}'. The stores are: {known}.")
     return cls(cls.settings_model(**(settings or {})))
+
+
+def open_binding(binding: dict) -> Collection:
+    """The collection an index binding names."""
+    parsed = Binding.model_validate(binding)
+    collection = get_store(parsed.store, parsed.settings).open(parsed.collection)
+    if collection is None:
+        raise ValueError(
+            f"The index collection '{parsed.collection}' is not in the {parsed.store} store. "
+            "Run index.sync to build it."
+        )
+    return collection

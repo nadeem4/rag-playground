@@ -49,7 +49,8 @@ def pdfs(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def rows(report) -> list[str]:
-    table = lancedb.connect(report.index.output).open_table("chunks")
+    binding = report.index.output
+    table = lancedb.connect(binding["settings"]["location"]).open_table(binding["collection"])
     return sorted(r["id"] for r in table.to_arrow().to_pylist())
 
 

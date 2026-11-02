@@ -2,7 +2,7 @@
 
 The config is one integer: the size of the candidate pool it hands on. Everything else a dense search needs — which model,
 which revision, which width, which distance type — is read from the index's
-`descriptor.json`; see `pandion.plugins.retrieve._base` for why that is not a shortcut
+descriptor; see `pandion.plugins.retrieve._base` for why that is not a shortcut
 but the point.
 """
 
@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from pandion.artifacts import ArtifactType
 from pandion.payloads import Query
-from pandion.ports import PortSpec, RunContext, Stage, set_note
+from pandion.ports import PortSpec, RunContext, Stage
 from pandion.registry import register
 from pandion.transform import Explanation, Transform
 from pandion.plugins.retrieve import _base
@@ -70,26 +70,19 @@ class DenseRetriever(Transform[DenseConfig]):
         self, inputs: Mapping[str, Any], config: DenseConfig, ctx: RunContext
     ) -> dict[str, Any]:
         query = Query.model_validate(inputs["query"])
-        table, descriptor = _base.open_index(inputs["index"])
-        _base.require_backend(descriptor, "dense", self.name)
-        where = _base.where_sql(query, descriptor)
+        collection, descriptor = _base.open_index(inputs["index"])
+        roles = _base.caller_roles(query, ctx.extras)
+        _base.check_pairing(inputs["index"], descriptor, "dense", self.name, roles)
+        where = _base.search_filter(query, descriptor, roles)
 
         timings: dict[str, float] = {}
         with _base.timed(timings, "embed"):
             vector = _base.embed_query(descriptor, query, ctx.extras)
         with _base.timed(timings, "search"):
-            rows = _base.dense_rows(table, vector, descriptor, config.top_k, where)
-        note = _base.filter_note(table, query)
-        if note:
-            set_note(ctx, note)
+            rows = _base.dense_hits(collection, vector, config.top_k, where, roles, self.name)
 
         hits = [
-            _base.make_hit(
-                row,
-                rank=rank,
-                score=_base.similarity(row["_distance"], descriptor["metric"]),
-                retriever=self.name,
-            )
+            _base.make_hit(row, rank=rank, score=row.score, retriever=self.name)
             for rank, row in enumerate(rows, start=1)
         ]
 

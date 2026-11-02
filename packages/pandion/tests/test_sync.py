@@ -62,12 +62,36 @@ def manifest(config: Path) -> dict:
 
 
 def index_rows(report) -> list[str]:
-    table = lancedb.connect(report.index.output).open_table("chunks")
+    binding = report.index.output
+    table = lancedb.connect(binding["settings"]["location"]).open_table(binding["collection"])
     return sorted(r["id"] for r in table.to_arrow().to_pylist())
 
 
 def chunk_ids(report, doc_id: str) -> list[str]:
     return sorted(c.id for c in report.documents[doc_id].stages["chunk"].output.chunks)
+
+
+def collections(config: Path) -> set[str]:
+    db = lancedb.connect(str(config.parent / "index" / "index"))
+    return set(db.table_names())
+
+
+def test_a_sync_keeps_the_previous_collection_for_rollback(setup):
+    config, docs = setup
+    first = sync(config, docs)
+    (docs / "extra.pdf").write_bytes(build_pdf([["Berlin is the capital of Germany."]]))
+    second = sync(config, docs)
+
+    assert first.index.output["collection"] != second.index.output["collection"]
+    assert {first.index.output["collection"], second.index.output["collection"]} <= collections(config)
+
+
+def test_clearing_the_artifact_store_does_not_delete_collections(setup):
+    config, docs = setup
+    report = sync(config, docs)
+    Pipeline.from_file(config).index.store.delete(report.index.artifact_id)
+
+    assert report.index.output["collection"] in collections(config)
 
 
 def statuses(report) -> set[str]:

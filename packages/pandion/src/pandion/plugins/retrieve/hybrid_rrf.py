@@ -17,6 +17,7 @@ from pydantic import Field, model_validator
 
 from pandion.artifacts import ArtifactType
 from pandion.ids import AddedSettings
+from pandion.index_store import Filter, StoreHit
 from pandion.payloads import Query
 from pandion.ports import PortSpec, RunContext, Stage, set_note
 from pandion.registry import register
@@ -185,22 +186,25 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
         self, inputs: Mapping[str, Any], config: HybridRrfConfig, ctx: RunContext
     ) -> dict[str, Any]:
         query = Query.model_validate(inputs["query"])
-        table, descriptor = _base.open_index(inputs["index"])
+        collection, descriptor = _base.open_index(inputs["index"])
+        roles = _base.caller_roles(query, ctx.extras)
         for backend in ("dense", "fts"):
-            _base.require_backend(descriptor, backend, self.name)
-        where = _base.where_sql(query, descriptor)
+            _base.check_pairing(inputs["index"], descriptor, backend, self.name, roles)
+        where = _base.search_filter(query, descriptor, roles)
 
         timings: dict[str, float] = {}
         with _base.timed(timings, "dense"):
             vector = _base.embed_query(descriptor, query, ctx.extras)
-            dense = _base.dense_rows(table, vector, descriptor, config.top_k, where)
+            # Each list is re-checked before fusion, so a row the store should
+            # not have returned cannot add rank to one it may return.
+            dense = _base.dense_hits(collection, vector, config.top_k, where, roles, self.name)
 
         expanded: str | None = None
         terms: list[str] = []
         notes: list[str] = []
         if config.query_expansion == "prf":
             with _base.timed(timings, "expand"):
-                expanded, terms = self._expand(table, dense, query, config, where)
+                expanded, terms = self._expand(collection, vector, dense, query, config, where, roles)
             docs = min(config.prf_docs, len(dense))
             if terms:
                 notes.append(
@@ -211,17 +215,16 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
                 notes.append(NO_EXPANSION_NOTE)
             else:
                 notes.append(filtered_out_note(docs))
-        skipped = _base.filter_note(table, query)
-        if skipped:
-            notes.append(skipped)
         if notes:
             set_note(ctx, " ".join(notes))
 
         with _base.timed(timings, "bm25"):
-            lexical = _base.fts_rows(table, query, config.top_k, text=expanded, where=where)
+            lexical = _base.lexical_hits(
+                collection, query, config.top_k, where, roles, self.name, text=expanded
+            )
 
         with _base.timed(timings, "fuse"):
-            hits = self._fuse(dense, lexical, descriptor, config)
+            hits = self._fuse(dense, lexical, config)
 
         return _base.result(
             hits,
@@ -229,7 +232,7 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
             fetch_k=config.top_k,
             # Unique documents across both lists — the pool fusion actually chose
             # from, which is more than either list contributed on its own.
-            total_candidates=len({row["id"] for row in dense + lexical}),
+            total_candidates=len({hit.row.id for hit in dense + lexical}),
             timings_ms=timings,
             expanded_query=expanded,
             expansion_terms=terms,
@@ -237,53 +240,54 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
 
     def _expand(
         self,
-        table: Any,
-        dense: list[dict[str, Any]],
+        collection: Any,
+        vector: list[float] | None,
+        dense: list[StoreHit],
         query: Query,
         config: HybridRrfConfig,
-        where: str | None = None,
+        where: Filter,
+        roles: list[str] | None,
     ) -> tuple[str | None, list[str]]:
         """The expanded keyword query and the words it added, or `(None, [])`.
 
         Words come from the indexed text of the top dense rows, weighed against
-        the indexed text of every row the filter keeps, so the idf is the
-        searched documents' own. The
-        question's words go first, so the search still looks for them.
+        the indexed text of the rows the filter keeps (at most `PRF_POOL`, the
+        nearest first, because the store contract has no scan), so the idf is
+        the searched documents' own. The question's words go first, so the
+        search still looks for them.
         """
         if not dense:
             return None, []
-        top = [row[_base.TEXT_COLUMN] for row in dense[: config.prf_docs]]
-        terms = _prf.select_terms(
-            top, _base.indexed_texts(table, where), query.text, config.prf_terms
-        )
+        top = [hit.row.text for hit in dense[: config.prf_docs]]
+        pool = _base.dense_hits(collection, vector, _base.PRF_POOL, where, roles, self.name)
+        terms = _prf.select_terms(top, [hit.row.text for hit in pool], query.text, config.prf_terms)
         if not terms:
             return None, []
         return f"{query.text} {' '.join(terms)}", terms
 
     def _fuse(
         self,
-        dense: list[dict[str, Any]],
-        lexical: list[dict[str, Any]],
-        descriptor: dict[str, Any],
+        dense: list[StoreHit],
+        lexical: list[StoreHit],
         config: HybridRrfConfig,
     ) -> list[Any]:
-        rows: dict[str, dict[str, Any]] = {}
+        rows: dict[str, StoreHit] = {}
         scores: dict[str, float] = {}
         components: dict[str, dict[str, float]] = {}
         best_rank: dict[str, int] = {}
 
         lists = (
-            ("dense", dense, config.dense_weight, lambda r: _base.similarity(r["_distance"], descriptor["metric"])),
-            ("bm25", lexical, config.bm25_weight, lambda r: float(r["_score"])),
+            ("dense", dense, config.dense_weight),
+            ("bm25", lexical, config.bm25_weight),
         )
-        for label, ranked, weight, raw_score in lists:
+        for label, ranked, weight in lists:
             for rank, row in enumerate(ranked, start=1):
-                doc = row["id"]
+                doc = row.row.id
                 rows.setdefault(doc, row)
                 scores[doc] = scores.get(doc, 0.0) + weight / (config.rrf_k + rank)
                 # Only the lists a document actually appeared in get a component.
                 # A zero would read as "scored zero" rather than "not retrieved".
-                components.setdefault(doc, {})[label] = raw_score(row)
+                components.setdefault(doc, {})[label] = float(row.score)
                 best_rank[doc] = min(best_rank.get(doc, rank), rank)
 
         # Ties are broken by the better contributing rank, then by id, so the

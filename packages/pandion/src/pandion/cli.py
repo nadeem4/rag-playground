@@ -25,6 +25,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from typing import Any
 
 import yaml
@@ -163,6 +164,34 @@ def cmd_index(args: argparse.Namespace) -> int:
         report = p.index.run(args.documents, through=args.through, credentials=credentials_from_env())
         _print_index(report)
     return 0 if report.ok else 1
+
+
+def sync_line(report: Any, seconds: float) -> str:
+    """The one line `pandion sync` prints: JSON, counts only, no document names."""
+    cost = report.cost()
+    return json.dumps({
+        "event": "sync",
+        "ok": report.complete,
+        "added": len(report.added),
+        "changed": len(report.changed),
+        "removed": len(report.removed),
+        "unchanged": len(report.unchanged),
+        "failed": len(report.failed),
+        "duration_s": round(seconds, 2),
+        "tokens": (cost["input_tokens"] or 0) + (cost["output_tokens"] or 0),
+    })
+
+
+def cmd_sync(args: argparse.Namespace) -> int:
+    """Sync the `source:` block. 0 when every document is in, 1 when one was
+    left out; a refusal falls to `main`, which exits 2."""
+    p = _load(args)
+    started = time.monotonic()
+    report = p.index.sync_source(credentials=credentials_from_env())
+    print(sync_line(report, time.monotonic() - started))
+    for document, reason in report.failed.items():
+        print(f"failed: {document}: {reason}", file=sys.stderr)
+    return 0 if report.complete else 1
 
 
 def _documents(args: argparse.Namespace) -> list[str] | None:
@@ -476,6 +505,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("documents", nargs="+", help="files or folders to index")
     sub.add_argument("--sync", action="store_true", help="also say which documents were added, changed, removed or unchanged since the last index")
     sub.add_argument("--through", help="stop after this step: parse, clean, clean.2, chunk or index")
+
+    sub = command("sync", "sync the source named in the pipeline file", cmd_sync)
+    sub.add_argument("config")
 
     for name, help, fn in (("retrieve", "search the index for a question", cmd_retrieve), ("ask", "answer a question", cmd_ask)):
         sub = command(name, help, fn)

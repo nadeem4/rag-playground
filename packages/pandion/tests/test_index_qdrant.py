@@ -173,6 +173,35 @@ def test_a_wrong_width_vector_is_refused():
         col.write_all([_row("1", [1, 0])])
 
 
+def test_a_metadata_key_named_like_the_stored_row_id_is_refused():
+    col = _store().create("c", _meta())
+    with pytest.raises(ValueError, match="_row_id"):
+        col.write_all([_row("1", [1, 0, 0], metadata={"_row_id": "x"})])
+
+
+def test_a_prefix_with_two_underscores_is_refused():
+    with pytest.raises(ValueError, match="__"):
+        QdrantSettings(prefix="a__b")
+
+
+def test_two_store_objects_on_one_folder_work_together(tmp_path):
+    one = QdrantStore(QdrantSettings(location=str(tmp_path)))
+    two = QdrantStore(QdrantSettings(location=str(tmp_path)))
+    one.create("c", _meta()).write_all([_row("1", [1, 0, 0])])
+    assert _ids(two.open("c").search_dense([1, 0, 0], 5, NO_FILTER)) == ["1"]
+    two.open("c").write_all([_row("2", [1, 0, 0])])
+    assert _ids(one.open("c").search_dense([1, 0, 0], 5, NO_FILTER)) == ["2"]
+
+
+def test_without_a_keyword_index_there_is_no_text_search():
+    store = _store(fts=False)
+    assert store.capabilities().lexical is None
+    col = store.create("c", _meta())
+    col.write_all([_row("1", [1, 0, 0])])
+    assert col.search_lexical("plain", 5, NO_FILTER) == []
+    assert _ids(col.search_dense([1, 0, 0], 5, NO_FILTER)) == ["1"]
+
+
 @pytest.mark.skipif(not os.environ.get("QDRANT_URL"), reason="set QDRANT_URL to run against a server")
 def test_qdrant_conformance_against_a_server():
     store_conformance(lambda: QdrantStore(QdrantSettings(url=os.environ["QDRANT_URL"], prefix=uuid4().hex)))

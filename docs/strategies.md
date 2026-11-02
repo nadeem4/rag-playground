@@ -282,9 +282,10 @@ The same step as `lancedb`, with the rows in Qdrant, in a folder or on a server.
 the `qdrant` extra. The same retrievers read it. See "The Qdrant store" in
 [pandion.md](pandion.md#the-qdrant-store).
 
-- `embedder`, `truncate_dim`, `build_fts`: as for `lancedb`.
+- `embedder`, `truncate_dim`, `build_fts`: as for `lancedb`. With `build_fts` off no keyword
+  index is kept, so `bm25` and `hybrid_rrf` are refused.
 - `metric`: `cosine` (the default), `dot` or `l2`.
-- `settings`: `url` (a Qdrant server), `location` (`:memory:` or a folder; with no `url`
+- `settings`: `url` (a Qdrant server; never put a key in it), `location` (a folder; with no `url`
   and no `location`, a folder beside the pipeline's index), `api_key_env` (the name of the
   environment variable that holds the key) and `prefix` (so pipelines can share a server).
 

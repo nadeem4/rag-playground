@@ -2285,7 +2285,7 @@ index:
     settings: {url: "http://qdrant.internal:6333", api_key_env: QDRANT_API_KEY, prefix: support-bot}
 ```
 
-The `settings` are `url` (a Qdrant server; it wins over `location`), `location` (`:memory:` or a folder, both run with no server), `api_key_env` (the name of an environment variable that holds the key; the key itself is never in the pipeline file or in the index result) and `prefix` (every Qdrant collection is named `<prefix>__<name>`, so two pipelines can share one server). With no `url` and no `location`, the step keeps its rows in a folder beside the pipeline's index, the same place `lancedb` uses. A pipeline file does not expand `${VAR}`: write the url, and keep only the key in the environment.
+The `settings` are `url` (a Qdrant server; it wins over `location`), `location` (a folder; with no server), `api_key_env` (the name of an environment variable that holds the key; the key itself is never in the pipeline file or in the index result) and `prefix` (every Qdrant collection is named `<prefix>__<name>`, so two pipelines can share one server). With no `url` and no `location`, the step keeps its rows in a folder beside the pipeline's index, the same place `lancedb` uses. A pipeline file does not expand `${VAR}`: write the url, and keep only the key in the environment. Never put a key inside the url; use `api_key_env`. `:memory:` is a location for the store in code (tests, `QdrantStore` used directly); a pipeline step with no place given uses its folder, because memory would vanish before a search could open it. `build_fts: false` leaves the keyword index out, so the store has no text search and `bm25` and `hybrid_rrf` are refused when the file is read.
 
 | | LanceDB | Qdrant, in a folder | Qdrant, on a server |
 |---|---|---|---|
@@ -2296,7 +2296,7 @@ The `settings` are `url` (a Qdrant server; it wins over `location`), `location` 
 | Metrics | cosine, dot, l2 | the same | the same |
 | Best for | one machine, or object storage | one process on one machine | a team, many servers |
 
-A folder holds one open Qdrant at a time, so use a server when more than one process reads the index. Text search in Qdrant is a sparse-vector search with an IDF weight, which is bm25-like: it has no length normalisation, so its scores differ a little from LanceDB's. Both embedded and server mode accept it (checked on qdrant-client 1.20). If a store ever has no text search, a pipeline that pairs it with `bm25` or `hybrid_rrf` is refused when the file is read, with a sentence that says so. Each row also keeps its own vector in the payload, so a cosine collection (which Qdrant stores normalised) still returns the vector you wrote; that costs about twice the vector storage.
+A folder holds one open Qdrant at a time, so use a server when more than one process reads the index. Text search in Qdrant is a sparse-vector search with an IDF weight, which is bm25-like: it has no length normalisation, so its scores differ a little from LanceDB's. Both embedded and server mode accept it (checked on qdrant-client 1.20). If a store ever has no text search, a pipeline that pairs it with `bm25` or `hybrid_rrf` is refused when the file is read, with a sentence that says so. A cosine collection stores its vectors scaled to length 1, so a row comes back with its vector scaled that way.
 
 A filter on a list-valued field with `eq` or `in` matches if any element matches in Qdrant, where the memory store matches nothing; use `any_of` for lists (roles and pages do). `in` takes whole numbers and text, not decimals.
 

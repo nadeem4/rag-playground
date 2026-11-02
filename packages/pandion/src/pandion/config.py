@@ -346,7 +346,10 @@ def _check_text_search(config: PipelineConfig, search: str) -> None:
     store = config.index.store_use
     if store not in store_names():
         return
-    caps = get_store(store, config.index.store.get("settings") or {}).capabilities()
+    settings = dict(config.index.store.get("settings") or {})
+    if "build_fts" in config.index.store:
+        settings["fts"] = config.index.store["build_fts"]
+    caps = get_store(store, settings).capabilities()
     try:
         check_store(store, caps, lexical=True)
     except StoreRefused as exc:

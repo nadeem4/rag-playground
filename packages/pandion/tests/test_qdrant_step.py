@@ -124,7 +124,7 @@ def test_the_binding_holds_the_env_name_not_the_key(monkeypatch, tmp_path):
     )
     ctx = RunContext(output_dir=tmp_path, emit=lambda e: None, tmp=tmp_path, extras={"index_location": str(tmp_path)})
     _, kept = QdrantIndex()._settings(config, ctx)
-    assert kept == {"url": "http://q:6333", "api_key_env": "MY_KEY", "prefix": "bot"}
+    assert kept == {"url": "http://q:6333", "api_key_env": "MY_KEY", "prefix": "bot", "fts": True}
     assert "sekret-value" not in json.dumps(kept)
 
 
@@ -132,6 +132,24 @@ def test_an_embedded_step_keeps_no_folder_in_the_binding(tmp_path):
     ctx = RunContext(output_dir=tmp_path, emit=lambda e: None, tmp=tmp_path, extras={"index_location": str(tmp_path)})
     settings, kept = QdrantIndex()._settings(QdrantIndexConfig(embedder="fake-deterministic"), ctx)
     assert settings["location"] == str(tmp_path) and "location" not in kept
+
+
+@pytest.mark.parametrize("store", ["lancedb", "qdrant"])
+def test_no_keyword_index_with_bm25_is_refused_at_load(tmp_path, store):
+    data = _file(tmp_path, {"use": store, "build_fts": False})
+    data["retrieve"] = {"search": {"use": "bm25"}}
+    with pytest.raises(ConfigError, match="text search"):
+        from_dict(data, base=tmp_path)
+    data["retrieve"] = {"search": {"use": "dense"}}
+    from_dict(data, base=tmp_path)
+
+
+def test_the_qdrant_step_without_a_keyword_index_has_no_text_search(tmp_path, docs):
+    config = tmp_path / "pipeline.yaml"
+    config.write_text(CONFIG.format(store="qdrant", search="dense").replace("{use: qdrant}", "{use: qdrant, build_fts: false}"), encoding="utf-8")
+    p = Pipeline.from_file(config)
+    p.index.sync(docs)
+    assert found(p.retrieve(QUESTION, roles=["hr", "staff"]), tmp_path) == {"hr/pay.pdf", "handbook.pdf"}
 
 
 def test_a_store_without_text_search_is_refused_with_bm25_at_load(monkeypatch, tmp_path):

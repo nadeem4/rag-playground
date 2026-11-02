@@ -70,6 +70,7 @@ class QdrantIndex(StoreIndex):
         server = bool(mine["url"])
         # Memory would vanish before a retriever opened it, so "no place given" is the pipeline's folder.
         folder = not server and mine["location"] in ("", ":memory:")
+        mine["fts"] = config.build_fts  # the keyword index is the step's setting, not the store's
         settings = {**mine, "location": _here(ctx)} if folder else dict(mine)
         kept = dict(settings)
         # The pipeline's own place is not kept (the folder may move); whoever opens it says.

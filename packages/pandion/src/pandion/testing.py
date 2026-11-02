@@ -157,6 +157,14 @@ def check_eq_in_and_filters_on_metadata(store):
 
 
 @_check
+def check_in_and_eq_match_a_whole_number_stored_as_a_float(store):
+    col = _col(store, [_row("1", "d", [1, 0, 0], metadata={"n": 1.0}), _row("2", "d", [0, 1, 0], metadata={"n": 2.0})])
+    for where in (In("n", (1,)), Eq("n", 1)):
+        got = _ids(col.search_dense([1, 1, 0], 10, where))
+        _expect(got == ["1"], f"a whole number must match the same number stored as a float, got {got}")
+
+
+@_check
 def check_lexical_search_finds_the_word(store):
     if not store.capabilities().lexical:
         return
@@ -189,7 +197,17 @@ def check_rows_round_trip_every_field(store):
                chunk='{"id": "1", "text": "cited text"}')
     col = _col(store, [row])
     hits = col.search_dense([0.5, 0.25, 0.125], 1, NO_FILTER)
-    _expect(len(hits) == 1 and hits[0].row == row, "a row must come back with every field unchanged")
+    _expect(len(hits) == 1, "a search must find the row")
+    got = hits[0].row
+    # A store may return the vector scaled to length 1 (cosine); its direction must be the same.
+    scale = sum(x * x for x in row.vector) ** 0.5
+    same_direction = len(got.vector) == 3 and all(
+        abs(g * scale / (sum(y * y for y in got.vector) ** 0.5 or 1) - w) < 1e-6 for g, w in zip(got.vector, row.vector)
+    )
+    _expect(
+        got.model_copy(update={"vector": row.vector}) == row and same_direction,
+        "a row must come back with every field unchanged (the vector may be scaled to length 1)",
+    )
 
 
 def store_conformance(factory: Callable[[], IndexStore]) -> None:

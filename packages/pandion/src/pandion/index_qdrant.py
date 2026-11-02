@@ -11,18 +11,19 @@ Checked live on qdrant-client 1.20 (spec 5, T10 spike):
   `crc32 % 2**31` as the sparse index and uses the term count as the value. No
   `fastembed` is needed. It has no length normalization, so it is bm25-like, not
   exact BM25.
-- A cosine collection returns its vectors normalized, so each row also keeps its
-  own vector in the payload; that is what comes back unchanged.
+- A cosine collection returns its vectors normalized, so a row comes back with
+  its vector scaled to length 1. Nothing in Pandion reads it.
 
 A collection is the Qdrant collection `<prefix>__<name>`. One point in
 `<prefix>__meta` keeps its `IndexMeta` as JSON. A local folder allows one open
-client at a time, so a folder store opens, works and closes per call; memory
-and server stores keep one client. `qdrant_client` is imported only inside
+client at a time, so all stores on one folder share one client, kept until the
+process ends; memory and server stores keep their own. `qdrant_client` is imported only inside
 functions.
 """
 
 from __future__ import annotations
 
+import atexit
 import json
 import math
 import os
@@ -32,7 +33,9 @@ from collections.abc import Iterable, Sequence
 from contextlib import contextmanager
 from uuid import NAMESPACE_URL, uuid5
 
-from pydantic import BaseModel, ConfigDict
+from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from pandion.errors import FormatTooNew, require
 from pandion.index_lance import NoRows
@@ -45,7 +48,7 @@ _DENSE = "dense"
 _SPARSE = "text"
 _META = "meta"
 _ID = "_row_id"  # the row id; not "id", so a point id and a row id are never confused
-_PAYLOAD_FIELDS = {_ID, "doc_id", "doc_version", "text", "roles", "chunk", "vector"}
+_PAYLOAD_FIELDS = {_ID, "doc_id", "doc_version", "text", "roles", "chunk"}
 _UNFILTERABLE = ("chunk", "chunk_json", "vector")  # row payload; no filter can match it
 _BATCH = 256
 
@@ -57,6 +60,14 @@ class QdrantSettings(BaseModel):
     url: str = ""  # a Qdrant server; wins over `location`
     api_key_env: str = ""  # the NAME of an environment variable; the key is never a setting
     prefix: str = "pandion"
+    fts: bool = True  # also keep a text index; off means no text search
+
+    @field_validator("prefix")
+    @classmethod
+    def _no_double_underscore(cls, prefix):
+        if "__" in prefix:
+            raise ValueError("The prefix cannot contain two underscores in a row, because they end the prefix. Use one.")
+        return prefix
 
 
 def _pid(text: str) -> str:
@@ -97,8 +108,7 @@ def _in(models, key: str, values):
     parts = []
     if texts:
         parts.append(models.FieldCondition(key=key, match=models.MatchAny(any=texts)))
-    if numbers:
-        parts.append(models.FieldCondition(key=key, match=models.MatchAny(any=numbers)))
+    parts += [_eq(models, key, v) for v in numbers]  # a range each, so 1 matches 1.0
     parts += [models.FieldCondition(key=key, match=models.MatchValue(value=v)) for v in flags]
     return parts[0] if len(parts) == 1 else models.Filter(should=parts)
 
@@ -122,6 +132,19 @@ def to_filter(models, where: Filter):
     return models.Filter(must=[_in(models, key, where.values)])
 
 
+_FOLDER_CLIENTS: dict[str, object] = {}
+
+
+@atexit.register
+def _close_folders() -> None:
+    for client in _FOLDER_CLIENTS.values():
+        try:
+            client.close()
+        except Exception:
+            pass
+    _FOLDER_CLIENTS.clear()
+
+
 class QdrantCollection:
     def __init__(self, store: "QdrantStore", name: str, meta: IndexMeta):
         self._store = store
@@ -132,6 +155,8 @@ class QdrantCollection:
         return self._meta
 
     def _check(self, row: IndexRow) -> None:
+        if _ID in row.metadata:
+            raise ValueError(f"Metadata key '{_ID}' is kept by the qdrant store for the row id; rename it.")
         if len(row.vector) != self._meta.dims:
             raise ValueError(
                 f"Row '{row.id}' has {len(row.vector)} numbers but this collection's dims is {self._meta.dims}. "
@@ -139,20 +164,20 @@ class QdrantCollection:
             )
 
     @staticmethod
-    def _point(models, row: IndexRow):
+    def _point(models, row: IndexRow, fts: bool):
         payload = {
             _ID: row.id, "doc_id": row.doc_id, "doc_version": row.doc_version, "text": row.text,
-            "roles": row.roles, "chunk": row.chunk, "vector": row.vector, **row.metadata,
+            "roles": row.roles, "chunk": row.chunk, **row.metadata,
         }
-        return models.PointStruct(
-            id=_pid(row.id), payload=payload,
-            vector={_DENSE: row.vector, _SPARSE: _sparse(models, row.text)},
-        )
+        vector = {_DENSE: row.vector}
+        if fts:
+            vector[_SPARSE] = _sparse(models, row.text)
+        return models.PointStruct(id=_pid(row.id), payload=payload, vector=vector)
 
     def _upsert(self, client, models, rows: Sequence[IndexRow]) -> None:
         for start in range(0, len(rows), _BATCH):
             batch = rows[start:start + _BATCH]
-            client.upsert(self._store._full(self._name), [self._point(models, r) for r in batch])
+            client.upsert(self._store._full(self._name), [self._point(models, r, self._store.settings.fts) for r in batch])
 
     def _delete_where(self, client, models, flt) -> None:
         client.delete(self._store._full(self._name), points_selector=models.FilterSelector(filter=flt))
@@ -197,10 +222,10 @@ class QdrantCollection:
                     return found
 
     @staticmethod
-    def _hit(payload: dict, score: float) -> StoreHit:
+    def _hit(payload: dict, vector: list[float], score: float) -> StoreHit:
         row = IndexRow(
             id=payload[_ID], doc_id=payload["doc_id"], doc_version=payload["doc_version"], text=payload["text"],
-            vector=payload["vector"], roles=list(payload["roles"] or []), chunk=payload["chunk"],
+            vector=list(vector), roles=list(payload["roles"] or []), chunk=payload["chunk"],
             metadata={k: v for k, v in payload.items() if k not in _PAYLOAD_FIELDS},
         )
         return StoreHit(row=row, score=score)
@@ -214,9 +239,9 @@ class QdrantCollection:
         with self._store._use() as client:
             found = client.query_points(
                 self._store._full(self._name), query=query, using=using, query_filter=flt,
-                limit=k + 1, with_payload=True,  # one extra, so ties at the cut-off order by id
+                limit=k + 1, with_payload=True, with_vectors=[_DENSE],  # one extra, so ties at the cut-off order by id
             ).points
-        hits = [self._hit(p.payload, score(p.score)) for p in found]
+        hits = [self._hit(p.payload, p.vector[_DENSE], score(p.score)) for p in found]
         hits.sort(key=lambda h: (-h.score, h.row.id))
         return hits[:k]
 
@@ -225,6 +250,8 @@ class QdrantCollection:
         return self._search(list(vector), _DENSE, k, where, lambda s: sign * s)
 
     def search_lexical(self, text: str, k: int, where: Filter) -> list[StoreHit]:
+        if not self._store.settings.fts:
+            return []
         query = _sparse(self._store._models(), text)
         if not query.indices:
             return []
@@ -261,17 +288,17 @@ class QdrantStore:
 
     @contextmanager
     def _use(self):
-        """A client for one call. A folder allows one open client, so it is closed after; memory and servers keep theirs."""
+        """A client for one call. Memory and servers keep their own; a folder allows one open
+        client, so every store on that folder shares one."""
         if self.settings.url or self.settings.location == ":memory:":
             if self._client is None:
                 self._client = self._connect()
             yield self._client
             return
-        client = self._connect()
-        try:
-            yield client
-        finally:
-            client.close()
+        key = str(Path(self.settings.location).resolve())
+        if key not in _FOLDER_CLIENTS:
+            _FOLDER_CLIENTS[key] = self._connect()
+        yield _FOLDER_CLIENTS[key]
 
     def _full(self, name: str) -> str:
         return f"{self.settings.prefix}__{name}"
@@ -282,7 +309,7 @@ class QdrantStore:
 
     def capabilities(self) -> Capabilities:
         return Capabilities(
-            incremental=True, lexical="bm25",
+            incremental=True, lexical="bm25" if self.settings.fts else None,
             filters={"eq", "in", "any_of", "and"}, metrics={"cosine", "dot", "l2"},
         )
 
@@ -299,7 +326,9 @@ class QdrantStore:
                 self._full(name),
                 vectors_config={_DENSE: models.VectorParams(
                     size=meta.dims, distance=getattr(models.Distance, self._DISTANCE[meta.metric]))},
-                sparse_vectors_config={_SPARSE: models.SparseVectorParams(modifier=models.Modifier.IDF)},
+                sparse_vectors_config=(
+                    {_SPARSE: models.SparseVectorParams(modifier=models.Modifier.IDF)} if self.settings.fts else None
+                ),
             )
             if not client.collection_exists(self._meta_name):
                 client.create_collection(

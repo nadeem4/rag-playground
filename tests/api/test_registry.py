@@ -15,7 +15,7 @@ def test_the_catalog_lists_every_plugin_with_its_contract(client):
     body = r.json()["stages"]
     entries = [t for stage, strategies in body.items() if stage != "route" for t in strategies.values()]
     # One plugin module holds the route checks, which are not strategies.
-    assert len(entries) == len(PLUGIN_MODULES) - 1 == 24
+    assert len(entries) == len(PLUGIN_MODULES) - 1 == 25
     assert len(body["route"]) == 7
     for t in entries:
         for key in ("config_schema", "inputs", "output", "stackable", "learn"):

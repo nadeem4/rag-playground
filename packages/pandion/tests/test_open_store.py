@@ -99,8 +99,8 @@ def test_to_dict_leaves_embed_out_for_a_store_that_embeds_by_itself(tmp_path):
 
 
 def test_an_unknown_store_lists_the_stores(tmp_path):
-    with pytest.raises(ConfigError, match="'qdrant', which is not a store.*lancedb"):
-        from_dict(_config({"use": "qdrant"}), base=tmp_path)
+    with pytest.raises(ConfigError, match="'pinecone', which is not a store.*lancedb"):
+        from_dict(_config({"use": "pinecone"}), base=tmp_path)
 
 
 def test_the_embedder_cannot_be_set_on_the_store(tmp_path):

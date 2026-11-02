@@ -374,7 +374,9 @@ A run is two requests:
 2. `GET /api/v2/runs/{run_id}/events` streams the run's events as server-sent events:
    `run_started`, `node_started`, `node_skipped`, `node_failed`, `run_finished` or
    `run_cancelled`, then `stream_end`. A client that reconnects passes the last event id
-   and gets the rest from there.
+   and gets the rest from there. Each event about a step names its `stage`, and carries the
+   caller's `trace_id` when one was given (Pandion adds both; the keys are additive, the
+   events still Provisional).
 
 Compare uses `POST /api/v2/comparisons`: one stage, up to ten variants, each the block the
 pipeline file takes for that stage. It sends one of three shapes. Through an index step,

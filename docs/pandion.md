@@ -1637,14 +1637,25 @@ so results keep the names people gave their files.
   `run_started` has `steps` (every step of the run) and `selected_steps` (the ones
   this run asked for), and `run_cancelled` has `skipped_steps`. The raw ids in
   `node_id`, `nodes`, `selected` and `skipped` are internal and may change; use the
-  named fields. If the callback raises, the run stops and the exception reaches your
-  code. The one exception is an event a strategy emits itself through `ctx.emit` inside
+  named fields. Every event about a step also has `stage` (`source`, `parse`, `clean`,
+  `chunk`, `embed`, and so on). Events are still Provisional: keys are only ever added,
+  never renamed or removed. If the callback raises, the run stops and the exception
+  reaches your code. The one exception is an event a strategy emits itself through `ctx.emit` inside
   `apply`: an error the callback raises there is caught like any other step error, so
   that step fails instead of the whole run stopping.
+- `trace_id` is any string you choose. `index.run`, `p.retrieve` and `p.ask`
+  take it and add it to every event of the call, as `trace_id`, including the events a
+  strategy emits itself. It is passed through, not read from the thread, so events from a
+  worker thread keep it. Without it the key is absent.
 - `cancel` is checked between steps: a step that is running finishes, the rest are
   reported with status `skipped`, and `report.ok` is False.
 - `credentials` are the model keys for this call, as for `p.retrieve`.
 - `force` runs every step that was asked for again, even when its result is stored.
+
+A single step can emit the same events. `pandion.parse`, `pandion.clean`, `pandion.chunk`
+and `pandion.rewrite` take `on_event` and `trace_id`, and give `node_started`, then
+`node_finished`, or `node_failed` followed by the error being raised as before. The
+`node_id` and `stage` are the stage name (`parse`, `clean`, `chunk`, `query`).
 
 ### Search the files a question is about
 

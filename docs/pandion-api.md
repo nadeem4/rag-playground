@@ -180,8 +180,10 @@ An index run, a question, an evaluation and a comparison are all runs. The reque
 checked first (a bad pipeline is a 422, a document this caller may not read is a 403, a
 `through` that names no step is a 400), then answered 202 with a `run_id`, and the work
 happens in the background. Its events are Pandion's own (`node_started`, `node_finished`
-with the step's `document` and `step`, `node_failed`, `run_finished`), plus `queued` and
-`unqueued` when the Policy limits how many runs work at once, and a last `stream_end`. An
+with the step's `document`, `step` and `stage`, `node_failed`, `run_finished`), plus `queued` and
+`unqueued` when the Policy limits how many runs work at once, and a last `stream_end`.
+The API sets no `trace_id` on its events, so that key is absent from the
+stream. An
 index run's `result` gives, per document and step, its `status` (`executed`, `cached`,
 `failed` or `skipped`), its `strategy` and its `result_id`.
 

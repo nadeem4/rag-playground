@@ -513,6 +513,7 @@ class Pipeline:
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
         force: bool = False,
+        trace_id: str | None = None,
     ) -> Retrieval:
         """Search the index for `question`. See `RetrievalPipeline.retrieve`."""
         if self.retrieval is None:
@@ -522,7 +523,7 @@ class Pipeline:
             )
         return self.retrieval.retrieve(
             question, k, documents=documents, where=where, roles=roles, credentials=credentials,
-            on_event=on_event, cancel=cancel, force=force,
+            on_event=on_event, cancel=cancel, force=force, trace_id=trace_id,
         )
 
     def ask(
@@ -537,6 +538,7 @@ class Pipeline:
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
         force: bool = False,
+        trace_id: str | None = None,
     ) -> Answer:
         """Answer `question`. See `QueryPipeline.ask`."""
         if self.query is None:
@@ -546,7 +548,7 @@ class Pipeline:
             )
         return self.query.ask(
             question, k, documents=documents, where=where, roles=roles, credentials=credentials,
-            on_event=on_event, cancel=cancel, force=force,
+            on_event=on_event, cancel=cancel, force=force, trace_id=trace_id,
         )
 
 
@@ -788,6 +790,7 @@ class IndexPipeline:
         credentials: dict[str, str] | None = None,
         force: bool = False,
         categories: dict[str, str] | None = None,
+        trace_id: str | None = None,
     ) -> IndexReport:
         """Index the files at `paths`: files, folders, or a list of both.
 
@@ -820,6 +823,7 @@ class IndexPipeline:
             cancel=cancel,
             credentials=credentials,
             force=force,
+            trace_id=trace_id,
         )
 
     def _last_step(self, through: str | None) -> str | None:
@@ -1404,6 +1408,7 @@ class IndexPipeline:
         categories: dict[str, str] | None = None,
         known: dict[str, Sorting] | None = None,
         labels: dict[str, dict[str, str]] | None = None,
+        trace_id: str | None = None,
     ) -> IndexReport:
         """Index `documents`. `remember=False` leaves `self.documents` as it
         was; evaluate's trace of a miss uses it so the pipeline is unchanged."""
@@ -1428,6 +1433,7 @@ class IndexPipeline:
             force=force,
             roles=roles,
             check_index_rows=True,
+            trace_id=trace_id,
         )
         reports = {
             doc_id: DocumentReport(
@@ -1466,6 +1472,7 @@ class IndexPipeline:
         roles: dict[str, tuple[str | None, str]] | None = None,
         caller_roles: list[str] | None = None,
         check_index_rows: bool = False,
+        trace_id: str | None = None,
     ) -> RunResult:
         """Run `graph` through the store, with this pipeline's files and models.
 
@@ -1520,6 +1527,7 @@ class IndexPipeline:
             on_event=emit,
             cancelled=cancel.is_set if cancel is not None else None,
             context_extras=extras,
+            trace_id=trace_id,
         )
 
     def indexed(self) -> dict[str, SourceFile | str]:
@@ -1781,6 +1789,7 @@ class RetrievalPipeline:
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
         force: bool = False,
+        trace_id: str | None = None,
     ) -> Retrieval:
         """Search the index for `question`, and say what every step did.
 
@@ -1810,7 +1819,7 @@ class RetrievalPipeline:
         resolved = self.index._documents(documents) if documents is not None else None
         return self._retrieve(
             question, k, resolved, where=where, roles=roles, credentials=credentials,
-            on_event=on_event, cancel=cancel, force=force,
+            on_event=on_event, cancel=cancel, force=force, trace_id=trace_id,
         )
 
     def _retrieve(
@@ -1825,11 +1834,12 @@ class RetrievalPipeline:
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
         force: bool = False,
+        trace_id: str | None = None,
     ) -> Retrieval:
         graph, nodes = self.graph(question, k, documents, where, roles)
         result = self.index.execute(
             graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=nodes,
-            caller_roles=_caller_roles(self.config, roles),
+            caller_roles=_caller_roles(self.config, roles), trace_id=trace_id,
         )
         return self._retrieval(graph, result)
 
@@ -1956,6 +1966,7 @@ class QueryPipeline:
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
         force: bool = False,
+        trace_id: str | None = None,
     ) -> Answer:
         """Retrieve for `question`, then run the answer step on what was found.
 
@@ -1970,7 +1981,7 @@ class QueryPipeline:
         graph, nodes = self.graph(question, k, resolved, where, roles)
         result = self.index.execute(
             graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=nodes,
-            caller_roles=_caller_roles(self.config, roles),
+            caller_roles=_caller_roles(self.config, roles), trace_id=trace_id,
         )
         answer = next(node for node in graph.nodes if node.id == "answer")
         return Answer(

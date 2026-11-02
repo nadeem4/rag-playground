@@ -12,11 +12,13 @@ import mimetypes
 import tempfile
 import time
 import types
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from pydantic import ValidationError
 
+from pandion.events import Emit, event
 from pandion.formats import check_readable
 from pandion.payloads import ChunkSet, ParsedDoc, Query
 from pandion.plugins import discover
@@ -25,7 +27,54 @@ from pandion.registry import UnknownTransformError, registry
 from pandion.results import StageResult
 
 
-def parse(source: str | Path, *, use: str, **config: Any) -> StageResult:
+@contextmanager
+def _emitting(
+    on_event: Emit | None,
+    trace_id: str | None,
+    stage: Stage,
+    transform: str,
+) -> Iterator[tuple[Emit, dict[str, Any]]]:
+    """Time one step and, given `on_event`, emit what the executor would:
+    `node_started`, then `node_finished`, or `node_failed` and the error re-raised.
+
+    Yields the emitter a step's `RunContext` should use (it adds `trace_id`) and
+    a dict the step fills with its `usage` before it ends."""
+    sink = on_event or (lambda e: None)
+
+    def emit(e: dict[str, Any]) -> None:
+        sink({**e, "trace_id": trace_id} if trace_id is not None else e)
+
+    seen: dict[str, Any] = {"usage": None}
+    node = {"node_id": str(stage), "stage": str(stage)}
+    started = time.perf_counter()
+    if on_event:
+        emit(event("node_started", transform=transform, **node))
+    try:
+        yield emit, seen
+    except Exception as exc:
+        if on_event:
+            emit(event("node_failed", error=str(exc), usage=seen["usage"], **node))
+        raise
+    if on_event:
+        emit(
+            event(
+                "node_finished",
+                cache_hit=False,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                usage=seen["usage"],
+                **node,
+            )
+        )
+
+
+def parse(
+    source: str | Path,
+    *,
+    use: str,
+    on_event: Emit | None = None,
+    trace_id: str | None = None,
+    **config: Any,
+) -> StageResult:
     """Parse one file with the parser named `use` and its settings.
 
     `config` holds the parser's settings by name, as in its config model, for
@@ -35,17 +84,19 @@ def parse(source: str | Path, *, use: str, **config: Any) -> StageResult:
     cls, settings = _strategy(Stage.PARSE, use, config, where="The parser")
     path = Path(source)
     check_readable(use, path.name)
-    raw = {
-        "sha": hashlib.sha256(path.read_bytes()).hexdigest(),
-        "filename": path.name,
-        "path": str(path),
-        "mime": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
-    }
-    with tempfile.TemporaryDirectory(prefix="pandion-") as scratch:
-        ctx = RunContext(output_dir=Path(scratch), emit=lambda e: None, tmp=Path(scratch))
-        started = time.perf_counter()
-        payload = cls().apply({"file": raw}, settings, ctx)
-        duration_ms = (time.perf_counter() - started) * 1000
+    with _emitting(on_event, trace_id, Stage.PARSE, use) as (emit, seen):
+        raw = {
+            "sha": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "filename": path.name,
+            "path": str(path),
+            "mime": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+        }
+        with tempfile.TemporaryDirectory(prefix="pandion-") as scratch:
+            ctx = RunContext(output_dir=Path(scratch), emit=emit, tmp=Path(scratch))
+            started = time.perf_counter()
+            payload = cls().apply({"file": raw}, settings, ctx)
+            duration_ms = (time.perf_counter() - started) * 1000
+        seen["usage"] = ctx.extras.get("meta", {}).get("usage")
     return StageResult(
         stage=str(Stage.PARSE),
         transform=use,
@@ -56,7 +107,13 @@ def parse(source: str | Path, *, use: str, **config: Any) -> StageResult:
     )
 
 
-def clean(doc: ParsedDoc | StageResult, *, steps: list[dict[str, Any]]) -> StageResult:
+def clean(
+    doc: ParsedDoc | StageResult,
+    *,
+    steps: list[dict[str, Any]],
+    on_event: Emit | None = None,
+    trace_id: str | None = None,
+) -> StageResult:
     """Run cleaners on one parsed document, one after another, in the order given.
 
     Each step names its cleaner with `use` and holds its settings by name, for
@@ -71,18 +128,21 @@ def clean(doc: ParsedDoc | StageResult, *, steps: list[dict[str, Any]]) -> Stage
     notes: list[str] = []
     usage = None
     started = time.perf_counter()
-    with tempfile.TemporaryDirectory(prefix="pandion-") as scratch:
-        for cls, settings in planned:
-            ctx = RunContext(output_dir=Path(scratch), emit=lambda e: None, tmp=Path(scratch))
-            out = cls().apply({"doc": current}, settings, ctx)
-            current = out if isinstance(out, ParsedDoc) else ParsedDoc.model_validate(out)
-            note = ctx.extras.get("meta", {}).get("note")
-            if note:
-                notes.append(f"{cls.name}: {note}")
-            usage = ctx.extras.get("meta", {}).get("usage") or usage
+    names = ", ".join(cls.name for cls, _ in planned)
+    with _emitting(on_event, trace_id, Stage.CLEAN, names) as (emit, seen):
+        with tempfile.TemporaryDirectory(prefix="pandion-") as scratch:
+            for cls, settings in planned:
+                ctx = RunContext(output_dir=Path(scratch), emit=emit, tmp=Path(scratch))
+                out = cls().apply({"doc": current}, settings, ctx)
+                current = out if isinstance(out, ParsedDoc) else ParsedDoc.model_validate(out)
+                note = ctx.extras.get("meta", {}).get("note")
+                if note:
+                    notes.append(f"{cls.name}: {note}")
+                usage = ctx.extras.get("meta", {}).get("usage") or usage
+        seen["usage"] = usage
     return StageResult(
         stage=str(Stage.CLEAN),
-        transform=", ".join(cls.name for cls, _ in planned),
+        transform=names,
         output=current,
         duration_ms=(time.perf_counter() - started) * 1000,
         note="\n".join(notes) or None,
@@ -90,7 +150,14 @@ def clean(doc: ParsedDoc | StageResult, *, steps: list[dict[str, Any]]) -> Stage
     )
 
 
-def chunk(doc: ParsedDoc | StageResult, *, use: str, **config: Any) -> StageResult:
+def chunk(
+    doc: ParsedDoc | StageResult,
+    *,
+    use: str,
+    on_event: Emit | None = None,
+    trace_id: str | None = None,
+    **config: Any,
+) -> StageResult:
     """Cut one parsed document into pieces with the chunker named `use`.
 
     `config` holds the chunker's settings by name, as in its config model, for
@@ -101,9 +168,11 @@ def chunk(doc: ParsedDoc | StageResult, *, use: str, **config: Any) -> StageResu
     cls, settings = _strategy(Stage.CHUNK, use, config, where="The chunker")
     current = doc.output if isinstance(doc, StageResult) else doc
     started = time.perf_counter()
-    with tempfile.TemporaryDirectory(prefix="pandion-") as scratch:
-        ctx = RunContext(output_dir=Path(scratch), emit=lambda e: None, tmp=Path(scratch))
-        out = cls().apply({"doc": current}, settings, ctx)
+    with _emitting(on_event, trace_id, Stage.CHUNK, use) as (emit, seen):
+        with tempfile.TemporaryDirectory(prefix="pandion-") as scratch:
+            ctx = RunContext(output_dir=Path(scratch), emit=emit, tmp=Path(scratch))
+            out = cls().apply({"doc": current}, settings, ctx)
+        seen["usage"] = ctx.extras.get("meta", {}).get("usage")
     return StageResult(
         stage=str(Stage.CHUNK),
         transform=use,
@@ -120,6 +189,8 @@ def rewrite(
     use: str,
     doc: ParsedDoc | StageResult | None = None,
     credentials: dict[str, str] | None = None,
+    on_event: Emit | None = None,
+    trace_id: str | None = None,
     **config: Any,
 ) -> StageResult:
     """Turn one question into the query retrieval searches with.
@@ -139,12 +210,14 @@ def rewrite(
     if isinstance(doc, StageResult):
         doc = doc.output
     inputs = {} if doc is None else {"doc": doc}
-    with tempfile.TemporaryDirectory(prefix="pandion-") as scratch:
-        ctx = RunContext(output_dir=Path(scratch), emit=lambda e: None, tmp=Path(scratch))
-        if credentials:
-            ctx.extras["credentials"] = dict(credentials)
-        started = time.perf_counter()
-        out = cls().apply(inputs, settings, ctx)
+    with _emitting(on_event, trace_id, Stage.QUERY, use) as (emit, seen):
+        with tempfile.TemporaryDirectory(prefix="pandion-") as scratch:
+            ctx = RunContext(output_dir=Path(scratch), emit=emit, tmp=Path(scratch))
+            if credentials:
+                ctx.extras["credentials"] = dict(credentials)
+            started = time.perf_counter()
+            out = cls().apply(inputs, settings, ctx)
+        seen["usage"] = ctx.extras.get("meta", {}).get("usage")
     return StageResult(
         stage=str(Stage.QUERY),
         transform=use,

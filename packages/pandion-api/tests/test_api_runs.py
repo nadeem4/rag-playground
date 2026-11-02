@@ -337,3 +337,10 @@ def test_by_default_an_owner_may_have_any_number_of_runs(tmp_path, monkeypatch):
         for run_id in ids:
             with c.stream("GET", f"/runs/{run_id}/events", headers={"X-Who": "ann"}) as s:
                 list(s.iter_lines())
+
+
+def test_run_events_name_their_stage(client):
+    sha = upload(client)["sha"]
+    _, events = index(client, sha)
+    started = [e for e in events if e["event"] == "node_started"]
+    assert started and {e["step"]: e["stage"] for e in started}["parse"] == "parse"

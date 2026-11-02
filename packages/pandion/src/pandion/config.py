@@ -92,7 +92,7 @@ from pandion.registry import UnknownTransformError, registry
 from pandion.routing import CHECKS
 from pandion.stages import _problems, _settings, _strategy
 
-TOP_KEYS = ("version", "plugins", "path", "models", "categories", "route", "index", "retrieve", "answer", "access")
+TOP_KEYS = ("version", "plugins", "path", "models", "categories", "route", "index", "retrieve", "answer", "access", "source")
 CATEGORY_KEYS = ("name", "template", "parse", "clean", "chunk")
 ROUTE_KEYS = ("when", "category")
 RETRIEVE_KEYS = ("rewrite", "search", "rerank")
@@ -235,6 +235,8 @@ class PipelineConfig:
     plugins: list[str] = field(default_factory=list)
     #: Who may read which document. None is access off: no search is filtered by roles.
     access: AccessConfig | None = None
+    #: The source `pandion sync` reads, as (source name, its settings). Not part of the recipe.
+    source: tuple[str, dict[str, Any]] | None = None
 
 
 def load(file: str | Path) -> PipelineConfig:
@@ -282,6 +284,7 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
         answer=_answer(data["answer"]) if "answer" in data else None,
         plugins=plugins,
         access=_access(data["access"]) if "access" in data else None,
+        source=_sync_source(data["source"]) if "source" in data else None,
     )
     if config.access is not None and config.index.source[0] != "upload":
         raise ConfigError(
@@ -377,6 +380,7 @@ def build(
     categories: dict[str, Any] | None = None,
     route: list[Any] | None = None,
     access: dict[str, Any] | None = None,
+    source: dict[str, Any] | None = None,
 ) -> PipelineConfig:
     """Check a pipeline written in code; relative paths are read from the
     current folder.
@@ -403,6 +407,8 @@ def build(
         data["answer"] = _block(answer)
     if access is not None:
         data["access"] = access
+    if source is not None:
+        data["source"] = source
     return from_dict(data, base=Path("."))
 
 
@@ -446,6 +452,8 @@ def to_dict(config: PipelineConfig) -> dict[str, Any]:
     if config.plugins:
         data["plugins"] = list(config.plugins)
     data["path"] = config.path.as_posix()
+    if config.source is not None:
+        data["source"] = _out(config.source)
     models = config.models.model_dump(mode="json", exclude_defaults=True)
     if models:
         data["models"] = models
@@ -933,6 +941,24 @@ def _roles(value: Any, where: str) -> list[str]:
     if not isinstance(value, list) or not all(isinstance(r, str) and r.strip() for r in value):
         raise ConfigError(f"{where} must be a list of role names, for example [staff].", step=place(where))
     return list(value)
+
+
+def _sync_source(data: Any) -> tuple[str, dict[str, Any]]:
+    """The `source:` block: `use` names a registered source, the other keys are
+    its settings. It is built once here so a bad name or setting fails now."""
+    from pandion.document_sources import get_source
+
+    if not isinstance(data, dict):
+        raise ConfigError("source must be a mapping with a use key, such as use: files.", step="source")
+    if not isinstance(data.get("use"), str) or not data["use"]:
+        raise ConfigError("source needs a use key naming the source, such as use: files.", step="source")
+    use = data["use"]
+    settings = {key: value for key, value in data.items() if key != "use"}
+    try:
+        get_source(use, **settings)
+    except (ValueError, TypeError) as exc:
+        raise ConfigError(f"source: {exc}", step="source", use=use) from None
+    return use, settings
 
 
 def _access(data: Any) -> AccessConfig:

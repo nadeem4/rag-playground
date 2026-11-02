@@ -109,7 +109,8 @@ def test_without_an_access_block_nothing_changes(tmp_path, docs):
 # --- searches filter by roles and fail closed -------------------------------
 
 from pandion.access import ALL_ROLES, AccessDenied
-from pandion.filters import where_sql
+from pandion.document_sources import FilesSource, SourceEntry
+from pandion.filters import no_pages_sql, where_sql
 
 QUESTION = "salaries office opens month morning"
 
@@ -178,3 +179,67 @@ def test_two_users_with_different_roles_get_different_cached_answers(tmp_path, s
 def test_where_sql_adds_the_roles_condition_and_quotes_it():
     assert where_sql({"roles": ["o'k", "hr"]}, {}) == "(array_has_any(roles, ['o''k', 'hr']))"
     assert where_sql({"roles": []}, {}) == "(1 = 0)"
+
+
+# --- review fixes -------------------------------------------------------------
+
+
+def test_a_roles_label_saved_before_access_was_added_still_counts(tmp_path, docs):
+    config = write(tmp_path)
+    Pipeline.from_file(config).index.sync(docs, metadata={"hr/pay.pdf": {"roles": "hr"}})
+    write(tmp_path, access="access:\n  default: [staff]\n")
+    p = Pipeline.from_file(config)
+    assert docs_found(p.retrieve(QUESTION, roles=["staff"]), tmp_path) == {"handbook.pdf"}
+
+
+class Labelled(FilesSource):
+    name = "labelled"
+    roles: dict[str, str] = {}
+
+    def list(self):
+        return [
+            SourceEntry(e.doc_id, e.version, {"roles": self.roles[e.doc_id]} if e.doc_id in self.roles else {})
+            for e in super().list()
+        ]
+
+
+def test_a_changed_roles_label_from_a_source_applies_on_the_next_sync(tmp_path, docs):
+    config = write(tmp_path, access=folder_access(roles="hr"))
+    source = Labelled(str(docs))
+    source.roles = {"hr/pay.pdf": "hr, legal"}
+    Pipeline.from_file(config).index.sync(source)
+    p = Pipeline.from_file(config)
+    assert docs_found(p.retrieve(QUESTION, roles=["legal"]), tmp_path) == {"hr/pay.pdf"}
+    source.roles = {"hr/pay.pdf": "hr"}
+    Pipeline.from_file(config).index.sync(source)
+    p = Pipeline.from_file(config)
+    assert docs_found(p.retrieve(QUESTION, roles=["legal"]), tmp_path) == set()
+    source.roles = {}
+    Pipeline.from_file(config).index.sync(source)
+    assert manifest(tmp_path)["hr/pay.pdf"]["roles_reason"] == "folder rule hr/**"
+
+
+def test_metadata_given_to_sync_replaces_the_roles_label_of_an_indexed_document(tmp_path, docs):
+    config = write(tmp_path, access=folder_access())
+    Pipeline.from_file(config).index.sync(docs, metadata={"handbook.pdf": {"roles": "ops"}})
+    Pipeline.from_file(config).index.sync(docs, metadata={"handbook.pdf": {"roles": "legal"}})
+    assert manifest(tmp_path)["handbook.pdf"]["roles"] == ["legal"]
+
+
+def test_the_no_page_count_does_not_include_rows_the_caller_cannot_read():
+    sql = no_pages_sql({"pages": [1, 2], "roles": ["hr"]})
+    assert "array_has_any(roles, ['hr'])" in sql
+    assert "1 = 0" in no_pages_sql({"pages": [1, 2], "roles": []})
+
+
+@pytest.mark.parametrize("bad", ["hr", ["hr", ""], ["hr", 1], {"hr"}, b"hr"])
+def test_roles_that_are_not_a_list_of_names_are_refused(synced, bad):
+    with pytest.raises(AccessDenied, match="list of role names"):
+        synced().retrieve(QUESTION, roles=bad)
+
+
+def test_roles_are_sorted_and_deduplicated_in_the_search(tmp_path, synced):
+    p = synced()
+    first = p.retrieve(QUESTION, roles=["staff", "hr", "hr"])
+    second = p.retrieve(QUESTION, roles=("hr", "staff"))
+    assert first.stages["search"].artifact_id == second.stages["search"].artifact_id

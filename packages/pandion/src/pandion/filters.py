@@ -155,6 +155,10 @@ def _whole(value: Any) -> int:
     return value
 
 
+def _roles_sql(roles: Any) -> str:
+    return f"array_has_any(roles, [{', '.join(_quote(r) for r in roles)}])" if roles else "1 = 0"
+
+
 def where_sql(filters: Mapping[str, Any] | None, descriptor: Mapping[str, Any]) -> str | None:
     """The SQL condition for `Query.filters` on a LanceDB index, or None.
 
@@ -196,8 +200,7 @@ def where_sql(filters: Mapping[str, Any] | None, descriptor: Mapping[str, Any]) 
     if "roles" in filters:
         # Set by the pipeline from the caller's roles, never by `where`. A piece
         # with none of them, or no roles at all, is not found.
-        roles = filters["roles"]
-        parts.append(f"array_has_any(roles, [{', '.join(_quote(r) for r in roles)}])" if roles else "1 = 0")
+        parts.append(_roles_sql(filters["roles"]))
     return " AND ".join(f"({p})" for p in parts)
 
 
@@ -211,6 +214,8 @@ def no_pages_sql(filters: Mapping[str, Any] | None) -> str | None:
         parts.append(f"doc_id IN ({', '.join(_quote(i) for i in filters['doc_ids'])})")
     if isinstance(filters.get("section"), str):
         parts.append(f"array_has(section, {_quote(filters['section'])})")
+    if "roles" in filters:
+        parts.append(_roles_sql(filters["roles"]))
     return " AND ".join(parts)
 
 

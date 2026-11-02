@@ -703,7 +703,8 @@ class IndexPipeline:
         recorded = Manifest.load(self.config.path / MANIFEST).documents
         if all("roles" in recorded.get(d, {}) for d in documents):
             return {d: Resolved(recorded[d]["roles"], recorded[d].get("roles_reason", "")) for d in documents}
-        return self._access(documents)
+        saved = {d: e["metadata"] for d, e in recorded.items() if e.get("metadata")}
+        return self._access(documents, saved)
 
     def _source_records(self, documents: dict[str, Any]) -> dict[str, dict[str, Any]]:
         """What a custom source gives for each document: its source step alone
@@ -894,8 +895,11 @@ class IndexPipeline:
         versions: dict[str, str] | None = None
         unread: dict[str, str] = {}
         entry_labels: dict[str, dict[str, str]] = {}
+        #: The roles label each listed document has now (None: it has none), taken on
+        #: every sync, unlike the other labels, which a document keeps from when it was added.
+        role_labels: dict[str, str | None] = {}
         if isinstance(paths, Source):
-            documents, versions, entry_labels, unread = self._from_source(paths, before)
+            documents, versions, entry_labels, unread = self._from_source(paths, before, role_labels)
         else:
             documents = self._documents(paths)
         # A document in a category the pipeline no longer has goes back through the route.
@@ -903,12 +907,16 @@ class IndexPipeline:
         known.update({d: Sorting(c, "Chosen when added") for d, c in (categories or {}).items()})
         new = {d: m for d, m in (metadata or {}).items() if d not in before.documents}
         new = {**{d: m for d, m in entry_labels.items() if d not in new}, **new}
+        for doc_id, given in (metadata or {}).items():
+            if doc_id in documents and "roles" in given:
+                role_labels[doc_id] = given["roles"]
         return self._commit(
-            documents, before, known, new, versions=versions, credentials=credentials, failed=unread
+            documents, before, known, new, versions=versions, credentials=credentials, failed=unread,
+            role_labels=role_labels,
         )
 
     def _from_source(
-        self, source: Source, before: Manifest
+        self, source: Source, before: Manifest, role_labels: dict[str, str | None] | None = None
     ) -> tuple[dict[str, SourceFile], dict[str, str], dict[str, dict[str, str]], dict[str, str]]:
         """The documents of `source` by id, their versions, the labels of
         the ids new to the manifest, and the entries that could not be read
@@ -939,6 +947,8 @@ class IndexPipeline:
                 file = self.sources.add_bytes(data, PurePosixPath(entry.doc_id).name)
             documents[entry.doc_id] = file
             versions[entry.doc_id] = entry.version
+            if role_labels is not None:
+                role_labels[entry.doc_id] = entry.metadata.get("roles")
             if old is None and entry.metadata:
                 labels[entry.doc_id] = dict(entry.metadata)
         return documents, versions, labels, unread
@@ -980,6 +990,7 @@ class IndexPipeline:
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
         failed: dict[str, str] | None = None,
+        role_labels: dict[str, str | None] | None = None,
     ) -> SyncReport:
         """Index `documents` (every document the index should hold), then, if
         every step worked, write the manifest and delete the previous index.
@@ -989,6 +1000,9 @@ class IndexPipeline:
             **{d: e["metadata"] for d, e in before.documents.items() if e.get("metadata")},
             **(labels or {}),
         }
+        for doc_id, given in (role_labels or {}).items():
+            label = {k: v for k, v in labels.get(doc_id, {}).items() if k != "roles"}
+            labels[doc_id] = {**label, "roles": given} if given is not None else label
         failed = {**(failed or {}), **(self._unreadable(documents) if self._uploads() else {})}
         documents = {d: f for d, f in documents.items() if d not in failed}
         if not documents:
@@ -1581,7 +1595,11 @@ class RetrievalPipeline:
                     "Pass roles=[...]."
                 )
             if user_roles is not ALL_ROLES:
-                filters = {**(filters or {}), "roles": list(user_roles)}
+                if not isinstance(user_roles, (list, tuple)) or not all(
+                    isinstance(r, str) and r for r in user_roles
+                ):
+                    raise AccessDenied("roles must be a list of role names, for example roles=['staff'].")
+                filters = {**(filters or {}), "roles": sorted(set(user_roles))}
         if filters:
             settings["filters"] = filters
         nodes.append(Node("rewrite", Stage.QUERY, use, settings))

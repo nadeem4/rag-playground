@@ -283,6 +283,12 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
         plugins=plugins,
         access=_access(data["access"]) if "access" in data else None,
     )
+    if config.access is not None and config.index.source[0] != "upload":
+        raise ConfigError(
+            "access needs documents added as files: the index keeps each document's roles by "
+            "the file's hash. Use the upload source, or remove the access block.",
+            step=place("access"),
+        )
     if config.retrieve is not None:
         _check_compatible(config)
     return config

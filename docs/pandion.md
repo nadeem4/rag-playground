@@ -2220,6 +2220,11 @@ Without an `access:` block, `roles` is ignored. Pandion does not read roles from
 app passes the roles of the signed-in user. This does not protect the files on disk, only what
 a search returns.
 
+While access is on, evaluation, `pandion retrieve` and `pandion eval` raise `AccessDenied`
+because they pass no roles. Admin runs for them come later. A `roles` label is read again on
+every sync, so a changed label from a source or from `sync(metadata=...)` applies at the next
+sync.
+
 ## Index stores
 
 An index store is the place where an index keeps its rows. Pandion defines one contract, `IndexStore` and `Collection`, and you can write a store for the database your team already runs. This contract is **Stable**, and so is `register_store`. The memory store that comes with Pandion is the reference. LanceDB is on the contract now, and Qdrant lands in the same batch.

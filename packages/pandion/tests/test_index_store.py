@@ -3,10 +3,12 @@
 import pytest
 from pydantic import BaseModel
 
+from pydantic import ValidationError
+
 from pandion import index_store
 from pandion.index_memory import MemorySettings, MemoryStore
 from pandion.index_store import (
-    IndexMeta,
+    IndexMeta, RESERVED_FIELDS, _same,
     NO_FILTER, AnyOf, And, Capabilities, Eq, In, IndexRow, StoreRefused,
     check_store, get_store, matches, register_store, store_names,
 )
@@ -151,3 +153,17 @@ def test_memory_store_l2_score_is_the_negative_distance():
     hits = col.search_dense([0.0, 0.0], 2, NO_FILTER)
     assert [h.row.id for h in hits] == ["near", "far"]
     assert hits[0].score == -1.0 and hits[1].score == -4.0
+
+
+def test_any_of_does_not_match_a_bool_against_a_number():
+    assert not matches(_row(metadata={"flag": True}), AnyOf("flag", ("1",)))
+    assert matches(_row(metadata={"tags": ["a", "b"]}), AnyOf("tags", ("b",)))
+    assert not _same(True, 1)
+    assert _same("1", "1")
+
+
+@pytest.mark.parametrize("key", sorted(RESERVED_FIELDS))
+def test_a_metadata_key_named_like_a_row_field_is_refused(key):
+    with pytest.raises(ValidationError) as err:
+        _row(metadata={key: "x"})
+    assert key in str(err.value)

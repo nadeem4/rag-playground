@@ -15,10 +15,13 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import ClassVar, Literal, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 MetaValue = str | int | float | bool | list[str]
 Metric = Literal["cosine", "dot", "l2"]
+
+
+RESERVED_FIELDS = frozenset({"id", "doc_id", "doc_version", "text", "vector", "roles", "chunk", "chunk_json"})
 
 
 class IndexRow(BaseModel):
@@ -30,6 +33,14 @@ class IndexRow(BaseModel):
     roles: list[str] = []
     metadata: dict[str, MetaValue] = {}
     chunk: str
+
+    @field_validator("metadata")
+    @classmethod
+    def _no_reserved_keys(cls, metadata):
+        for key in metadata:
+            if key in RESERVED_FIELDS:
+                raise ValueError(f"Metadata key '{key}' is a row field; rename it.")
+        return metadata
 
 
 class IndexMeta(BaseModel):
@@ -98,7 +109,7 @@ def matches(row: IndexRow, where: Filter) -> bool:
     if isinstance(where, In):
         return any(_same(value, v) for v in where.values)
     items = value if isinstance(value, list) else [value]
-    return any(v in where.values for v in items)
+    return any(_same(v, w) for v in items for w in where.values)
 
 
 class Capabilities(BaseModel):
@@ -166,6 +177,7 @@ def register_store(cls: type) -> type:
 
 
 def _load_builtin() -> None:
+    import pandion.index_lance  # noqa: F401  (registers the lancedb store; imports no heavy library)
     import pandion.index_memory  # noqa: F401  (registers the memory store)
 
 

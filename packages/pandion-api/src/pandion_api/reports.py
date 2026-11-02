@@ -30,6 +30,14 @@ def step(s: StageResult | None) -> dict[str, Any] | None:
     }
 
 
+def collection_of(s: StageResult | None) -> str | None:
+    """The index collection a run searched (`<recipe>-<artifact>`), or None for
+    a missing or failed index step."""
+    if s is None or s.status == "failed" or not isinstance(s.output, dict):
+        return None
+    return s.output.get("collection")
+
+
 def index_report(report: Any) -> dict[str, Any]:
     """An index run (what `p.index.run` returns): each document's steps, the
     category and reason for each document (a sibling of `documents`, because a
@@ -78,13 +86,16 @@ def answer(a: Answer) -> dict[str, Any]:
 
 def evaluation(report: Any) -> dict[str, Any]:
     """An evaluation (what `pandion.evaluate` returns): its `to_dict()` and its cost."""
-    return {**report.to_dict(), "cost": report.cost()}
+    index = next((q.retrieval.index for q in report.questions if q.retrieval is not None), None)
+    return {**report.to_dict(), "index_collection": collection_of(index), "cost": report.cost()}
 
 
 def comparisons(results: Any) -> dict[str, Any]:
     """A comparison (what `pandion.compare` returns): its `to_dict()`, each
     variant's cost, and the cost of every variant together; see `split`."""
     out = results.to_dict()
+    for item, c in zip(out["comparisons"], results):
+        item["index_collection"] = collection_of(c.index.index)
     return {**out, **split(list(results), out["comparisons"], results.varied_from)}
 
 

@@ -2394,6 +2394,10 @@ server onto a new collection: start it again from the new file. A server's first
 `index_status()` remembers its collection, and later checks keep to it, so an old server stays
 ready while a new one is deployed beside it.
 
+The name also pins a run. An evaluation or a comparison searches one collection, and its name
+cannot change under the run. `pandion-api` reports it as `index_collection` (on an evaluation,
+and on each comparison variant), so you can check which index a result came from.
+
 If the folder of the index is deleted, or its collection was cleaned up while the cache
 still holds the record, the next sync builds the index again from the cached embeddings.
 

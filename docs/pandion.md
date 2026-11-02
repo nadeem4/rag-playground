@@ -2332,7 +2332,10 @@ collection that is neither the new one nor the previous one is dropped once it w
 more than 7 days ago. The 7 days count from the replacement, not from when the collection was
 built, and only collections this manifest retired are dropped. A collection that another
 pipeline built in the same folder or the same Qdrant prefix is never touched, whatever its
-age. The stored index record of a dropped collection goes with it. Nothing reloads a running
+age. One limit: a collection is named after the recipe and the documents, so two copies of
+the same pipeline over the same documents (staging and production, say) share one collection
+if they share a folder or a prefix, and the first to move on drops it. Give each copy its own
+folder or prefix. The stored index record of a dropped collection goes with it. Nothing reloads a running
 server onto a new collection: start it again from the new file. A server's first ready
 `index_status()` remembers its collection, and later checks keep to it, so an old server stays
 ready while a new one is deployed beside it.

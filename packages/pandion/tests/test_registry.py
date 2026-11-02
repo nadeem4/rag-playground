@@ -215,6 +215,30 @@ def test_export_schema_preserves_config_defaults_and_descriptions(reg):
     assert props["size"]["description"] == "Target chunk size in tokens"
 
 
+def test_export_schema_leaves_out_internal_settings():
+    from pandion.plugins.query.text import TextQuery
+
+    from pandion.registry import Registry
+
+    r = Registry()
+    r.register(TextQuery)
+    schema = r.export_schema()["query"]["text"]["config_schema"]
+    assert "text" in schema["properties"]
+    assert "filters" not in schema["properties"]
+
+
+def test_export_schema_leaves_out_internal_settings_of_nested_models():
+    from pandion.plugins.index.qdrant_store import QdrantIndex
+    from pandion.registry import Registry
+
+    r = Registry()
+    r.register(QdrantIndex)
+    schema = r.export_schema()["index"]["qdrant"]["config_schema"]
+    inner = schema["$defs"]["QdrantSettings"]["properties"]
+    assert "prefix" in inner
+    assert "fts" not in inner
+
+
 class TitleEnricher(Transform[ChunkConfig]):
     summary = "A test transform."
     name = "titles"

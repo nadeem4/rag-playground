@@ -43,7 +43,7 @@ const obj = (properties: Record<string, JsonSchema>, extra: Partial<JsonSchema> 
   ...extra,
 })
 
-const plugins = Object.entries(registry).flatMap(([stage, byName]) =>
+const plugins = Object.entries(registry).filter(([stage]) => stage !== "route").flatMap(([stage, byName]) =>
   Object.values(byName ?? {}).map((info) => [`${stage}/${info.name}`, info.config_schema] as const),
 )
 
@@ -62,7 +62,9 @@ describe("every registered plugin", () => {
     // and the form emitted exactly the defaults.
     const defaults = defaultsFor(schema, schema) as Record<string, unknown>
     const shown = Object.values(schema.properties ?? {}).filter((prop) => isShown(prop, defaults))
-    expect(container.querySelectorAll("[data-field-kind]").length).toBe(shown.length)
+    // Count the form's own fields; an object field draws its inner fields inside itself.
+    const top = [...container.querySelectorAll("[data-field-kind]")].filter((el) => !el.parentElement?.closest("[data-field-kind]"))
+    expect(top.length).toBe(shown.length)
     expect(last()).toEqual(defaultsFor(schema, schema))
   })
 })

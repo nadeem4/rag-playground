@@ -127,8 +127,8 @@ def test_embed_and_store_settings_stay_in_their_own_step(tmp_path):
 
 
 def test_an_unknown_store_lists_the_stores(tmp_path):
-    text = GOOD.replace("use: lancedb", "use: qdrant")
-    with pytest.raises(ConfigError, match="qdrant.*lancedb"):
+    text = GOOD.replace("use: lancedb", "use: pinecone")
+    with pytest.raises(ConfigError, match="pinecone.*lancedb"):
         load(write(tmp_path, text))
 
 

@@ -334,6 +334,26 @@ def _check_compatible(config: PipelineConfig) -> None:
             step="retrieve.search",
             use=search,
         )
+    if "fts" in needed.get("backends", []):
+        _check_text_search(config, search)
+
+
+def _check_text_search(config: PipelineConfig, search: str) -> None:
+    """Refuse bm25 or hybrid with a store that has no text search, at load.
+    (Only a step that shares its name with a registered store can be asked.)"""
+    from pandion.index_store import StoreRefused, check_store, get_store, store_names
+
+    store = config.index.store_use
+    if store not in store_names():
+        return
+    settings = dict(config.index.store.get("settings") or {})
+    if "build_fts" in config.index.store:
+        settings["fts"] = config.index.store["build_fts"]
+    caps = get_store(store, settings).capabilities()
+    try:
+        check_store(store, caps, lexical=True)
+    except StoreRefused as exc:
+        raise ConfigError(str(exc), step="retrieve.search", use=search) from None
 
 
 def _capabilities(claims: dict[str, Any]) -> str:

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any, ClassVar, Mapping
 
+from pydantic import Field
+
 from pandion.artifacts import ArtifactType
 from pandion.ids import AddedSettings
 from pandion.payloads import Query
@@ -36,7 +38,7 @@ class TextQueryConfig(AddedSettings):
     #: gives them. Set by p.retrieve and p.ask from `where`, never in the
     #: file. Part of the step's id, so a different filter is never served
     #: another's results; left out of the id when empty, so ids stay as they were.
-    filters: dict | None = None
+    filters: dict | None = Field(default=None, json_schema_extra={"x-internal": True})
 
 
 @register

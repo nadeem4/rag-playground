@@ -230,9 +230,9 @@
   "fetch_k": 20,
   "total_candidates": 6,
   "timings_ms": {
-    "dense": 6.34419999551028,
-    "bm25": 6.369300012011081,
-    "fuse": 0.15709997387602925
+    "dense": 8.311600016895682,
+    "bm25": 7.3617999732960016,
+    "fuse": 0.15440001152455807
   },
   "expanded_query": null,
   "expansion_terms": []

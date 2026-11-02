@@ -615,9 +615,9 @@ def test_registered_under_the_retrieve_stage(transform):
 
 
 def test_each_retriever_declares_the_backends_it_needs():
-    assert DenseRetriever.requires == {"index": {"backends": ["dense"], "format": ["lancedb"]}}
-    assert Bm25Retriever.requires == {"index": {"backends": ["fts"], "format": ["lancedb"]}}
-    assert HybridRrfRetriever.requires == {"index": {"backends": ["dense", "fts"], "format": ["lancedb"]}}
+    assert DenseRetriever.requires == {"index": {"backends": ["dense"], "format": ["store"]}}
+    assert Bm25Retriever.requires == {"index": {"backends": ["fts"], "format": ["store"]}}
+    assert HybridRrfRetriever.requires == {"index": {"backends": ["dense", "fts"], "format": ["store"]}}
 
 
 def test_config_defaults_match_the_plan():

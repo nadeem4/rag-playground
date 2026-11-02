@@ -27,6 +27,7 @@ is missing tells you which one to install:
 | `pdfium` | pypdfium2 | the fast `pdfium` parser |
 | `docling` | Docling and its OCR engine | the `docling` parser, for layout, tables and scans |
 | `lancedb` | LanceDB and pyarrow | the index, and the `dense`, `bm25` and `hybrid_rrf` search |
+| `qdrant` | qdrant-client | the `qdrant` index: Qdrant in a folder or on a server |
 | `local` | sentence-transformers and torch | the local embedders, and the `mmr` and `cross_encoder` rerankers |
 | `anthropic` | the Anthropic SDK | `llm_rewrite`, `llm_rerank` and `chat` with Claude |
 | `openai` | the OpenAI SDK | the same steps with OpenAI, OpenRouter or a compatible server |

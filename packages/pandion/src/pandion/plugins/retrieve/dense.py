@@ -44,7 +44,7 @@ class DenseRetriever(Transform[DenseConfig]):
         "query": PortSpec(ArtifactType.QUERY, ambient=True),
     }
     output = ArtifactType.RETRIEVAL_RESULT
-    requires = {"index": {"backends": ["dense"], "format": ["lancedb"]}}
+    requires = {"index": {"backends": ["dense"], "format": ["store"]}}
     config_model = DenseConfig
     summary = (
         "Turns the question into a vector with the same model the index used, "

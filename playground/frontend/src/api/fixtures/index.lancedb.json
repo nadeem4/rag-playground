@@ -10,6 +10,8 @@
   "embedding_revision": "1",
   "vector_kind": "dense",
   "doc_count": 6,
+  "sections": 0,
+  "max_page": 3,
   "embeddings_computed": 6,
   "embeddings_cached": 0
 }

@@ -75,6 +75,10 @@ cd playground/frontend && npm run build && cd ../..
 uv run --with playwright==1.55.0 pytest -m smoke
 ```
 
+The Qdrant store tests run embedded, with no server. To run the conformance suite against a
+real Qdrant server too, set `QDRANT_URL` (for example
+`QDRANT_URL=http://localhost:6333 uv run pytest packages/pandion/tests/test_index_qdrant.py`).
+
 The tests run on every push and pull request to `main` (`.github/workflows/ci.yml`): the
 Python suite, then the web tests and a web build. The `models` and `smoke` tests run in
 their own workflow, **Release checks** (`.github/workflows/release-checks.yml`), on

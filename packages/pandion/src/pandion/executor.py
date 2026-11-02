@@ -27,10 +27,11 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Callable, TypedDict
 
-from pandion.artifacts import Artifact
+from pandion.artifacts import Artifact, ArtifactType
 from pandion.events import Emit, event
 from pandion.graph import Graph, Node
 from pandion.ids import compute_artifact_id
+from pandion.index_store import collection_present
 from pandion.ports import RunContext
 from pandion.registry import Registry
 from pandion.storage import Store
@@ -71,6 +72,19 @@ class RunResult:
     @property
     def ok(self) -> bool:
         return not any(n.status is NodeStatus.FAILED for n in self.nodes.values())
+
+
+def _rows_present(cls: Any, store: Store, aid: str, extras: dict[str, Any] | None) -> bool:
+    """False for a stored index whose collection is gone (cleaned up, or the
+    index folder deleted), so the step runs again instead of serving a binding
+    to nothing. Only a run that builds the index asks (`check_index_rows`); a
+    search reports a missing collection and pays no extra store call."""
+    if cls.output != ArtifactType.INDEX or not (extras or {}).get("check_index_rows"):
+        return True
+    try:
+        return collection_present(store.load(aid, cls.output), extras.get("index_location"))
+    except Exception:
+        return True  # a store error is the retriever's to report
 
 
 def run(
@@ -219,7 +233,7 @@ def run(
         emit(event("node_started", node_id=nid, transform=cls.name, artifact_id=aid))
         started = time.perf_counter()
 
-        if cls.cacheable and not force and store.has(aid):
+        if cls.cacheable and not force and store.has(aid) and _rows_present(cls, store, aid, context_extras):
             payloads[nid] = store.load(aid, cls.output)
             result.nodes[nid] = NodeResult(
                 nid,

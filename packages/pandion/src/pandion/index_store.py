@@ -50,6 +50,8 @@ class IndexMeta(BaseModel):
     metric: Metric
     recipe_hash: str
     format_version: int = 1
+    #: When the collection was made (UTC, ISO 8601); empty for one made before this field.
+    created_at: str = ""
 
 
 class Binding(BaseModel):
@@ -235,3 +237,15 @@ def open_binding(binding: dict, location: str | None = None) -> Collection:
             "Run index.sync to build it."
         )
     return collection
+
+
+def collection_present(payload: object, location: str | None = None) -> bool:
+    """Whether the collection an index payload names is still in its store.
+
+    A payload that is not a binding (a third-party index step with its own
+    format) counts as present: only a binding can say its rows are gone."""
+    try:
+        parsed = Binding.model_validate(payload)
+    except ValueError:
+        return True
+    return get_store(parsed.store, binding_settings(payload, location)).open(parsed.collection) is not None

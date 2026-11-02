@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from typing import Any, ClassVar, Literal, Mapping
 
 from pydantic import BaseModel, Field
@@ -389,6 +390,7 @@ def _build(
         IndexMeta(
             embed_model=embedder.name, embed_revision=embedder.revision,
             dims=dim, metric=metric, recipe_hash=recipe,
+            created_at=datetime.now(timezone.utc).isoformat(),
         ),
     )
     collection.write_all(rows)

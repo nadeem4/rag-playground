@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import re
 import threading
+from datetime import datetime, timezone
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
@@ -57,6 +58,11 @@ from pandion.docinfo import DocumentInfo, document_info
 from pandion.formats import UnreadableFormat, check_contents, check_readable, format_of
 from pandion.synclock import sync_lock
 from pandion.graph import Edge, Graph, Node
+from pandion.artifacts import ArtifactType
+from pandion.embeddings import get_embedder
+from pandion.errors import FormatTooNew
+from pandion.index_retention import drop_stale
+from pandion.index_store import Binding, binding_settings, get_store, open_binding
 from pandion.manifest import MANIFEST, Manifest, recipe_hash
 from pandion.payloads import ChunkSet, Hit, Output, ParsedDoc, Query, RetrievalResult
 from pandion.plugins import discover
@@ -544,6 +550,15 @@ class Pipeline:
         )
 
 
+@dataclass(frozen=True)
+class IndexStatus:
+    """Whether a pipeline's own collection is ready. `reason` is empty when it is."""
+
+    ready: bool
+    collection: str | None
+    reason: str
+
+
 class IndexPipeline:
     """Parse, clean, chunk, embed and store, for many documents into one index.
 
@@ -603,6 +618,8 @@ class IndexPipeline:
         self.sources = Sources(root / "sources")
         self.store = Store(root / "artifacts")
         self.embedding_cache = EmbeddingCache(root / "embeddings")
+        #: The index binding `index_status` first found ready.
+        self._served: dict[str, Any] | None = None
         #: The documents the last run or sync in this process indexed: stored
         #: files with the upload source, locations with any other.
         self.documents: dict[str, SourceFile | str] | None = None
@@ -1035,6 +1052,7 @@ class IndexPipeline:
         after = Manifest(
             index_recipe=recipe,
             index_artifact=report.index.artifact_id,
+            index_collection=(report.index.output or {}).get("collection"),
             documents={
                 doc_id: {
                     "content_hash": file.sha,
@@ -1075,10 +1093,89 @@ class IndexPipeline:
             failed=dict(sorted(failed.items())),
         )
         if sync.ok:
+            self._retire(before, after, report.index.output)
             after.save(self.config.path / MANIFEST)
-            if before.index_artifact and before.index_artifact != after.index_artifact:
-                self.store.delete(before.index_artifact)
         return sync
+
+    def _retire(self, before: Manifest, after: Manifest, binding: Any) -> None:
+        """Note the collection this sync replaced in `after.retired`, then drop
+        the retired ones past the grace period (keeping the new and the previous
+        one) and forget them. The index record of a dropped collection goes too.
+        Never fails a sync."""
+        now = datetime.now(timezone.utc)
+        retired = dict(before.retired)
+        old = before.index_collection
+        if old and old != after.index_collection:
+            retired[old] = now.isoformat()
+        retired.pop(after.index_collection, None)
+        try:
+            parsed = Binding.model_validate(binding)
+            store = get_store(parsed.store, binding_settings(binding, str(self.config.path / "index")))
+            dropped = drop_stale(
+                store, keep={k for k in (after.index_collection, old) if k}, retired=retired, now=now
+            )
+            for name in dropped:
+                retired.pop(name, None)
+                for found in self.store.root.glob(f"{name[17:19]}/{name[19:21]}/{name[17:]}*"):
+                    self.store.delete(found.name)
+        except Exception:
+            pass
+        after.retired = retired
+
+    def index_status(self) -> IndexStatus:
+        """Whether this pipeline's own collection is there to be searched.
+
+        Reads the manifest and the store; never writes, parses or embeds.
+        Ready needs a manifest that names a collection, the collection in its
+        store, the same recipe, the same embedding model revision and a format
+        this version reads. Otherwise `reason` says in one sentence what to do.
+
+        The first ready check remembers the collection it found. Later checks
+        open that same collection again, not whatever the manifest names after
+        a newer sync, so an old server stays ready beside a new one."""
+        if self._served is None:
+            manifest = Manifest.load(self.config.path / MANIFEST)
+            if not manifest.index_collection or not manifest.index_artifact:
+                return IndexStatus(False, None, "Nothing is synced yet. Run pandion sync with this file.")
+            try:
+                binding = self.store.load(manifest.index_artifact, ArtifactType.INDEX)
+            except Exception:
+                return IndexStatus(
+                    False, manifest.index_collection, "The index record is missing. Run pandion sync with this file."
+                )
+        else:
+            binding = self._served
+        name = binding.get("collection")
+        try:
+            collection = open_binding(binding, str(self.config.path / "index"))
+            meta = collection.meta()
+        except FormatTooNew as exc:
+            return IndexStatus(False, name, str(exc))
+        except ValueError:
+            return IndexStatus(
+                False, name, f"The collection {name} is not in the store. Run pandion sync with this file."
+            )
+        mine = recipe_hash(self.config.index)
+        if meta.recipe_hash != mine:
+            return IndexStatus(
+                False,
+                name,
+                f"This server's recipe is {mine[:4]}, but the collection was built from {meta.recipe_hash[:4]}. "
+                "Run pandion sync with this file, or deploy the image that matches it.",
+            )
+        try:
+            revision = get_embedder(meta.embed_model).revision
+        except Exception as exc:
+            return IndexStatus(False, name, f"The embedding model {meta.embed_model} cannot be built: {exc}")
+        if revision != meta.embed_revision:
+            return IndexStatus(
+                False,
+                name,
+                f"The embedding model {meta.embed_model} is revision {revision} here, but the collection was "
+                f"built with {meta.embed_revision}. Run pandion sync to rebuild it.",
+            )
+        self._served = binding  # later checks keep to this collection, whatever a later sync writes
+        return IndexStatus(True, name, "")
 
     def add(
         self,
@@ -1319,6 +1416,7 @@ class IndexPipeline:
             cancel=cancel,
             force=force,
             roles=roles,
+            check_index_rows=True,
         )
         reports = {
             doc_id: DocumentReport(
@@ -1356,6 +1454,7 @@ class IndexPipeline:
         force: bool = False,
         roles: dict[str, tuple[str | None, str]] | None = None,
         caller_roles: list[str] | None = None,
+        check_index_rows: bool = False,
     ) -> RunResult:
         """Run `graph` through the store, with this pipeline's files and models.
 
@@ -1373,6 +1472,8 @@ class IndexPipeline:
         discover()
         extras: dict[str, Any] = {
             "index_location": str(self.config.path / "index"),
+            # Only a run that builds the index checks that a stored index still has its rows.
+            "check_index_rows": check_index_rows,
             "recipe_hash": recipe_hash(self.config.index),
             "sources": self.sources,
             "embedding_cache": self.embedding_cache,

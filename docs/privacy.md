@@ -32,6 +32,13 @@ with a run, and a question set while it is checked.
 |---|---|---|
 | Memories (only when you turn memory on in code) | In the conversation store you chose | Until the user deletes one. When memory is on, the user's question is sent to the summary model to extract facts, and the memories are sent to the rewrite model. The playground does not turn memory on. |
 
+## In a Pandion server (serve mode)
+
+| What | Where | How long |
+|---|---|---|
+| Logs | Standard error, one JSON line per request, step and failure | As long as your log system keeps them. They hold the trace id and counts, and no question or answer text unless you set `PANDION_LOG_CONTENT=true`. |
+| OpenTelemetry spans | Sent to the endpoint you set in `OTEL_EXPORTER_OTLP_ENDPOINT`, and nowhere else | Off unless you set that variable. A span holds step names, timings, the model name and token counts, and the question only when `PANDION_LOG_CONTENT=true`. |
+
 ## On the demo server
 
 | What | Where | How long |

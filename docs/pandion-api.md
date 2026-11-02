@@ -378,7 +378,7 @@ stop it: the set is already paid for, so the run finishes with it.
 
 `create_app` has two modes. The default, `mode="lab"`, is everything above: a client sends a
 pipeline with each request. `mode="serve"` is for a site's own users. It loads one pipeline
-file once, at startup, and answers one question route, `POST /chat`. No lab route is
+file once, at startup, and answers `POST /chat`, a one-turn `POST /ask`, and a user's own conversations and memories. No lab route is
 mounted, so `/documents`, `/runs`, `/strategies` and the rest are a 404.
 
 ```python
@@ -456,6 +456,27 @@ If the client disconnects, the turn is cancelled and no half turn is stored. Aft
 the server folds old turns into the running summary and, when `ServeSettings.chat.memory`
 is on, keeps facts the user shared. The user never waits for either. Cancel on disconnect applies to streams only: a JSON request runs to its end. A stream cannot be
 resumed on another server copy: there is no events route in serve.
+
+### POST /ask, conversations and memories
+
+`POST /ask` takes `{"question": "..."}` (1 to 8,000 characters) and answers once, with no
+conversation. It gives the same JSON reply as `/chat`, with `conversation_id` set to `null`,
+and stores nothing: no history, no rewrite, no summary, no memory.
+
+Every route below asks the Policy `limit` first, then `user_id`. Anything that is not the
+caller's own is a 404, the same as something that does not exist, so a guessed id tells
+nothing.
+
+| Route | What it does |
+|---|---|
+| `GET /conversations` | The user's conversations, newest first: `id`, `title`, `turns`, `updated_at`. |
+| `GET /conversations/{id}` | The turns in order. Each has `question`, `answer`, `source_ids`, `trace_id` and `created_at`. The rewrite and the running summary are never shown. |
+| `DELETE /conversations/{id}` | Deletes it and answers `204`. A second delete is a 404. |
+| `GET /memories` | The user's memories, oldest first. |
+| `DELETE /memories/{memory_id}` | Deletes one memory by id and answers `204`. There is no delete-all route. |
+
+The memory routes are a 404 while `ServeSettings.chat.memory` is off, because there is
+nothing to show.
 
 ### GET /health and GET /ready
 

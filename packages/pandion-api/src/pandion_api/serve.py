@@ -24,14 +24,14 @@ from pandion.extend import ALL_ROLES
 from pandion.extend import ChatSettings
 from pandion.extend import ConversationStore, get_conversation_store
 from pandion_api.policy import Policy
-from pandion_api.routes import chat, serve_health
+from pandion_api.routes import chat, conversations, serve_ask, serve_health
 from pandion_api.runs import RunManager
 from pandion_api.settings import ApiSettings
 
 logger = logging.getLogger(__name__)
 
 #: Every router serve mounts. Lab's `ROUTERS` is a different tuple.
-SERVE_ROUTERS = (serve_health.router, chat.router)
+SERVE_ROUTERS = (serve_health.router, chat.router, serve_ask.router, conversations.router)
 
 
 @dataclass(frozen=True)

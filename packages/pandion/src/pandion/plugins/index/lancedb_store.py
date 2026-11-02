@@ -33,7 +33,7 @@ import hashlib
 import json
 import shutil
 from pathlib import Path
-from typing import Any, Callable, Literal, Mapping
+from typing import Any, Callable, ClassVar, Literal, Mapping
 
 from pydantic import BaseModel, Field
 
@@ -41,6 +41,7 @@ from pandion.artifacts import ArtifactType
 from pandion.embedding_cache import embed_cached
 from pandion.embeddings import EmbedderName, embedder_names, get_embedder
 from pandion.errors import require
+from pandion.ids import AddedSettings
 from pandion.index_lance import LanceSettings, LanceStore
 from pandion.index_store import IndexMeta, IndexRow
 from pandion.payloads import ChunkSet
@@ -73,7 +74,10 @@ def _embedder_labels(schema: dict[str, Any]) -> None:
     schema["x-labels"] = {name: _EMBEDDER_LABELS.get(name, name) for name in sorted(embedder_names())}
 
 
-class LanceDbIndexConfig(BaseModel):
+class LanceDbIndexConfig(AddedSettings):
+    #: Left out of the artifact id while empty, so an index with no `access:` block keeps its id.
+    added: ClassVar[tuple[str, ...]] = ("doc_roles",)
+
     #: The first real run downloads the model (Qwen3 is about 1.2 GB).
     embedder: EmbedderName = Field(
         default="qwen3-embedding-0.6b",
@@ -117,7 +121,7 @@ class LanceDbIndexConfig(BaseModel):
 
     #: Roles by file hash, filled in by the pipeline when it has an `access:`
     #: block. Not a setting to edit, so a form leaves it out.
-    doc_roles: dict[str, list[str]] = Field(default_factory=dict, json_schema_extra={"readOnly": True})
+    doc_roles: dict[str, list[str]] | None = Field(default=None, json_schema_extra={"readOnly": True})
 
     #: On by default so `bm25` and `hybrid_rrf` cannot be mis-wired to an index
     #: that has no full-text side.
@@ -303,7 +307,7 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
                 # retrieval always agree about what a row says.
                 text=chunk.text_to_embed,
                 vector=vector,
-                roles=config.doc_roles.get(chunk.doc_id, []),
+                roles=(config.doc_roles or {}).get(chunk.doc_id, []),
                 # What search filters read (pandion.filters). A piece with no
                 # pages has no page keys, so it never matches a pages filter.
                 metadata={

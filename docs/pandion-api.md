@@ -439,14 +439,14 @@ Serve starts safe. Each default below is on until you change it.
 | Policy required | Startup fails without a Policy that overrides `user_id`, `roles` and `limit`. | `Policy.anonymous()`, on purpose. |
 | Generic errors | A caller sees only "Something went wrong. Quote this trace id when you ask for help: ..." The reason is logged at ERROR with the same trace id, under the `pandion_api` logger. A refusal your Policy raises, and a 422 for bad input, keep their own sentence. | Nothing. |
 | Keys from the environment | Model keys come only from the server's environment variables. A key header is ignored, and `Policy.key` and `Policy.credentials` are not called. | Nothing. |
-| Public endpoints only | A custom model endpoint in the pipeline file must be a public https address, or startup fails. A URL document is held to the same rule. | Nothing. |
+| Public endpoints only | A custom model endpoint in the pipeline file must be a public https address, or startup fails. The check resolves DNS, so a host that does not resolve also stops startup. A URL document is held to the same rule. | Nothing. |
 | 20 turns a minute | A user past `ServeSettings.turns_per_minute` gets a 429. | A bigger number. |
 | 2 active turns | A user with `ServeSettings.active_turns_per_user` questions being answered gets a 429. | A bigger number. |
 | 64 KB request body | A larger body is a 413 before it is parsed. | `ServeSettings.max_body_bytes`. |
 | 120 second turn | A turn past `ServeSettings.turn_deadline_s` is cancelled and ends with the generic error. | `ServeSettings.turn_deadline_s`. |
 | No docs, no CORS | `/docs`, `/redoc` and `/openapi.json` are a 404. No CORS header is sent. | `ServeSettings.cors_origins`, a list of sites. A `"*"` entry stops startup. |
 
-The limits count in memory, per user id, for one server copy. With several copies, put a shared
+The limits count in memory, per user id, for one server copy. Under `Policy.anonymous()` every caller shares the id "anonymous", so the default limits (20 turns a minute, 2 active) are server-wide. With several copies, put a shared
 limit in `Policy.limit` (a gateway, or Redis). `/health` returns only `{"status": "ok"}` and
 `/ready` never says why it is not ready.
 

@@ -99,3 +99,14 @@ def test_a_turn_past_its_deadline_is_cancelled(tmp_path):
     with client(tmp_path, Slow(), turn_deadline_s=0.2) as c:
         r = say(c)
     assert r.json()["ok"] is False and "Something went wrong" in r.json()["error"]
+
+
+def test_idle_users_are_forgotten():
+    clock = Clock()
+    limiter = TurnLimiter(5, 2, clock=clock)
+    limiter.acquire("ann")
+    limiter.release("ann")
+    clock.now = 61
+    limiter.acquire("bob")
+    limiter.release("bob")
+    assert "ann" not in limiter._times and "ann" not in limiter._active

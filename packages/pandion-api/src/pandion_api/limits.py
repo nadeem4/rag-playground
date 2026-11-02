@@ -32,9 +32,14 @@ class TurnLimiter:
         """Count a turn, or raise a 429 and count nothing."""
         with self._lock:
             now = self._clock()
+            for uid in list(self._times):  # forget users with nothing in the window and nothing active
+                old = self._times[uid]
+                while old and now - old[0] >= 60:
+                    old.popleft()
+                if not old and not self._active.get(uid):
+                    del self._times[uid]
+                    self._active.pop(uid, None)
             times = self._times[user_id]
-            while times and now - times[0] >= 60:
-                times.popleft()
             if len(times) >= self._per_minute:
                 raise HTTPException(status_code=429, detail=TOO_FAST)
             if self._active[user_id] >= self._active_max:
@@ -44,7 +49,11 @@ class TurnLimiter:
 
     def release(self, user_id: str) -> None:
         with self._lock:
-            self._active[user_id] = max(self._active[user_id] - 1, 0)
+            left = max(self._active.get(user_id, 0) - 1, 0)
+            if left:
+                self._active[user_id] = left
+            else:
+                self._active.pop(user_id, None)
 
 
 class BodyLimit:

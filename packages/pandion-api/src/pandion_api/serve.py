@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import traceback
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -176,8 +175,7 @@ def create_serve_app(
 
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception) -> JSONResponse:
-        detail = "".join(traceback.format_exception(exc))
-        return JSONResponse(status_code=500, content={"detail": hide(detail)})
+        return JSONResponse(status_code=500, content={"detail": hide(type(exc).__name__)})
 
     if serve.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=list(serve.cors_origins), allow_methods=["GET", "POST"], allow_headers=["*"])

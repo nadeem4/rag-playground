@@ -221,7 +221,8 @@ class Policy:
 
 class AnonymousPolicy(Policy):
     """Everyone is one user with no roles and no limit. Serve accepts it only
-    when asked for with `Policy.anonymous()`, and never with an `access:` block."""
+    when asked for with `Policy.anonymous()`, and never with an `access:` block.
+    Every caller shares the id "anonymous", so serve's default limits are server-wide."""
 
     def user_id(self, request: Request) -> str:
         return "anonymous"

@@ -10,6 +10,7 @@ unchanged, and writes it again after a sync that worked.
   "index_recipe": "<sha256 of the index settings>",
   "index_artifact": "<artifact id of the index>",
   "index_collection": "<name of the store collection that holds its rows>",
+  "retired": {"<collection it replaced>": "<when, UTC>"},
   "documents": {
     "guides/chunking.pdf": {
       "content_hash": "<sha256 of the bytes>", "chunk_set": "<artifact id>",
@@ -92,6 +93,8 @@ class Manifest:
     index_artifact: str | None = None
     #: The store collection the index rows are in (the name the index binding holds).
     index_collection: str | None = None
+    #: Collections this manifest replaced -> when (UTC, ISO 8601). Cleanup drops only these.
+    retired: dict[str, str] = field(default_factory=dict)
     #: document id -> {"content_hash", "chunk_set", "category", "reason", ...}
     documents: dict[str, dict[str, Any]] = field(default_factory=dict)
 

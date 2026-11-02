@@ -298,12 +298,12 @@ After a sync that worked, the manifest also records the collection the rows went
 flowchart TD
     A["sync builds a new collection: recipe hash + step id"] --> B["manifest.index_collection names it"]
     B --> C["the previous collection stays: a server on the old image still works"]
-    C --> D{"Pandion-named, not new, not previous, older than 7 days?"}
+    C --> D{"Retired by this manifest, not new, not previous, replaced over 7 days ago?"}
     D -- yes --> E["drop it"]
     D -- no --> F["keep it"]
 ```
 
-`index_status()` is the server's check that its own collection exists, matches its recipe and
+`index_status()` is the server's check that its own collection (the one it first found ready) exists, matches its recipe and
 embedding model revision, and is a format this version reads. A stored index whose collection
 is gone is not a cache hit: the step runs again. Nothing reloads a running server onto a new
 collection.

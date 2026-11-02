@@ -2326,11 +2326,16 @@ collection is in a format this Pandion reads. It never writes, parses or embeds,
 no model.
 
 The collection from before the last sync stays, so a server on the previous image or file
-keeps working and rolling back is redeploying it. After a sync that worked, any collection
-Pandion named that is neither the new one nor the previous one, and was made more than 7 days
-ago, is dropped. Collections with other names, in the same folder or the same Qdrant prefix,
-are never touched, and neither is a collection with no recorded creation time. Nothing
-reloads a running server onto a new collection: start it again from the new file.
+keeps working and rolling back is redeploying it. Each sync writes the collection it replaced
+into `retired` in `manifest.json`, with the time. After a sync that worked, a retired
+collection that is neither the new one nor the previous one is dropped once it was replaced
+more than 7 days ago. The 7 days count from the replacement, not from when the collection was
+built, and only collections this manifest retired are dropped. A collection that another
+pipeline built in the same folder or the same Qdrant prefix is never touched, whatever its
+age. The stored index record of a dropped collection goes with it. Nothing reloads a running
+server onto a new collection: start it again from the new file. A server's first ready
+`index_status()` remembers its collection, and later checks keep to it, so an old server stays
+ready while a new one is deployed beside it.
 
 If the folder of the index is deleted, or its collection was cleaned up while the cache
 still holds the record, the next sync builds the index again from the cached embeddings.

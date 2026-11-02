@@ -77,10 +77,14 @@ class RunResult:
 def _rows_present(cls: Any, store: Store, aid: str, extras: dict[str, Any] | None) -> bool:
     """False for a stored index whose collection is gone (cleaned up, or the
     index folder deleted), so the step runs again instead of serving a binding
-    to nothing."""
-    if cls.output != ArtifactType.INDEX:
+    to nothing. Only a run that builds the index asks (`check_index_rows`); a
+    search reports a missing collection and pays no extra store call."""
+    if cls.output != ArtifactType.INDEX or not (extras or {}).get("check_index_rows"):
         return True
-    return collection_present(store.load(aid, cls.output), (extras or {}).get("index_location"))
+    try:
+        return collection_present(store.load(aid, cls.output), extras.get("index_location"))
+    except Exception:
+        return True  # a store error is the retriever's to report
 
 
 def run(

@@ -110,12 +110,57 @@ def test_not_ready_when_the_collection_is_from_a_newer_pandion(tmp_path, docs):
 def test_two_servers_with_two_recipes_are_each_ready_against_their_own_collection(tmp_path, docs):
     one, two = config(tmp_path, 70, name="one.yaml"), config(tmp_path, 90, name="two.yaml")
     first = pipeline(one).index.sync(docs).index.output["collection"]
-    # Same path, so the second sync replaces the manifest; each server checks its own recipe.
+    old_server = pipeline(one).index
+    assert old_server.index_status().ready  # it opens its collection once and remembers it
     second = pipeline(two).index.sync(docs).index.output["collection"]
     assert first != second
-    assert pipeline(two).index.index_status().ready
-    assert not pipeline(one).index.index_status().ready  # its manifest now names the other recipe's collection
-    assert first in get_store("lancedb", {"location": str(tmp_path / "index" / "index")}).list()
+    new_server = pipeline(two).index
+    assert new_server.index_status().ready
+    # The manifest now names the new collection; the old server keeps its own.
+    assert old_server.index_status().ready and old_server.index_status().collection == first
+    assert new_server.index_status().collection == second
+
+
+def test_the_previous_index_record_stays_so_the_old_server_still_hits_the_cache(tmp_path, docs):
+    one, two = config(tmp_path, 70, name="one.yaml"), config(tmp_path, 90, name="two.yaml")
+    first = pipeline(one).index.sync(docs)
+    pipeline(two).index.sync(docs)
+    assert pipeline(one).index.store.has(first.index.artifact_id)
+    assert pipeline(one).index.sync(docs).index.status == "cached"
+
+
+def test_a_store_error_in_the_presence_check_does_not_escape_a_sync(tmp_path, docs, monkeypatch):
+    file = config(tmp_path)
+    pipeline(file).index.sync(docs)
+
+    def boom(*a, **k):
+        raise RuntimeError("store down")
+
+    monkeypatch.setattr("pandion.executor.collection_present", boom)
+    assert pipeline(file).index.sync(docs).index.status == "cached"
+
+
+SEARCH = CONFIG + """retrieve:
+  search: {{use: dense, top_k: 5}}
+answer: {{use: search}}
+"""
+
+
+def test_a_search_neither_checks_nor_rebuilds_a_missing_collection(tmp_path, docs, monkeypatch):
+    file = tmp_path / "pipeline.yaml"
+    file.write_text(SEARCH.format(size=70, store="lancedb"), encoding="utf-8")
+    report = pipeline(file).index.sync(docs)
+    name = report.index.output["collection"]
+    store = get_store("lancedb", {"location": str(tmp_path / "index" / "index")})
+    store.drop(name)
+    calls = []
+    monkeypatch.setattr("pandion.executor.collection_present", lambda *a, **k: calls.append(1) or True)
+
+    result = pipeline(file).retrieve("capital")
+
+    assert calls == []  # no extra store round trip on a search
+    assert not result.ok  # the missing collection is reported
+    assert name not in store.list()  # and not rebuilt
 
 
 def test_status_does_not_load_any_model(tmp_path, docs, monkeypatch):

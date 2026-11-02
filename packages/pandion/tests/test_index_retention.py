@@ -25,38 +25,42 @@ def made(store, collection: str, days_ago: float | None) -> None:
         embed_model="m", embed_revision="1", dims=2, metric="cosine", recipe_hash="h", created_at=created))
 
 
-def test_a_collection_older_than_the_grace_period_that_nobody_keeps_is_dropped():
+def ago(days: float) -> str:
+    return (NOW - timedelta(days=days)).isoformat()
+
+
+def test_a_retired_collection_past_the_grace_period_is_dropped():
     store = get_store("memory")
-    made(store, name(1), GRACE_DAYS + 1)
-    assert drop_stale(store, keep=set(), now=NOW) == [name(1)]
+    made(store, name(1), 90)
+    assert drop_stale(store, keep=set(), retired={name(1): ago(GRACE_DAYS + 1)}, now=NOW) == [name(1)]
     assert store.list() == []
+
+
+def test_the_grace_period_counts_from_retirement_not_creation():
+    store = get_store("memory")
+    made(store, name(1), 90)
+    assert drop_stale(store, keep=set(), retired={name(1): ago(1)}, now=NOW) == []
 
 
 def test_the_current_and_the_previous_collection_are_kept_whatever_their_age():
     store = get_store("memory")
     for n in (1, 2, 3):
         made(store, name(n), 90)
-    assert drop_stale(store, keep={name(1), name(2)}, now=NOW) == [name(3)]
+    retired = {name(n): ago(90) for n in (1, 2, 3)}
+    assert drop_stale(store, keep={name(1), name(2)}, retired=retired, now=NOW) == [name(3)]
     assert store.list() == [name(1), name(2)]
 
 
-def test_a_young_collection_is_kept():
-    store = get_store("memory")
-    made(store, name(1), GRACE_DAYS - 1)
-    assert drop_stale(store, keep=set(), now=NOW) == []
-
-
-def test_a_collection_with_no_created_at_is_kept():
-    store = get_store("memory")
-    made(store, name(1), None)
-    assert drop_stale(store, keep=set(), now=NOW) == []
-
-
-def test_a_created_at_that_cannot_be_read_is_kept():
+def test_a_collection_this_manifest_never_retired_is_never_dropped():
     store = get_store("memory")
     made(store, name(1), 90)
-    store.open(name(1)).meta().created_at = "last tuesday"
-    assert drop_stale(store, keep=set(), now=NOW) == []
+    assert drop_stale(store, keep=set(), retired={}, now=NOW) == []
+
+
+def test_a_retired_at_that_cannot_be_read_keeps_the_collection():
+    store = get_store("memory")
+    made(store, name(1), 90)
+    assert drop_stale(store, keep=set(), retired={name(1): "last tuesday"}, now=NOW) == []
 
 
 @pytest.mark.parametrize(
@@ -65,7 +69,7 @@ def test_a_created_at_that_cannot_be_read_is_kept():
 def test_a_collection_with_another_naming_scheme_is_never_touched(other):
     store = get_store("memory")
     made(store, other, 90)
-    assert drop_stale(store, keep=set(), now=NOW) == []
+    assert drop_stale(store, keep=set(), retired={other: ago(90)}, now=NOW) == []
     assert store.list() == [other]
 
 
@@ -81,7 +85,7 @@ def test_a_collection_that_will_not_open_is_skipped():
         return real(n)
 
     store.open = open
-    assert drop_stale(store, keep=set(), now=NOW) == [name(2)]
+    assert drop_stale(store, keep=set(), retired={name(1): ago(90), name(2): ago(90)}, now=NOW) == [name(2)]
 
 
 CONFIG = """\
@@ -109,8 +113,16 @@ def lance(config: Path):
     return get_store("lancedb", {"location": str(config.parent / "index" / "index")})
 
 
-def age(config: Path, collection: str, days: float) -> None:
-    """Pretend the collection was made `days` ago."""
+def retire_long_ago(config: Path, collection: str, days: float = 90) -> None:
+    """Pretend this manifest retired the collection `days` ago."""
+    path = config.parent / "index" / MANIFEST
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.setdefault("retired", {})[collection] = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def built_days_ago(config: Path, collection: str, days: float) -> None:
+    """Pretend the collection was built `days` ago."""
     import lancedb
 
     meta = lance(config).open(collection).meta().model_copy(
@@ -128,27 +140,53 @@ def add(docs, file: str, text: str) -> None:
     (docs / file).write_bytes(build_pdf([[text]]))
 
 
-def test_a_sync_drops_an_old_unkept_collection_and_keeps_current_and_previous(setup):
+def manifest_of(config: Path) -> dict:
+    return json.loads((config.parent / "index" / MANIFEST).read_text(encoding="utf-8"))
+
+
+def test_a_sync_retires_the_replaced_collection_and_drops_it_after_the_grace_period(setup):
     config, docs = setup
     one = sync(config, docs).index.output["collection"]
     add(docs, "b.pdf", "Berlin is the capital of Germany.")
     two = sync(config, docs).index.output["collection"]
+    assert list(manifest_of(config)["retired"]) == [one]
     add(docs, "c.pdf", "Rome is the capital of Italy.")
-    age(config, one, 90)
-    age(config, two, 90)
     three = sync(config, docs).index.output["collection"]
+    assert set(lance(config).list()) == {one, two, three}  # one is retired but young
+    retire_long_ago(config, one)
+    add(docs, "d.pdf", "Madrid is the capital of Spain.")
+    four = sync(config, docs).index.output["collection"]
 
-    assert set(lance(config).list()) == {two, three}  # one is old and no longer the previous
+    assert set(lance(config).list()) == {two, three, four}  # one is gone; two is retired and young
+    assert one not in manifest_of(config)["retired"]
 
 
-def test_a_young_collection_of_another_recipe_survives_a_sync(setup):
+def test_a_collection_built_long_ago_and_replaced_today_survives_quick_syncs(setup):
+    config, docs = setup
+    one = sync(config, docs).index.output["collection"]
+    built_days_ago(config, one, 30)
+    for i, text in enumerate(["Berlin is a city.", "Rome is a city."]):
+        add(docs, f"n{i}.pdf", text)
+        sync(config, docs)
+    assert one in lance(config).list()
+
+
+def test_a_sync_never_drops_the_live_collection_of_another_pipeline_in_the_same_store(setup):
     config, docs = setup
     sync(config, docs)
-    other = name(7)
-    made(lance(config), other, 0)
-    add(docs, "b.pdf", "Berlin is the capital of Germany.")
-    sync(config, docs)
-    assert other in lance(config).list()
+    other = config.parent / "other"
+    other.mkdir()
+    # A second pipeline on the same Lance location, with another recipe.
+    (other / "pipeline.yaml").write_text(
+        CONFIG.replace("chunk_size: 70", "chunk_size: 90").replace("path: ./index", f"path: {config.parent / 'index'}"),
+        encoding="utf-8",
+    )
+    theirs = sync(other / "pipeline.yaml", docs).index.output["collection"]
+    built_days_ago(config, theirs, 30)
+    for text in ("Berlin is a city.", "Rome is a city."):
+        add(docs, f"{text[:4]}.pdf", text)
+        sync(config, docs)
+    assert theirs in lance(config).list()
 
 
 def test_a_failed_sync_drops_nothing(setup):
@@ -156,7 +194,7 @@ def test_a_failed_sync_drops_nothing(setup):
     one = sync(config, docs).index.output["collection"]
     add(docs, "b.pdf", "Berlin is the capital of Germany.")
     two = sync(config, docs).index.output["collection"]
-    age(config, one, 90)
+    retire_long_ago(config, one)
     (docs / "a.pdf").unlink()
     (docs / "b.pdf").unlink()
     (docs / "bad.pdf").write_bytes(b"not a pdf")
@@ -175,5 +213,5 @@ def test_cleanup_in_one_qdrant_prefix_never_touches_another(tmp_path):
     made(mine, name(1), 90)
     made(theirs, name(2), 90)
 
-    assert drop_stale(mine, keep=set(), now=NOW) == [name(1)]
+    assert drop_stale(mine, keep=set(), retired={name(1): ago(90)}, now=NOW) == [name(1)]
     assert theirs.list() == [name(2)]

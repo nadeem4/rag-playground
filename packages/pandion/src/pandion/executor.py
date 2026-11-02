@@ -32,7 +32,7 @@ from pandion.events import Emit, event
 from pandion.graph import Graph, Node
 from pandion.ids import compute_artifact_id
 from pandion.index_store import collection_present
-from pandion.ports import RunContext
+from pandion.ports import RunContext, Stage
 from pandion.registry import Registry
 from pandion.storage import Store
 
@@ -175,7 +175,7 @@ def run(
             )
         return hashlib.sha256(f"{aid}\x00{written}".encode("utf-8")).hexdigest()
 
-    def failed(nid: str, started: float, usage: dict[str, Any] | None = None) -> None:
+    def failed(nid: str, stage: Stage, started: float, usage: dict[str, Any] | None = None) -> None:
         broken.add(nid)
         err = traceback.format_exc()
         result.nodes[nid] = NodeResult(
@@ -186,7 +186,7 @@ def run(
             usage=usage,
         )
         # A step that fails after its model call was still billed for it.
-        emit(event("node_failed", node_id=nid, stage=str(cls.stage), error=err, usage=usage))
+        emit(event("node_failed", node_id=nid, stage=str(stage), error=err, usage=usage))
 
     for nid in resolved.order:
         if nid not in selected:
@@ -224,7 +224,7 @@ def run(
                     input_ids[pname] = input_id(src)
                     call_inputs[pname] = payloads[src]
         except Exception:
-            failed(nid, time.perf_counter())
+            failed(nid, cls.stage, time.perf_counter())
             continue
 
         aid = compute_artifact_id(
@@ -284,7 +284,7 @@ def run(
         try:
             payload = instance.apply(call_inputs, config, ctx)
         except Exception:
-            failed(nid, started, ctx.extras.get("meta", {}).get("usage"))
+            failed(nid, cls.stage, started, ctx.extras.get("meta", {}).get("usage"))
             continue
 
         # Transform-supplied meta is merged *under* the built-ins: the spread

@@ -39,7 +39,7 @@ def test_a_step_emits_started_then_finished_with_its_stage(sample_pdf, stage):
 
 def test_a_failed_step_emits_node_failed_then_raises(tmp_path):
     events: list[dict] = []
-    with pytest.raises(Exception):
+    with pytest.raises(FileNotFoundError):
         pandion.parse(tmp_path / "missing.pdf", use="pdfium", on_event=events.append)
 
     assert [e["event"] for e in events] == ["node_started", "node_failed"]

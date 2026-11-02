@@ -858,7 +858,6 @@ class IndexPipeline:
         credentials: dict[str, str] | None = None,
         metadata: dict[str, dict[str, str]] | None = None,
         categories: dict[str, str] | None = None,
-        trace_id: str | None = None,
     ) -> SyncReport:
         """Bring the index in line with the files at `paths` now.
 
@@ -905,11 +904,9 @@ class IndexPipeline:
                 "sync works with local files (the upload source); index.run works with any source."
             )
         with sync_lock(self.config.path):
-            return self._sync(paths, credentials, metadata, categories, trace_id)
+            return self._sync(paths, credentials, metadata, categories)
 
-    def sync_source(
-        self, *, credentials: dict[str, str] | None = None, trace_id: str | None = None
-    ) -> SyncReport:
+    def sync_source(self, *, credentials: dict[str, str] | None = None) -> SyncReport:
         """`sync` the source named in the pipeline file's `source:` block.
 
         Raises ValueError when the file has no such block, and as `sync` does
@@ -918,7 +915,7 @@ class IndexPipeline:
         if self.config.source is None:
             raise ValueError("The pipeline file has no source: block to sync from. Add one, such as source: {use: files, location: ./docs}.")
         use, settings = self.config.source
-        return self.sync(get_source(use, **settings), credentials=credentials, trace_id=trace_id)
+        return self.sync(get_source(use, **settings), credentials=credentials)
 
     def _sync(
         self,
@@ -926,7 +923,6 @@ class IndexPipeline:
         credentials: dict[str, str] | None,
         metadata: dict[str, dict[str, str]] | None,
         categories: dict[str, str] | None,
-        trace_id: str | None = None,
     ) -> SyncReport:
         before = Manifest.load(self.config.path / MANIFEST)
         self._check_names(categories)
@@ -955,7 +951,7 @@ class IndexPipeline:
                 role_labels[doc_id] = given["roles"]
         return self._commit(
             documents, before, known, new, versions=versions, credentials=credentials, failed=unread,
-            role_labels=role_labels, trace_id=trace_id,
+            role_labels=role_labels,
         )
 
     def _from_source(
@@ -1034,7 +1030,6 @@ class IndexPipeline:
         cancel: threading.Event | None = None,
         failed: dict[str, str] | None = None,
         role_labels: dict[str, str | None] | None = None,
-        trace_id: str | None = None,
     ) -> SyncReport:
         """Index `documents` (every document the index should hold), then, if
         every step worked, write the manifest and delete the previous index.
@@ -1054,8 +1049,7 @@ class IndexPipeline:
 
         def run() -> IndexReport:
             return self._index(
-                documents, credentials=credentials, on_event=on_event, cancel=cancel, known=known, labels=labels,
-                trace_id=trace_id,
+                documents, credentials=credentials, on_event=on_event, cancel=cancel, known=known, labels=labels
             )
 
         report = run()

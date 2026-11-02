@@ -120,7 +120,9 @@ def test_eval_prints_the_cost_line_after_the_report(config, monkeypatch, capsys)
 def test_eval_json_holds_the_cost(config, monkeypatch, capsys):
     monkeypatch.setattr(cli.pandion, "evaluate", lambda *a, **kw: FakeReport())
     cli.main(["eval", config, "q.json", "--json"])
-    assert json.loads(capsys.readouterr().out) == {"total": 1, "cost": FULL}
+    data = json.loads(capsys.readouterr().out)
+    assert data.pop("environment")["platform"]  # the run's platform and models travel with the report
+    assert data == {"total": 1, "cost": FULL}
 
 
 def test_compare_prints_a_cost_line_under_each_variant(config, monkeypatch, capsys):

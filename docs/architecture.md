@@ -474,6 +474,10 @@ span tree built from those events, so no span is open while a step runs on its w
 OpenTelemetry packages are the optional extra `pandion-api[otel]`. See
 [Logs and traces](pandion-api.md#logs-and-traces).
 
+The same step events also feed Prometheus counters (`pandion_api/metrics.py`), served on a port
+of their own when `ServeSettings.metrics_port` is set. The client library is the optional extra
+`pandion-api[metrics]`. See [Metrics](pandion-api.md#metrics).
+
 ## How the web app talks to the API
 
 The web app is React, built with Vite into `playground/frontend/dist`. FastAPI serves it, with a fallback

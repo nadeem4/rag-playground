@@ -86,6 +86,8 @@ async def chat(body: ChatIn, request: Request):
             log_event(e, body.conversation_id)
             if spans:
                 spans.on_event(e)
+            if app.metrics:
+                app.metrics.on_event(e)
             if e.get("event") == "chat_rewrite":
                 on_event(e)
 
@@ -109,6 +111,8 @@ async def chat(body: ChatIn, request: Request):
             extra={"trace_id": trace_id, "conversation_id": result.conversation_id,
                    **content_fields(question=last.content, answer=result.text)},
         )
+        if app.metrics:
+            app.metrics.turn_done(result.answer)
         sources = _sources(result.answer)
         on_event(event("sources", sources=sources))
         on_event(event("token", text=result.text))

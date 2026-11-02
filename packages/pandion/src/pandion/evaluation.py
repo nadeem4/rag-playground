@@ -24,7 +24,7 @@ import json
 import re
 import statistics
 import threading
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
@@ -74,6 +74,7 @@ __all__ = [
     "documents_named",
     "environment",
     "evaluate",
+    "reask_missed",
     "find_gold",
     "load_baseline",
     "load_questions",
@@ -725,6 +726,38 @@ def evaluate(
         top_k=top_k, questions=results, cancelled=cancelled,
         document_shas=_shas(p, resolved), nondeterministic=_nondeterministic(results),
     )
+
+
+def reask_missed(
+    p: Pipeline,
+    report: EvaluationReport,
+    baseline: dict[str, Any],
+    questions: Any,
+    top_k: int = DEFAULT_TOP_K,
+    *,
+    documents: Any = None,
+    credentials: dict[str, str] | None = None,
+) -> tuple[EvaluationReport, list[str]]:
+    """Ask each question newly missed against `baseline` once more, when a
+    retrieval step can differ between runs (`report.nondeterministic`).
+
+    Returns the report, with a question that is found on the second ask
+    replaced by that result, and the ids asked again. A question that is
+    missed twice keeps its first result. With no such step, or nothing newly
+    missed, the report comes back as it was and the ids are empty.
+    """
+    missed = report.against(baseline).newly_missed if report.nondeterministic else []
+    if not missed:
+        return report, []
+    asked = [
+        {**q, "id": q["id"] or f"question {n}"}
+        for n, q in enumerate(load_questions(questions)["questions"], start=1)
+    ]
+    again = evaluate(
+        p, [q for q in asked if q["id"] in missed], top_k, documents=documents, credentials=credentials
+    )
+    passed = {q.id: q for q in again.questions if q.found}
+    return replace(report, questions=[passed.get(q.id, q) for q in report.questions]), missed
 
 
 #: The registry stage of each retrieval step, by its name in `Retrieval.stages`.

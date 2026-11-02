@@ -339,19 +339,31 @@ def cmd_eval(args: argparse.Namespace) -> int:
     # A baseline from another platform or with other models is refused before any search is paid for.
     env_notes = pandion.evaluation.check_environment(baseline, env) if baseline is not None else []
     report = pandion.evaluate(p, args.questions, args.top_k, documents=_documents(args), credentials=credentials_from_env())
+    reasked: list[str] = []
+    if baseline is not None:
+        # A step that can differ between runs gets one more ask for each newly missed question.
+        report, reasked = pandion.evaluation.reask_missed(
+            p, report, baseline, args.questions, args.top_k,
+            documents=_documents(args), credentials=credentials_from_env(),
+        )
     regression = report.against(baseline) if baseline is not None else None
+    found_again = {q.id: q.found for q in report.questions if q.id in reasked}
     if regression is not None:
         regression.notes[:0] = env_notes
     if args.json:
         data = {**report.to_dict(), "cost": report.cost(), "environment": env}
         if regression is not None:
             data["regression"] = {**regression.to_dict(), "gate_ok": regression.gate_ok(args.allow or 0)}
+            data["reasked"] = [{"id": i, "found": found_again[i]} for i in reasked]
         print(json.dumps(data, indent=2))
     else:
         print(report)
         print(cost_line(report.cost()))
         if regression is not None:
             print(regression)
+            if reasked:
+                again = ", ".join(f"{i} ({'found' if found_again[i] else 'missed again'})" for i in reasked)
+                print(f"Asked again because {', '.join(report.nondeterministic)} can differ between runs: {again}.")
             allow = args.allow or 0
             for name in regression.failed_categories(allow):
                 print(f'Category "{name}" newly missed: {", ".join(regression.by_category[name]["newly_missed"])}.')

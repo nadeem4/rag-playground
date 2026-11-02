@@ -15,12 +15,12 @@ from pandion.llm import Completion
 from pandion_api import Policy, ServeSettings
 
 
-def answer(text="The notice period is 30 days.", ok=True):
+def answer(text="The notice period is 30 days.", ok=True, dollars=None):
     hit = SimpleNamespace(chunk=SimpleNamespace(id="c1", doc_id="lease.pdf", page_span=(2, 3)), score=0.5)
     payload = {"answer": [{"text": text}], "citations": [{"chunk_id": "c1"}]}
     return SimpleNamespace(
         ok=ok, text=text if ok else "", output=SimpleNamespace(payload=payload) if ok else None,
-        hits=[hit] if ok else [], cost=lambda: {"seconds": 0.1},
+        hits=[hit] if ok else [], cost=lambda: {"seconds": 0.1, "dollars": dollars},
     )
 
 

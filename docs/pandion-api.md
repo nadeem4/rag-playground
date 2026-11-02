@@ -555,9 +555,10 @@ No label ever holds a question, an answer, a user id, a conversation id or a chu
 number of series stays small. A `feedback_total` metric arrives with the feedback route.
 
 Teams usually want three ratios, which you write in your own dashboard. The error rate of a
-step is `errors_total` divided by the count in `step_seconds_count` for the same step. The
+step is `errors_total` divided by `step_seconds_count + errors_total` for the same step. The
 share of flagged turns is `turns_flagged_total` divided by the answered turns, which is the
-`/chat` requests with status 200. The cost per turn is the rate of `cost_estimated_usd_total`
+`/chat` requests with status 200. That count includes replies with `ok: false`, which also
+return 200. A request refused by the body size limit (413) is counted with `route="unmatched"`. The cost per turn is the rate of `cost_estimated_usd_total`
 divided by that same request rate.
 
 To turn metrics off, leave `metrics_port` as `None`. If the port is taken, the server stops

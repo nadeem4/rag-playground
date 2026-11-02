@@ -34,7 +34,7 @@ class Metrics:
         self.registry = registry or prom.CollectorRegistry()
         r = self.registry
         self._requests = prom.Counter("requests_total", "Requests by route template and status.", ["route", "status"], registry=r)
-        self._seconds = prom.Histogram("step_seconds", "Seconds a pipeline step took.", ["step"], registry=r)
+        self._seconds = prom.Histogram("step_seconds", "Seconds a pipeline step took.", ["step"], buckets=(.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30, 60, 120), registry=r)
         self._tokens = prom.Counter("tokens_total", "Model tokens by step and kind.", ["step", "kind"], registry=r)
         self._cost = prom.Counter("cost_estimated_usd_total", "Estimated dollars spent on answered turns.", registry=r)
         self._errors = prom.Counter("errors_total", "Failed steps.", ["step"], registry=r)
@@ -61,7 +61,7 @@ class Metrics:
         dollars = answer.cost().get("dollars")
         if dollars:
             self._cost.inc(dollars)
-        stats = getattr(getattr(answer, "output", None), "payload", {}).get("stats") or {}
+        stats = (getattr(getattr(answer, "output", None), "payload", None) or {}).get("stats") or {}
         for category in FLAGGED:
             if stats.get(category):
                 self._flagged.labels(category=category).inc()

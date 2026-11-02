@@ -103,6 +103,8 @@ async def chat(body: ChatIn, request: Request):
         except Exception:  # noqa: BLE001  (the caller sees one sentence; the log has the rest)
             logger.exception("Chat turn failed.", extra={"trace_id": trace_id})
             return fail()
+        if app.metrics:  # spend counts even when the turn gave no answer
+            app.metrics.turn_done(result.answer)
         if not result.answer.ok:
             logger.warning("Chat turn gave no answer.", extra={"trace_id": trace_id})
             return fail()
@@ -111,8 +113,6 @@ async def chat(body: ChatIn, request: Request):
             extra={"trace_id": trace_id, "conversation_id": result.conversation_id,
                    **content_fields(question=last.content, answer=result.text)},
         )
-        if app.metrics:
-            app.metrics.turn_done(result.answer)
         sources = _sources(result.answer)
         on_event(event("sources", sources=sources))
         on_event(event("token", text=result.text))

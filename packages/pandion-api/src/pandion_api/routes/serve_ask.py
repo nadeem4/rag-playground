@@ -36,11 +36,14 @@ async def ask(body: AskIn, request: Request):
         failed = {"conversation_id": None, "trace_id": trace_id, "text": "", "sources": [], "ok": False, "error": FAILED}
         try:
             answer = app.pipeline.ask(
-                body.question, roles=roles, credentials=credentials, cancel=cancel, trace_id=trace_id
+                body.question, roles=roles, credentials=credentials, cancel=cancel, trace_id=trace_id,
+                on_event=app.metrics.on_event if app.metrics else None,
             )
         except Exception:  # noqa: BLE001  (the caller sees one sentence; the log has the rest)
             logger.exception("Ask failed (trace %s).", trace_id)
             return False, cancel.is_set(), failed
+        if app.metrics:
+            app.metrics.turn_done(answer)
         if not answer.ok:
             logger.warning("Ask gave no answer (trace %s).", trace_id)
             return False, False, failed

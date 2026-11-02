@@ -79,3 +79,13 @@ def test_missing_extra_names_pandion_api_metrics(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "prometheus_client", None)
     with pytest.raises(MissingExtra, match=r"pandion-api\[metrics\]"):
         client(tmp_path, metrics_port=free_port())
+
+
+def test_ask_and_a_failed_turn_still_count_their_cost(tmp_path):
+    with client(tmp_path, metrics_port=None, metrics_on_app=True) as c:
+        c.app.state.pipeline = StubPipeline(dollars=0.5)
+        c.post("/ask", json={"question": "Notice period?"})
+        c.app.state.pipeline = StubPipeline(ok=False, dollars=0.25)
+        say(c)
+        text = c.get("/metrics").text
+    assert "cost_estimated_usd_total 0.75" in text

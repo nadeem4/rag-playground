@@ -1416,7 +1416,7 @@ class IndexPipeline:
         sorted_ = self._sort(documents, categories, reuse=not remember, known=known, labels=labels)
         chosen = {doc_id: s.category for doc_id, s in sorted_.items()}
         resolved = self._access(documents, labels)
-        graph, roles = self.graph(documents, chosen, resolved)
+        graph, roles = self.graph(documents, chosen, resolved, labels)
         known = self.config.index.categories
         targets = {f"{d}::{self._stop_for(stop, known[chosen[d]])}" for d in documents} if stop else None
         result = self.execute(
@@ -1550,6 +1550,7 @@ class IndexPipeline:
         documents: dict[str, SourceFile | str],
         categories: dict[str, str] | None = None,
         resolved: dict[str, Resolved] | None = None,
+        labels: dict[str, dict[str, str]] | None = None,
     ) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The graph for `documents`, and each node's (document id, step name).
 
@@ -1559,7 +1560,8 @@ class IndexPipeline:
         the upload source a document is a stored file; with another source it
         is the location that source is told to read. With an `access:` block the
         index step also gets each file's roles (`resolved`, else the manifest's),
-        by the file's hash.
+        by the file's hash. The index step also gets each stored file's document id
+        and labels (`labels`, else the manifest's), which end up on its rows.
         """
         index = self.config.index
         nodes: list[Node] = []
@@ -1607,9 +1609,28 @@ class IndexPipeline:
         if self.config.access is not None:
             resolved = resolved if resolved is not None else self._roles_for(documents)
             store_settings = {**store_settings, "doc_roles": self._roles_by_sha(documents, resolved)}
+        if sources := self._sources_by_sha(documents, labels):
+            store_settings = {**store_settings, "doc_sources": sources}
         store = add(None, "index", Stage.INDEX, index.store_use, store_settings)
         edges += [Edge(chunk, store, "chunks") for chunk in chunk_nodes]
         return Graph(nodes=nodes, edges=edges), roles
+
+    def _sources_by_sha(
+        self, documents: dict[str, SourceFile | str], labels: dict[str, dict[str, str]] | None = None
+    ) -> dict[str, dict[str, str]]:
+        """Each stored file's document id and labels, by file hash, which is
+        what an index row holds. The labels are `labels`, else the manifest's
+        saved ones, so index time and search time give the same graph. Two ids
+        with the same bytes keep the first id in sorted order."""
+        recorded = Manifest.load(self.config.path / MANIFEST).documents
+        out: dict[str, dict[str, str]] = {}
+        for doc_id in sorted(documents):
+            file = documents[doc_id]
+            if isinstance(file, SourceFile) and file.sha not in out:
+                given = (labels or {}).get(doc_id) or recorded.get(doc_id, {}).get("metadata") or {}
+                # `roles` is access data, kept in doc_roles; here it would only move the id.
+                out[file.sha] = {**{k: v for k, v in given.items() if k != "roles"}, "id": doc_id}
+        return out
 
     @staticmethod
     def _roles_by_sha(documents: dict[str, SourceFile | str], resolved: dict[str, Resolved]) -> dict[str, list[str]]:

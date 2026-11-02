@@ -25,6 +25,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 from pandion import llm
+from pandion.answer_safety import strip_unsourced_urls
 from pandion.events import event
 from pandion.conversation_store import Conversation, ConversationNotFound, ConversationStore, Memory, Turn
 from pandion.llm import CHAT_MODELS
@@ -73,6 +74,8 @@ class ChatSettings(BaseModel):
     rewrite_model: str = "claude-haiku-4-5"
     summary_model: str = "claude-haiku-4-5"
     memory: bool = False
+    #: Remove links and images from the reply that no retrieved source contains.
+    strip_urls: bool = True
 
     @field_validator("rewrite_model", "summary_model")
     @classmethod
@@ -188,6 +191,8 @@ def chat_turn(
         return TurnResult(conversation_id or "", question, standalone, "", [], answer)
     conversation_id = conversation_id or uuid.uuid4().hex
     text, sources = answer.text, _source_ids(answer)
+    if settings.strip_urls:
+        text = strip_unsourced_urls(text, [hit.chunk.text for hit in getattr(answer, "hits", [])])
     store.append(
         conversation_id, user_id,
         Turn(question=question, answer=text, rewrite=standalone, source_ids=sources, trace_id=trace_id or ""),

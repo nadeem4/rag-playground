@@ -457,6 +457,8 @@ the server folds old turns into the running summary and, when `ServeSettings.cha
 is on, keeps facts the user shared. The user never waits for either. Cancel on disconnect applies to streams only: a JSON request runs to its end. A stream cannot be
 resumed on another server copy: there is no events route in serve.
 
+Answers are made safer by Pandion, not by the route: sources are fenced in the prompt, and a reply's links and images are removed unless a source holds the same address. The `token` event, the JSON reply and the stored turn all carry the cleaned text. Even so, a client should not load images or follow links in answers automatically. See [Answer safety](pandion.md#answer-safety).
+
 ### GET /health and GET /ready
 
 `GET /health` says `{"status": "ok"}` and names no version. `GET /ready` is `200

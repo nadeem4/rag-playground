@@ -50,6 +50,10 @@ curl -N http://127.0.0.1:8000/chat -H 'content-type: application/json' \
   -d '{"messages": [{"role": "user", "content": "How long is the notice period?"}], "stream": true}'
 ```
 
+Serve also has `POST /ask` (one question, nothing stored), `GET /conversations`,
+`GET` and `DELETE /conversations/{id}`, `GET /memories` and `DELETE /memories/{id}`. A user
+only ever sees their own; anything else is a 404.
+
 [docs/pandion-api.md](../../docs/pandion-api.md#serve-mode) has the request, the events and `/ready`.
 
 ## The routes

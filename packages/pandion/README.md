@@ -101,13 +101,69 @@ for the `files` source, prints one JSON summary line and exits non-zero when a d
 left out): the same pipeline, from the command line. See
 [the pandion command](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#the-pandion-command).
 
+## Extend Pandion
+
+These are the extension points and how steady each one is. Pandion is 0.x, and a Stable
+contract changes only after a deprecation in the changelog. Each recipe below is taken
+from an example that the repository's tests run.
+
+| Extension point | Level | Tested example |
+| --- | --- | --- |
+| Source | Stable | [`zip_source.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/extensions/zip_source.py) |
+| Route check | Stable | [`route.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/own_strategies/my_strategies/route.py) |
+| Access rule | Stable | [`owner_access.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/extensions/owner_access.py) |
+| Index store | Stable | [`json_file_store.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/extensions/json_file_store.py) |
+| Conversation store | Stable | recipe lands with that store |
+| Policy | Stable | [`policy_example.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion-api/policy_example.py) |
+| Step plugins, executor events, online evaluators | Provisional | |
+
+Import the module before you build the pipeline (or list it under `plugins:` in the
+pipeline file), so its name is registered.
+
+**A source** lists documents and reads one on request. `index.sync(source)` reads only
+what is new or changed, so give each entry a version that changes when its content does.
+The example is registered as `zip`:
+
+```python
+import zip_source  # registers "zip"
+from pandion.document_sources import get_source
+
+report = pipeline.index.sync(get_source("zip", path="docs.zip"))
+```
+
+In the pipeline file, `source: {use: zip, path: docs.zip}` and `pandion sync` do the same.
+
+**A route check** looks at a `DocumentInfo` and returns True or False. The example is
+`is_invoice`. Register it with
+`@route_check("is_invoice", ...)` and use it as `when: {use: is_invoice}`.
+
+**An access rule** takes a `DocumentInfo` and returns role names, or None for no
+opinion. The example, `team_from_path`, gives `legal/a.pdf` the role `legal`. Use it as
+`access: {rules: [team_from_path]}`. A rule that fails leaves the document visible to nobody.
+
+**An index store** keeps the rows of an index. Apply the filter before you rank, and
+never return a row with no roles. The example is registered as `json_file`, proven with
+`pandion.testing.store_conformance`, and used from code:
+
+```python
+from pandion.index_store import get_store
+
+store = get_store("json_file", {"folder": "my-index"})
+```
+
+A registered store reaches `pipeline.yaml` only through an index step, because
+`StoreIndex` is not a Stable export.
+
+**A Policy** (in pandion-api) is its one place for a site's rules. See
+[the pandion-api README](https://github.com/nadeem4/rag-playground/blob/main/packages/pandion-api/README.md#the-policy).
+
 ## Learn more
 
 - [The guide](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md): every
   step, setting and error.
 - [Examples](https://github.com/nadeem4/rag-playground/tree/main/examples/pandion): index,
-  sync, search, ask, the three ways to write a pipeline, and your own strategy for every
-  stage.
+  sync, search, ask, the three ways to write a pipeline, your own strategy for every
+  stage, and a source, access rule and index store of your own.
 - [RAG Playground](https://rag.codewithnk.com): try the same pipelines in the browser.
 
 ## License

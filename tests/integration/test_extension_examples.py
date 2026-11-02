@@ -59,7 +59,7 @@ def test_zip_source_version_changes_when_an_entry_changes(tmp_path):
 
 def test_zip_source_is_registered_by_name(tmp_path):
     zip_source = load("zip_source")
-    source = get_source("zip", path=make_zip(tmp_path / "d.zip", {"a": b"x"}))
+    source = get_source("zip", location=make_zip(tmp_path / "d.zip", {"a": b"x"}))
     assert isinstance(source, zip_source.ZipSource)
 
 
@@ -69,7 +69,7 @@ def test_zip_source_syncs_into_an_index(tmp_path):
     config["path"] = str(tmp_path / "index")
     file = tmp_path / "pipeline.yaml"
     file.write_text(yaml.safe_dump(config), encoding="utf-8")
-    source = get_source("zip", path=make_zip(tmp_path / "d.zip", {"primer.pdf": PDF.read_bytes()}))
+    source = get_source("zip", location=make_zip(tmp_path / "d.zip", {"primer.pdf": PDF.read_bytes()}))
 
     report = Pipeline.from_file(file).index.sync(source)
 
@@ -82,7 +82,7 @@ def test_a_source_that_lists_nothing_is_refused(tmp_path):
     config["path"] = str(tmp_path / "index")
     file = tmp_path / "pipeline.yaml"
     file.write_text(yaml.safe_dump(config), encoding="utf-8")
-    source = get_source("zip", path=make_zip(tmp_path / "empty.zip", {}))
+    source = get_source("zip", location=make_zip(tmp_path / "empty.zip", {}))
 
     with pytest.raises(ValueError):
         Pipeline.from_file(file).index.sync(source)
@@ -123,9 +123,36 @@ def test_the_example_modules_import_no_heavy_library():
         "import sys, importlib.util\n"
         "for n in ('zip_source', 'owner_access', 'json_file_store'):\n"
         f"    s = importlib.util.spec_from_file_location(n, r'{EXAMPLES}/' + n + '.py')\n"
-        "    importlib.util.module_from_spec(s); s.loader.exec_module(importlib.util.module_from_spec(s))\n"
+        "    m = importlib.util.module_from_spec(s); s.loader.exec_module(m)\n"
         "heavy = {'numpy', 'torch', 'lancedb', 'fsspec', 'pyarrow', 'pandas'}\n"
         "assert not heavy & set(sys.modules), heavy & set(sys.modules)\n"
     )
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert done.returncode == 0, done.stderr
+
+
+def test_zip_source_reads_a_relative_location_from_the_pipeline_file_folder(tmp_path):
+    import shutil
+
+    project, elsewhere = tmp_path / "project", tmp_path / "elsewhere"
+    project.mkdir()
+    elsewhere.mkdir()
+    shutil.copy(EXAMPLES / "zip_source.py", project)
+    make_zip(project / "docs.zip", {"primer.pdf": PDF.read_bytes()})
+    config = yaml.safe_load((ROOT / "examples" / "pandion" / "cli.yaml").read_text(encoding="utf-8"))
+    config.update({"path": "./index", "plugins": ["zip_source"], "source": {"use": "zip", "location": "docs.zip"}})
+    (project / "pipeline.yaml").write_text(yaml.safe_dump(config), encoding="utf-8")
+
+    done = subprocess.run(
+        [sys.executable, "-m", "pandion.cli", "sync", str(project / "pipeline.yaml")],
+        cwd=elsewhere, capture_output=True, text=True, timeout=600, encoding="utf-8",
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert '"added": 1' in done.stdout, done.stdout
+
+
+def test_zip_source_names_a_missing_entry(tmp_path):
+    source = load("zip_source").ZipSource(make_zip(tmp_path / "d.zip", {"a": b"x"}))
+    with pytest.raises(ValueError, match="nope"):
+        source.read("nope")

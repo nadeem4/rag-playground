@@ -15,11 +15,12 @@ from pandion.extend import SourceEntry, register_source
 class ZipSource:
     name: ClassVar[str] = "zip"
 
-    def __init__(self, path: str) -> None:
-        self.path = path
+    def __init__(self, location: str) -> None:
+        # `location` is the name a pipeline file's relative paths are resolved by.
+        self.location = location
 
     def list(self) -> Iterable[SourceEntry]:
-        with zipfile.ZipFile(self.path) as z:
+        with zipfile.ZipFile(self.location) as z:
             infos = [i for i in z.infolist() if not i.is_dir()]
         # The version must change whenever the content does: the crc and size do.
         return [
@@ -28,5 +29,8 @@ class ZipSource:
         ]
 
     def read(self, doc_id: str) -> bytes:
-        with zipfile.ZipFile(self.path) as z:
-            return z.read(doc_id)
+        with zipfile.ZipFile(self.location) as z:
+            try:
+                return z.read(doc_id)
+            except KeyError:
+                raise ValueError(f"The zip file has no entry named '{doc_id}'.") from None

@@ -553,6 +553,7 @@ Load it with `plugins: [my_rules]` in the pipeline file, like a strategy. A name
 already taken is refused. A registered check is listed by `pandion.catalog()["route"]` and by
 `GET /strategies` under `stages.route`, with its settings as a JSON schema, so an editor can offer it. Checks are not steps of the graph, so they have no cache and
 no `apply()`. A server that runs other people's requests does not accept `plugins`.
+[`route.py`](../examples/pandion/own_strategies/my_strategies/route.py) in
 [`examples/pandion/own_strategies/`](../examples/pandion/own_strategies) has this check.
 
 ### Context before embedding

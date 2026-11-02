@@ -128,10 +128,10 @@ The example is registered as `zip`:
 import zip_source  # registers "zip"
 from pandion.document_sources import get_source
 
-report = pipeline.index.sync(get_source("zip", path="docs.zip"))
+report = pipeline.index.sync(get_source("zip", location="docs.zip"))
 ```
 
-In the pipeline file, `source: {use: zip, path: docs.zip}` and `pandion sync` do the same.
+In the pipeline file, `source: {use: zip, location: docs.zip}` and `pandion sync` do the same.
 
 **A route check** looks at a `DocumentInfo` and returns True or False. The example is
 `is_invoice`. Register it with
@@ -141,8 +141,8 @@ In the pipeline file, `source: {use: zip, path: docs.zip}` and `pandion sync` do
 opinion. The example, `team_from_path`, gives `legal/a.pdf` the role `legal`. Use it as
 `access: {rules: [team_from_path]}`. A rule that fails leaves the document visible to nobody.
 
-**An index store** keeps the rows of an index. Apply the filter before you rank, and
-never return a row with no roles. The example is registered as `json_file`, proven with
+**An index store** keeps the rows of an index. Apply the filter before you rank; a row with empty
+roles never matches a roles filter. The example is registered as `json_file`, proven with
 `pandion.testing.store_conformance`, and used from code:
 
 ```python

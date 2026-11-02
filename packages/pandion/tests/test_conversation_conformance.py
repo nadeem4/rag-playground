@@ -133,3 +133,87 @@ def test_conformance_names_the_failing_check_in_the_error():
 
     with pytest.raises(AssertionError, match=r"^load_unknown_returns_none: RuntimeError: boom$"):
         conversation_store_conformance(Broken)
+
+
+class KeepsTurns(RefStore):
+    """Removes the conversation but leaves its turns behind for the next one with that id."""
+
+    def __init__(self):
+        super().__init__()
+        self.orphans = {}
+
+    def delete(self, conversation_id, user_id):
+        conv = self.convs.get(conversation_id)
+        if conv and conv.user_id == user_id:
+            self.orphans[conversation_id] = conv.turns
+            del self.convs[conversation_id]
+
+    def expire(self, older_than_days):
+        before = dict(self.convs)
+        count = super().expire(older_than_days)
+        for cid, conv in before.items():
+            if cid not in self.convs:
+                self.orphans[cid] = conv.turns
+        return count
+
+    def append(self, conversation_id, user_id, turn):
+        fresh = conversation_id not in self.convs
+        super().append(conversation_id, user_id, turn)
+        if fresh and conversation_id in self.orphans:
+            self.convs[conversation_id].turns[:0] = self.orphans.pop(conversation_id)
+
+
+def test_conformance_catches_a_delete_that_keeps_the_turns():
+    with pytest.raises(AssertionError, match="delete_removes_only_the_owners_conversation"):
+        conversation_store_conformance(KeepsTurns)
+
+
+def test_conformance_catches_an_expire_that_keeps_the_turns():
+    class OnlyExpireLeaks(KeepsTurns):
+        def delete(self, conversation_id, user_id):
+            RefStore.delete(self, conversation_id, user_id)
+
+    with pytest.raises(AssertionError, match="expire_deletes_old_conversations_and_counts_them"):
+        conversation_store_conformance(OnlyExpireLeaks)
+
+
+def test_conformance_catches_an_expire_that_ages_by_the_first_turn():
+    class AgesByStart(RefStore):
+        def expire(self, older_than_days):
+            for c in self.convs.values():
+                c.updated_at = c.created_at
+            return super().expire(older_than_days)
+
+    with pytest.raises(AssertionError, match="expire_deletes_old_conversations_and_counts_them"):
+        conversation_store_conformance(AgesByStart)
+
+
+def test_conformance_catches_a_list_in_insertion_order():
+    class Unsorted(RefStore):
+        def list(self, user_id):
+            return [
+                ConversationInfo(id=c.id, title=c.turns[0].question[:80], turns=len(c.turns), updated_at=c.updated_at)
+                for c in reversed(list(self.convs.values())) if c.user_id == user_id]
+
+    with pytest.raises(AssertionError, match="list_shows_only_own_conversations_newest_first"):
+        conversation_store_conformance(Unsorted)
+
+
+def test_conformance_catches_a_delete_that_removes_the_users_other_conversations():
+    class DeletesAll(RefStore):
+        def delete(self, conversation_id, user_id):
+            for cid in [k for k, c in self.convs.items() if c.user_id == user_id and conversation_id in self.convs]:
+                del self.convs[cid]
+
+    with pytest.raises(AssertionError, match="delete_removes_only_the_owners_conversation"):
+        conversation_store_conformance(DeletesAll)
+
+
+def test_a_turn_time_is_normalised_to_one_utc_format():
+    from pandion.conversation_store import Turn
+
+    assert Turn(question="q", answer="a", created_at="2026-01-02T03:04:05Z").created_at == "2026-01-02T03:04:05+00:00"
+    assert Turn(question="q", answer="a", created_at="2026-01-02T03:04:05+02:00").created_at == "2026-01-02T01:04:05+00:00"
+    assert Turn(question="q", answer="a").created_at == ""
+    with pytest.raises(ValueError):
+        Turn(question="q", answer="a", created_at="yesterday")

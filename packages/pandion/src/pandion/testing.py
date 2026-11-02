@@ -281,9 +281,9 @@ def check_append_by_another_user_is_refused(store):
 
 @_conv_check
 def check_list_shows_only_own_conversations_newest_first(store):
-    store.append("old", "u1", _turn("x" * 200, created_at=_ago(2)))
     store.append("new", "u1", _turn("fresh", created_at=_ago(1)))
     store.append("new", "u1", _turn("again", created_at=_ago(1)))
+    store.append("old", "u1", _turn("x" * 200, created_at=_ago(2)))
     store.append("other", "u2", _turn("not yours"))
     got = store.list("u1")
     _expect([i.id for i in got] == ["new", "old"], "list must show the user's own conversations, newest first")
@@ -293,12 +293,18 @@ def check_list_shows_only_own_conversations_newest_first(store):
 
 @_conv_check
 def check_delete_removes_only_the_owners_conversation(store):
-    store.append("c1", "u1", _turn())
+    store.append("c1", "u1", _turn("gone"))
+    store.append("c2", "u1", _turn("kept"))
     store.delete("c1", "u2")
     _expect(store.load("c1", "u1") is not None, "another user must not delete a conversation")
     store.delete("nope", "u1")
     store.delete("c1", "u1")
     _expect(store.load("c1", "u1") is None, "the owner's delete must remove the conversation")
+    _expect(store.load("c2", "u1") is not None, "a delete must leave the user's other conversations")
+    store.append("c1", "u2", _turn("new owner"))
+    got = store.load("c1", "u2")
+    _expect(got is not None and [t.question for t in got.turns] == ["new owner"],
+            "a delete must remove the conversation's turns too, not only the conversation")
 
 
 @_conv_check
@@ -333,12 +339,19 @@ def check_delete_memory_by_another_user_does_nothing(store):
 
 @_conv_check
 def check_expire_deletes_old_conversations_and_counts_them(store):
-    store.append("old", "u1", _turn(created_at=_ago(100)))
+    store.append("old", "u1", _turn("o", created_at=_ago(100)))
     store.append("fresh", "u1", _turn())
+    store.append("long", "u1", _turn("started long ago", created_at=_ago(100)))
+    store.append("long", "u1", _turn("still talking"))
     _expect(store.expire(30) == 1, "expire must return how many conversations it deleted")
     _expect(store.load("old", "u1") is None and store.load("fresh", "u1") is not None,
             "expire must delete only conversations whose newest turn is older than the limit")
+    _expect(store.load("long", "u1") is not None, "a conversation is as old as its newest turn, not its first")
     _expect(store.expire(30) == 0, "a second expire has nothing left to delete")
+    store.append("old", "u2", _turn("new owner"))
+    got = store.load("old", "u2")
+    _expect(got is not None and [t.question for t in got.turns] == ["new owner"],
+            "expire must remove the conversation's turns too, not only the conversation")
 
 
 @_conv_check

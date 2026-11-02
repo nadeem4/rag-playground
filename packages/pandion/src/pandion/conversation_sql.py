@@ -115,7 +115,11 @@ class SqlStore:
         t["meta"].create_all(engine)
         with engine.begin() as conn:
             if conn.execute(sa.select(schema.c.value).where(schema.c.key == "conversations")).first() is None:
-                conn.execute(sa.insert(schema).values(key="conversations", value=_SCHEMA_VERSION))
+                try:
+                    with conn.begin_nested():
+                        conn.execute(sa.insert(schema).values(key="conversations", value=_SCHEMA_VERSION))
+                except sa.exc.IntegrityError:
+                    pass  # another server starting at the same time wrote the row first
 
     def _sa(self):
         self.check()
@@ -146,14 +150,14 @@ class SqlStore:
                 self._append_once(sa, conversation_id, user_id, turn)
                 return
             except sa.exc.IntegrityError:
-                # Two servers took the same position, or made the conversation together; try again.
+                # Two servers made the conversation together; try again.
                 if attempt == _RETRIES - 1:
                     raise
 
     def _append_once(self, sa, conversation_id: str, user_id: str, turn: Turn) -> None:
         c, turns = self._t["conversations"], self._t["turns"]
         with self._engine.begin() as conn:
-            row = conn.execute(sa.select(c.c.user_id, c.c.updated_at).where(c.c.id == conversation_id)).first()
+            row = conn.execute(sa.select(c.c.user_id).where(c.c.id == conversation_id)).first()
             if row is None:
                 position = 0
                 conn.execute(sa.insert(c).values(
@@ -162,11 +166,13 @@ class SqlStore:
             elif row.user_id != user_id:
                 raise ConversationNotFound(f"There is no conversation '{conversation_id}' for this user.")
             else:
+                # Update first: it locks the conversation row, so appends to it take turns and the
+                # position read below is not stale. Only a race to create the row can collide.
+                conn.execute(sa.update(c).where(c.c.id == conversation_id).values(
+                    updated_at=sa.case((c.c.updated_at < turn.created_at, turn.created_at), else_=c.c.updated_at)))
                 position = conn.execute(
                     sa.select(sa.func.coalesce(sa.func.max(turns.c.position), -1) + 1)
                     .where(turns.c.conversation_id == conversation_id)).scalar_one()
-                conn.execute(sa.update(c).where(c.c.id == conversation_id)
-                             .values(updated_at=max(row.updated_at, turn.created_at)))
             conn.execute(sa.insert(turns).values(
                 conversation_id=conversation_id, position=position, data=turn.model_dump_json()))
 

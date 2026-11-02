@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import ClassVar, Protocol
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 TITLE_LENGTH = 80
 
@@ -22,6 +22,16 @@ TITLE_LENGTH = 80
 def utc_now() -> str:
     """The time a store stamps on what it keeps: UTC, ISO 8601, to the second."""
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def _utc(value: str) -> str:
+    """One UTC format for every stored time, so times sort as text."""
+    if not value:
+        return value
+    when = datetime.fromisoformat(value)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    return when.astimezone(UTC).isoformat(timespec="seconds")
 
 
 class Turn(BaseModel):
@@ -32,6 +42,11 @@ class Turn(BaseModel):
     source_ids: list[str] = []
     trace_id: str = ""
     created_at: str = ""
+
+    @field_validator("created_at")
+    @classmethod
+    def _created_at_is_utc(cls, value: str) -> str:
+        return _utc(value)
 
 
 class Conversation(BaseModel):

@@ -104,3 +104,55 @@ def test_concurrent_appends_keep_every_turn(tmp_path):
 def test_the_store_is_found_by_name(tmp_path):
     store = get_conversation_store("sql", {"url": sqlite_url(tmp_path / "n.db")})
     assert isinstance(store, SqlStore)
+
+
+def test_a_lost_race_for_a_position_is_retried_and_positions_stay_consecutive(tmp_path, monkeypatch):
+    import sqlalchemy as sa
+
+    store = SqlStore(SqlSettings(url=sqlite_url(tmp_path / "race.db")))
+    store.append("c1", "u1", Turn(question="first", answer="a"))
+    real, calls = store._append_once, []
+
+    def lose_once(sa_mod, conversation_id, user_id, turn):
+        calls.append(turn.question)
+        if len(calls) == 1:  # another server wins the position, and this attempt is rolled back
+            real(sa_mod, conversation_id, user_id, Turn(question="other server", answer="a"))
+            raise sa.exc.IntegrityError("insert", {}, Exception("duplicate position"))
+        real(sa_mod, conversation_id, user_id, turn)
+
+    monkeypatch.setattr(store, "_append_once", lose_once)
+    store.append("c1", "u1", Turn(question="mine", answer="a"))
+    assert calls == ["mine", "mine"]
+    assert [t.question for t in store.load("c1", "u1").turns] == ["first", "other server", "mine"]
+    engine = sa.create_engine(sqlite_url(tmp_path / "race.db"))
+    with engine.connect() as conn:
+        positions = conn.execute(sa.text("select position from turns order by position")).scalars().all()
+    engine.dispose()
+    assert positions == [0, 1, 2]
+
+
+def test_two_servers_starting_together_do_not_fail_on_the_schema_row(tmp_path, monkeypatch):
+    import sqlalchemy as sa
+
+    url = sqlite_url(tmp_path / "start.db")
+    SqlStore(SqlSettings(url=url)).list("u1")  # the first server made the schema row
+    real_first, seen = sa.engine.CursorResult.first, []
+
+    def first_misses_once(self):
+        if not seen:  # the second server read before the first one wrote
+            seen.append(1)
+            self.close()
+            return None
+        return real_first(self)
+
+    monkeypatch.setattr(sa.engine.CursorResult, "first", first_misses_once)
+    assert SqlStore(SqlSettings(url=url)).list("u1") == []
+    assert seen
+
+
+def test_times_in_any_offset_sort_as_one_utc_format(tmp_path):
+    store = SqlStore(SqlSettings(url=sqlite_url(tmp_path / "t.db")))
+    store.append("a", "u1", Turn(question="later", answer="a", created_at="2026-01-02T03:00:00Z"))
+    store.append("b", "u1", Turn(question="earlier", answer="a", created_at="2026-01-02T04:00:00+02:00"))
+    assert [i.id for i in store.list("u1")] == ["a", "b"]
+    assert store.load("b", "u1").turns[0].created_at == "2026-01-02T02:00:00+00:00"

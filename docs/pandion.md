@@ -2564,7 +2564,8 @@ A document can hold text written to steer the model, for example "ignore the rul
 - **Links removed.** `chat_turn` removes every link, image and web address from the reply unless the same address is written in one of the pieces retrieved for that answer. An image is dropped whole, a link keeps its label, and a bare address becomes `[link removed]`. A `data:` or `javascript:` target is always removed. Matching ignores the scheme, the case of the host, a trailing slash and trailing punctuation. Only `TurnResult.text` and the stored answer change; `TurnResult.answer` is the pipeline's answer as it was. Turn this off with `ChatSettings(strip_urls=False)`.
 - The answer step has no tools in release 1, so a reply can only act through what a screen does with it. If you show answers, do not load images or follow links in them automatically.
 - `pandion.answer_safety` holds `fence_text`, `new_marker` and `strip_unsourced_urls`. It is **Provisional**.
-- The default prompts changed, so a pipeline that sets its own `prompt` does not get the new sentence. Add it yourself. Answers cached before this release are not reused, because the prompt is part of the cache key.
+- The default prompts changed, so a pipeline that sets its own `prompt` does not get the new sentence. Add it yourself.
+- Known gaps: scheme-less raw HTML such as `<img src=//host/x>` is not stripped, and an `http` address is kept when a source holds the same address with `https`.
 
 ## Rolling out a new index
 

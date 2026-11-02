@@ -17,7 +17,7 @@ import secrets
 from collections.abc import Sequence
 
 #: The start of any fence line, opening or closing, that a source could forge.
-_FENCE_LIKE = re.compile(r"<<(?=(?:end )?SOURCE-)")
+_FENCE_LIKE = re.compile(r"(?i)<<\s*(?=(?:end\s+)?source-)")
 _ZERO_WIDTH_SPACE = "​"
 
 
@@ -35,8 +35,8 @@ def fence_text(text: str, marker: str, label: str = "") -> str:
 # One pass, in this order: image, link, autolink, then a bare address.
 _TAIL = ".,;:!?)'\""
 _URL = re.compile(
-    r"""(?P<image>!\[(?P<ialt>[^\]]*)\]\((?P<iurl>(?:[^()\s]|\([^()\s]*\))*)[^)]*\))
-      | (?P<link>\[(?P<label>[^\]]*)\]\((?P<lurl>(?:[^()\s]|\([^()\s]*\))*)[^)]*\))
+    r"""(?P<image>!\[(?P<ialt>[^\[\]]*)\]\((?P<iurl>(?:[^()\s]|\([^()\s]*\))*)[^)]*\))
+      | (?P<link>\[(?P<label>[^\[\]]*)\]\((?P<lurl>(?:[^()\s]|\([^()\s]*\))*)[^)]*\))
       | (?P<auto><(?P<aurl>[a-z][a-z0-9+.-]*:[^>\s]*)>)
       | (?P<bare>(?:https?://|www\.)[^\s<>\[\]]+)""",
     re.IGNORECASE | re.VERBOSE,

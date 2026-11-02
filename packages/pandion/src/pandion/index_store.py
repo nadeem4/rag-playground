@@ -50,6 +50,8 @@ class IndexMeta(BaseModel):
     metric: Metric
     recipe_hash: str
     format_version: int = 1
+    #: When the collection was made (UTC, ISO 8601); empty for one made before this field.
+    created_at: str = ""
 
 
 class Binding(BaseModel):

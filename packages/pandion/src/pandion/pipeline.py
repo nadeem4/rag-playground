@@ -1035,6 +1035,7 @@ class IndexPipeline:
         after = Manifest(
             index_recipe=recipe,
             index_artifact=report.index.artifact_id,
+            index_collection=(report.index.output or {}).get("collection"),
             documents={
                 doc_id: {
                     "content_hash": file.sha,

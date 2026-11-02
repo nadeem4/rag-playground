@@ -162,6 +162,18 @@ def test_a_failed_sync_drops_nothing(setup):
     (docs / "bad.pdf").write_bytes(b"not a pdf")
     report = sync(config, docs)
 
-    assert report.index is None
+    assert report.index.output is None
     assert {one, two} <= set(lance(config).list())
     assert json.loads((config.parent / "index" / MANIFEST).read_text())["index_collection"] == two
+
+
+def test_cleanup_in_one_qdrant_prefix_never_touches_another(tmp_path):
+    pytest.importorskip("qdrant_client")
+    here = {"location": str(tmp_path / "q")}
+    mine = get_store("qdrant", {**here, "prefix": "mine"})
+    theirs = get_store("qdrant", {**here, "prefix": "theirs"})
+    made(mine, name(1), 90)
+    made(theirs, name(2), 90)
+
+    assert drop_stale(mine, keep=set(), now=NOW) == [name(1)]
+    assert theirs.list() == [name(2)]

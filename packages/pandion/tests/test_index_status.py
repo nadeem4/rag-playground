@@ -92,18 +92,17 @@ def test_not_ready_when_the_embedder_revision_changed(tmp_path, docs, monkeypatc
     assert not status.ready and "embedding model" in status.reason
 
 
-def test_not_ready_when_the_collection_is_from_a_newer_pandion(tmp_path, docs, monkeypatch):
+def test_not_ready_when_the_collection_is_from_a_newer_pandion(tmp_path, docs):
+    import lancedb
+
     file = config(tmp_path)
-    pipeline(file).index.sync(docs)
-    real = type(get_store("lancedb", {"location": str(tmp_path)}))
-    original = real.open
-
-    def open(self, name):
-        found = original(self, name)
-        found.meta().format_version = 2
-        return found
-
-    monkeypatch.setattr(real, "open", open)
+    report = pipeline(file).index.sync(docs)
+    name = report.index.output["collection"]
+    path = str(tmp_path / "index" / "index")
+    meta = get_store("lancedb", {"location": path}).open(name).meta().model_copy(update={"format_version": 2})
+    table = lancedb.connect(path).open_table("_pandion_meta")
+    table.update(where=f"name = '{name}'", values={"meta_json": meta.model_dump_json()})
+    del table
     status = pipeline(file).index.index_status()
     assert not status.ready and "upgrade pandion" in status.reason.lower()
 

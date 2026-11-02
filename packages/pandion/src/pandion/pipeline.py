@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import re
 import threading
+from datetime import datetime, timezone
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
@@ -57,6 +58,11 @@ from pandion.docinfo import DocumentInfo, document_info
 from pandion.formats import UnreadableFormat, check_contents, check_readable, format_of
 from pandion.synclock import sync_lock
 from pandion.graph import Edge, Graph, Node
+from pandion.artifacts import ArtifactType
+from pandion.embeddings import get_embedder
+from pandion.errors import FormatTooNew
+from pandion.index_retention import drop_stale
+from pandion.index_store import Binding, binding_settings, get_store, open_binding
 from pandion.manifest import MANIFEST, Manifest, recipe_hash
 from pandion.payloads import ChunkSet, Hit, Output, ParsedDoc, Query, RetrievalResult
 from pandion.plugins import discover
@@ -542,6 +548,15 @@ class Pipeline:
             question, k, documents=documents, where=where, roles=roles, credentials=credentials,
             on_event=on_event, cancel=cancel, force=force,
         )
+
+
+@dataclass(frozen=True)
+class IndexStatus:
+    """Whether a pipeline's own collection is ready. `reason` is empty when it is."""
+
+    ready: bool
+    collection: str | None
+    reason: str
 
 
 class IndexPipeline:
@@ -1079,7 +1094,65 @@ class IndexPipeline:
             after.save(self.config.path / MANIFEST)
             if before.index_artifact and before.index_artifact != after.index_artifact:
                 self.store.delete(before.index_artifact)
+            self._clean_up(report.index.output, keep={after.index_collection, before.index_collection})
         return sync
+
+    def _clean_up(self, binding: Any, keep: set[str | None]) -> None:
+        """Drop collections of this store that are past the grace period and
+        are neither the new one nor the one before it. Never fails a sync."""
+        if not isinstance(binding, dict):
+            return
+        try:
+            parsed = Binding.model_validate(binding)
+            store = get_store(parsed.store, binding_settings(binding, str(self.config.path / "index")))
+            drop_stale(store, keep={k for k in keep if k}, now=datetime.now(timezone.utc))
+        except Exception:
+            pass
+
+    def index_status(self) -> IndexStatus:
+        """Whether this pipeline's own collection is there to be searched.
+
+        Reads the manifest and the store; never writes, parses or embeds.
+        Ready needs a manifest that names a collection, the collection in its
+        store, the same recipe, the same embedding model revision and a format
+        this version reads. Otherwise `reason` says in one sentence what to do."""
+        manifest = Manifest.load(self.config.path / MANIFEST)
+        name = manifest.index_collection
+        if not name or not manifest.index_artifact:
+            return IndexStatus(False, None, "Nothing is synced yet. Run pandion sync with this file.")
+        try:
+            binding = self.store.load(manifest.index_artifact, ArtifactType.INDEX)
+        except Exception:
+            return IndexStatus(False, name, "The index record is missing. Run pandion sync with this file.")
+        try:
+            collection = open_binding(binding, str(self.config.path / "index"))
+            meta = collection.meta()
+        except FormatTooNew as exc:
+            return IndexStatus(False, name, str(exc))
+        except ValueError:
+            return IndexStatus(
+                False, name, f"The collection {name} is not in the store. Run pandion sync with this file."
+            )
+        mine = recipe_hash(self.config.index)
+        if meta.recipe_hash != mine:
+            return IndexStatus(
+                False,
+                name,
+                f"This server's recipe is {mine[:4]}, but the collection was built from {meta.recipe_hash[:4]}. "
+                "Run pandion sync with this file, or deploy the image that matches it.",
+            )
+        try:
+            revision = get_embedder(meta.embed_model).revision
+        except Exception as exc:
+            return IndexStatus(False, name, f"The embedding model {meta.embed_model} cannot be built: {exc}")
+        if revision != meta.embed_revision:
+            return IndexStatus(
+                False,
+                name,
+                f"The embedding model {meta.embed_model} is revision {revision} here, but the collection was "
+                f"built with {meta.embed_revision}. Run pandion sync to rebuild it.",
+            )
+        return IndexStatus(True, name, "")
 
     def add(
         self,

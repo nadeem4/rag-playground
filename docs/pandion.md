@@ -40,6 +40,7 @@ installs the built package in new environments, with and without extras, and tes
 - [The pandion command](#the-pandion-command)
 - [Who may read a document](#who-may-read-a-document)
 - [Index stores](#index-stores)
+- [Rolling out a new index](#rolling-out-a-new-index)
 - [Write your own strategy](#write-your-own-strategy)
 - [Loading your strategies](#loading-your-strategies)
 - [Errors](#errors)
@@ -2301,6 +2302,38 @@ A folder holds one open Qdrant at a time, so use a server when more than one pro
 A filter on a list-valued field with `eq` or `in` matches if any element matches in Qdrant, where the memory store matches nothing; use `any_of` for lists (roles and pages do). `in` takes whole numbers and text, not decimals.
 
 To run the store tests against a real server, set `QDRANT_URL`, for example `QDRANT_URL=http://localhost:6333 uv run pytest packages/pandion/tests/test_index_qdrant.py`. Without it that one test is skipped.
+
+## Rolling out a new index
+
+Every sync builds its rows into a new collection in the store. The name is made of two
+parts: the first 16 characters of the recipe hash (a hash of the index settings), then 12
+characters of the id of the index step, which also covers the documents and the embedding
+model revision. A change to the settings, the documents or the model therefore makes a new
+collection, and two document sets of one recipe never overwrite each other. After a
+sync that worked, `manifest.json` names the collection in `index_collection`.
+
+A server asks whether its own collection is there with `p.index.index_status()`:
+
+```python
+status = Pipeline.from_file("pipeline.yaml").index.index_status()
+if not status.ready:
+    print(status.reason)   # one sentence that says what to do
+```
+
+It is ready only when the manifest names a collection, the store has it, the collection was
+built from the same recipe as this file, the embedding model has the same revision, and the
+collection is in a format this Pandion reads. It never writes, parses or embeds, and it loads
+no model.
+
+The collection from before the last sync stays, so a server on the previous image or file
+keeps working and rolling back is redeploying it. After a sync that worked, any collection
+Pandion named that is neither the new one nor the previous one, and was made more than 7 days
+ago, is dropped. Collections with other names, in the same folder or the same Qdrant prefix,
+are never touched, and neither is a collection with no recorded creation time. Nothing
+reloads a running server onto a new collection: start it again from the new file.
+
+If the folder of the index is deleted, or its collection was cleaned up while the cache
+still holds the record, the next sync builds the index again from the cached embeddings.
 
 ## Write your own strategy
 

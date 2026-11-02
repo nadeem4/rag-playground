@@ -290,6 +290,24 @@ a role change rebuilds the index step from the cached chunks and embeddings, wit
 A search filters on the caller's roles inside the store, before ranking, and a rule that fails
 leaves its document with no roles.
 
+After a sync that worked, the manifest also records the collection the rows went to
+(`index_collection`), and older collections are cleaned up:
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%
+flowchart TD
+    A["sync builds a new collection: recipe hash + step id"] --> B["manifest.index_collection names it"]
+    B --> C["the previous collection stays: a server on the old image still works"]
+    C --> D{"Pandion-named, not new, not previous, older than 7 days?"}
+    D -- yes --> E["drop it"]
+    D -- no --> F["keep it"]
+```
+
+`index_status()` is the server's check that its own collection exists, matches its recipe and
+embedding model revision, and is a format this version reads. A stored index whose collection
+is gone is not a cache hit: the step runs again. Nothing reloads a running server onto a new
+collection.
+
 ## Artifacts and the cache
 
 An artifact's id is a hash of its recipe: the transform, the transform's version, its

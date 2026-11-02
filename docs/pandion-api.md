@@ -403,7 +403,7 @@ app = create_app(
     mode="serve",
     pipeline="pipeline.yaml",
     conversations=None,           # None: SQL on PANDION_CONVERSATIONS_URL, else a SQLite file in data_dir
-    serve=ServeSettings(),        # chat settings, retention_days and the limits below
+    serve=ServeSettings(),        # chat settings, retention_days, metrics_port and the limits below
 )
 ```
 
@@ -554,6 +554,53 @@ model has the GenAI attributes `gen_ai.operation.name`, `gen_ai.request.model`,
 request's trace id. Question text is a span attribute only when `PANDION_LOG_CONTENT=true`.
 A failed step marks its span, and the turn's span, as an error. Spans for sync runs are not
 part of release 1.
+
+### Metrics
+
+Serve mode can expose Prometheus metrics on a port of their own. Install the extra and set
+the port. Metrics are off until you do, and then `prometheus_client` is not imported.
+
+```bash
+pip install "pandion-api[metrics]"
+```
+
+```python
+create_app(settings, mode="serve", pipeline="pipeline.yaml", serve=ServeSettings(metrics_port=9464))
+```
+
+Port 9464 is the usual choice. Prometheus scrapes it like this:
+
+```yaml
+scrape_configs:
+  - job_name: pandion
+    static_configs:
+      - targets: ["your-host:9464"]
+```
+
+| Metric | Labels | What it counts |
+|---|---|---|
+| `requests_total` | `route`, `status` | Requests. `route` is the route template such as `/conversations/{conversation_id}`, and `unmatched` for a path no route has. |
+| `step_seconds` | `step` | A histogram of how long each pipeline step took. |
+| `tokens_total` | `step`, `kind` | Model tokens. `kind` is `input` or `output`. |
+| `cost_estimated_usd_total` | none | Estimated dollars of answered turns. A model with no price adds nothing. |
+| `errors_total` | `step` | Steps that failed. |
+| `turns_flagged_total` | `category` | Answered turns with at least one claim graded `weak`, `none` or `not_found`. |
+
+No label ever holds a question, an answer, a user id, a conversation id or a chunk id, so the
+number of series stays small. A `feedback_total` metric arrives with the feedback route.
+
+Teams usually want three ratios, which you write in your own dashboard. The error rate of a
+step is `errors_total` divided by `step_seconds_count + errors_total` for the same step. The
+share of flagged turns is `turns_flagged_total` divided by the answered turns, which is the
+`/chat` requests with status 200. That count includes replies with `ok: false`, which also
+return 200. A request refused by the body size limit (413) is counted with `route="unmatched"`. The cost per turn is the rate of `cost_estimated_usd_total`
+divided by that same request rate.
+
+To turn metrics off, leave `metrics_port` as `None`. If the port is taken, the server stops
+at startup and says which port. If your gateway blocks a second port, set
+`ServeSettings(metrics_on_app=True)` to serve `GET /metrics` on the API port as well. It is a
+404 otherwise. Never expose that route to the internet: put it behind your gateway's
+network rules. The metrics port listens on every network interface, so firewall it too.
 
 ## Site rules: the Policy
 

@@ -86,8 +86,8 @@ class TraceIdMiddleware:
     """Gives each request a fresh trace id (an incoming one is never trusted),
     puts it in `request.state.trace_id` and the `X-Trace-Id` header, and logs one request line."""
 
-    def __init__(self, app: Any) -> None:
-        self.app = app
+    def __init__(self, app: Any, metrics: Any = None) -> None:
+        self.app, self.metrics = app, metrics
 
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         if scope["type"] != "http":
@@ -108,6 +108,8 @@ class TraceIdMiddleware:
             await self.app(scope, receive, send_with_id)
         finally:
             route = scope.get("route")
+            if self.metrics:  # an unmatched path is one label, never the raw path
+                self.metrics.request(getattr(route, "path", "unmatched"), status)
             logging.getLogger("pandion_api.request").info(
                 "Request.",
                 extra={

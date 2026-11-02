@@ -49,6 +49,8 @@ dev = [
     "pandion[sql]",
     # The OpenTelemetry span tests (pandion-api[otel]).
     "pandion-api[otel]",
+    # The Prometheus metrics tests (pandion-api[metrics]).
+    "pandion-api[metrics]",
     "httpx2>=2.13.0",
     "pytest>=8.3",
     "pytest-cov>=5.0",

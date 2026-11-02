@@ -109,7 +109,7 @@ def test_move_reruns_only_that_document(tmp_path, pdfs):
     assert report.index.artifact_id != first.index.artifact_id
     assert not set(old_pieces) & set(rows(report, tmp_path))
     assert set(chunk_ids(report, "a.pdf")) <= set(rows(report, tmp_path))
-    assert not p.index.store.has(first.index.artifact_id)
+    assert p.index.store.has(first.index.artifact_id)  # the previous record stays beside its collection
 
 
 def test_move_to_the_same_category_runs_nothing(tmp_path, pdfs):

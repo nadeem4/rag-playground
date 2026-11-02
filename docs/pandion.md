@@ -2500,11 +2500,29 @@ fold_summary(store, conversation_id=first.conversation_id, user_id="ana")  # aft
 
 - A first turn costs no rewrite call. When the rewrite call fails, or its reply is empty, or longer than 300 characters or more than one line, the question is searched as typed, so a reply is never lost to a rewrite.
 - The history is placed inside a labelled block and the model is told it is text to read, not instructions.
-- `ChatSettings` holds `last_turns` (default 6, at least 1), `rewrite_model` and `summary_model` (default `claude-haiku-4-5`, any key of `pandion.llm.CHAT_MODELS`) and `memory` (default off; it is used by a later release).
+- `ChatSettings` holds `last_turns` (default 6, at least 1), `rewrite_model` and `summary_model` (default `claude-haiku-4-5`, any key of `pandion.llm.CHAT_MODELS`) and `memory` (default off; see [Memory across conversations](#memory-across-conversations)).
 - The turn emits one event, `chat_rewrite`, with `standalone` and `reason` (`no history`, `rewritten`, `failed` or `too long`), through `on_event`, with the `trace_id` when one was given. An empty reply (or a refusal) counts as `failed`.
 - `fold_summary(store, *, conversation_id, user_id, settings=None, credentials=None)` folds the turns older than the last `last_turns` into the running summary, keeps those last turns verbatim, and returns `True`. It returns `False`, calling no model, when there is nothing new to fold or the conversation is not the user's, so calling it again does no harm. A summary over 1,500 characters is cut at a sentence end. A failed model call raises and changes nothing, so the next call folds the same turns again. Pandion starts no thread: run it after replying so the user never waits.
 
 The example [`chat_turn.py`](../examples/pandion/chat_turn.py) runs a first turn offline, and with `ANTHROPIC_API_KEY` set a follow-up too.
+
+### Memory across conversations
+
+Memory is **off by default**. With `ChatSettings(memory=True)`, Pandion can remember short facts a user shared about themselves ("I work in the Berlin office"), so a later question such as "my office address?" means something even in a new conversation.
+
+```python
+settings = ChatSettings(memory=True)
+reply = chat_turn(p, store, user_id="ana", question="I work in the Berlin office. Where is the printer?", settings=settings)
+remember(store, user_id="ana", question="I work in the Berlin office. Where is the printer?", settings=settings)  # after replying
+for m in store.memories("ana"):    # the user can list their memories
+    print(m.id, m.text)
+store.delete_memory("ana", m.id)   # and delete one
+```
+
+- `remember(store, *, user_id, question, settings=None, credentials=None)` returns the `Memory` rows it added. Run it after replying, like `fold_summary`, so the user never waits. It sends only the user's own question, never an answer or a source, to the `summary_model`, and keeps at most 3 short facts (200 characters each). Empty facts and duplicates (ignoring case and spacing) are dropped. A reply that cannot be read, or a failed call, adds nothing and raises nothing.
+- With memory on, `chat_turn` reads the user's newest 20 memories, and no one else's, and puts them in the rewrite prompt inside a labelled block. A first turn then costs one rewrite call, because a memory can change what a question means. With memory off, the store's memories are never read and no extra call is made.
+- Memories shape the rewrite only. Like history, they never reach the answer step and never count as sources: the answer step is asked only the standalone question.
+- Privacy: with memory on, the user's question is sent to the summary model's provider to extract facts, and the memories are sent to the rewrite model. Memories stay until the user deletes one through the store (`memories`, `delete_memory`); `expire` removes conversations, not memories.
 
 ## Rolling out a new index
 

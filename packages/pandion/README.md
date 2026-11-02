@@ -110,7 +110,9 @@ left out): the same pipeline, from the command line. `pandion eval pipeline.yaml
 conversation kept in a conversation store (`pandion[sql]`). A follow-up is first rewritten
 into a question that stands alone, using the running summary and the last turns, and the
 answer step is asked only that question, so history gives meaning and only the sources give
-facts. `fold_summary` folds older turns into the summary; run it after replying. Both are
+facts. `fold_summary` folds older turns into the summary; run it after replying. With
+`ChatSettings(memory=True)` (off by default), `remember` keeps a user's short facts and they
+help the rewrite only, never the answer. All are
 Provisional. See [A chat turn](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#a-chat-turn)
 and [`chat_turn.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/chat_turn.py).
 

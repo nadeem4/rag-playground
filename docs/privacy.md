@@ -26,6 +26,12 @@ with a run, and a question set while it is checked.
 | Build's results and the questions you asked | In this tab only | Until you close the tab. They let you leave Build and come back to the same answer. |
 | API keys you add | In this tab's memory only | Until you close or reload the tab. A key is sent with each request that needs it and is never written to storage, a cookie, a link or a saved file. |
 
+## In the Pandion package
+
+| What | Where | How long |
+|---|---|---|
+| Memories (only when you turn memory on in code) | In the conversation store you chose | Until the user deletes one. When memory is on, the user's question is sent to the summary model to extract facts, and the memories are sent to the rewrite model. The playground does not turn memory on. |
+
 ## On the demo server
 
 | What | Where | How long |

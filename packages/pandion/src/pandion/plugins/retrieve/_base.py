@@ -295,6 +295,10 @@ def make_hit(
     `chunk` is the canonical chunk, offsets and provenance included.
     """
     chunk = Chunk.model_validate(json.loads(hit.row.chunk))
+    # The document's id and labels the index step wrote as `source_*` row metadata.
+    source = {k[7:]: str(v) for k, v in hit.row.metadata.items() if k.startswith("source_")}
+    if source:
+        chunk = chunk.model_copy(update={"metadata": {**chunk.metadata, "source": source}})
     return Hit(
         chunk=chunk,
         score=float(score),

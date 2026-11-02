@@ -841,6 +841,16 @@ adding it does not rebuild any index. It is separate from `index.source`, which 
 pipeline's source step and stays `upload` for a sync. A file without a `source:` block
 makes `sync_source` raise a `ValueError` that says so.
 
+Each row the index keeps then names its document. The row's metadata gets `source_id`, the
+document id (for a folder, its path), and `source_<label>` for each label the source gave
+(`source_content_type`, `source_path` and so on). A label key is lower-cased, and any
+character that is not a letter, digit or underscore becomes `_`. The `roles` label is access
+data and is not copied. Only the document id and the labels reach a row, never a source's
+settings or `storage_options`. A document you sync or add as a file gets `source_id` too, its name,
+so its citations can name it. This changes the id of every built-in index
+result once, so an index built before this version rebuilds its index step on the next sync
+(the parsing and embedding stay cached).
+
 Keep keys and passwords out of the file, because a pipeline file is usually committed.
 `storage_options` is accepted by the `files` source, but fsspec reads credentials from the
 environment (for example `GOOGLE_APPLICATION_CREDENTIALS` or `AWS_ACCESS_KEY_ID`), and that
@@ -907,7 +917,10 @@ not built again.
 **What each step did.** `retrieve` returns a `Retrieval`:
 
 - `result.hits`, the hits, best first. Each has `rank`, `score` and `chunk`, and after a
-  reranker also `prior_rank` and `prior_score`, which say where it stood before.
+  reranker also `prior_rank` and `prior_score`, which say where it stood before. When the
+  index kept the document's id and labels (see [Sync from a source](#sync-from-a-source)),
+  `chunk.metadata["source"]` holds them, for example `{"id": "hr/pay.pdf", "owner": "hr"}`.
+  An index built before that has no `source` key.
 - `result.result`, the last step's whole `RetrievalResult`.
 - `result.stages["rewrite"]`, `result.stages["search"]` and `result.stages["rerank"]`.
   The last is a list with one entry per reranker. Each is a `StageResult` with its
@@ -1076,7 +1089,9 @@ again.
 With several documents in the index, `chat` finds its citations in the first document by
 name, the same rule as for a rewrite. A citation from another document is kept: its
 `source_sha` names its own piece's document, its quote is checked against that piece's
-text, and its page is the piece's page when the piece is on one page (none when it spans several). Its offsets are in its own document's text.
+text, and its page is the piece's page when the piece is on one page (none when it spans
+several). Its offsets are in its own document's text. A citation also has a `source`, the
+document's id and labels (empty when the index kept none).
 
 ## Evaluate a pipeline
 
@@ -2285,7 +2300,7 @@ sync.
 
 An index store is the place where an index keeps its rows. Pandion defines one contract, `IndexStore` and `Collection`, and you can write a store for the database your team already runs. This contract is **Stable**, and so is `register_store`. The memory store that comes with Pandion is the reference. LanceDB and Qdrant are on the contract.
 
-A row (`IndexRow`) holds an id, the document id and version, the text, the vector, the `roles` that may see it, some metadata, and the chunk as JSON. A row with an empty `roles` list is visible to nobody. A search takes a filter built from `Eq`, `In`, `AnyOf` and `And`, and the store must apply it before it ranks. Roles use `AnyOf("roles", (...))`, so every store must support `any_of`.
+A row (`IndexRow`) holds an id, the document id and version, the text, the vector, the `roles` that may see it, some metadata, and the chunk as JSON. Keys that start with `source_` in the metadata belong to Pandion: the built-in index steps write the document id and labels there (see [Sync from a source](#sync-from-a-source)), so a store should keep every metadata key it is given. A row with an empty `roles` list is visible to nobody. A search takes a filter built from `Eq`, `In`, `AnyOf` and `And`, and the store must apply it before it ranks. Roles use `AnyOf("roles", (...))`, so every store must support `any_of`.
 
 A store says what it can do in `Capabilities`: whether it can change one document at a time, whether it has text search, which filters it has, and which metrics it has. Pandion refuses a pairing the store cannot serve. A store with no text search cannot be used with BM25 or hybrid retrieval.
 

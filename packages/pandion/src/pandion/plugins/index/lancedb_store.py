@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any, ClassVar, Literal, Mapping
 
@@ -65,9 +66,21 @@ def _embedder_labels(schema: dict[str, Any]) -> None:
     schema["x-labels"] = {name: _EMBEDDER_LABELS.get(name, name) for name in sorted(embedder_names())}
 
 
+def source_fields(entry: dict[str, str]) -> dict[str, str]:
+    """A document's id and labels as row metadata: `source_id`, `source_<label>`.
+    A label key is lower-cased and made of letters, digits and underscores;
+    `roles` is access data, so it is left out."""
+    out = {}
+    for key, value in entry.items():
+        if key == "roles":
+            continue
+        out["source_" + re.sub(r"[^a-z0-9_]", "_", key.lower())] = value
+    return out
+
+
 class StoreIndexConfig(AddedSettings):
     #: Left out of the artifact id while empty, so an index with no `access:` block keeps its id.
-    added: ClassVar[tuple[str, ...]] = ("doc_roles",)
+    added: ClassVar[tuple[str, ...]] = ("doc_roles", "doc_sources")
 
     #: The first real run downloads the model (Qwen3 is about 1.2 GB).
     embedder: EmbedderName = Field(
@@ -113,6 +126,10 @@ class StoreIndexConfig(AddedSettings):
     #: Roles by file hash, filled in by the pipeline when it has an `access:`
     #: block. Not a setting to edit, so a form leaves it out.
     doc_roles: dict[str, list[str]] | None = Field(default=None, json_schema_extra={"readOnly": True})
+
+    #: Each file's document id and labels by file hash (`{"id": ..., **labels}`),
+    #: filled in by the pipeline. Only ids and labels: never a source's settings.
+    doc_sources: dict[str, dict[str, str]] | None = Field(default=None, json_schema_extra={"readOnly": True})
 
     #: On by default so `bm25` and `hybrid_rrf` cannot be mis-wired to an index
     #: that has no full-text side.
@@ -322,6 +339,7 @@ class StoreIndex(Transform[StoreIndexConfig]):
                         else {}
                     ),
                     "section": list(chunk.heading_path),
+                    **source_fields((config.doc_sources or {}).get(chunk.doc_id, {})),
                 },
                 # The canonical chunk, so a retriever can rebuild a `Hit.chunk`
                 # with its original text, offsets and provenance.

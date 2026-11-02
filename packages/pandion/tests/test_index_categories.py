@@ -91,7 +91,11 @@ OLD_GRAPH = {
     "b.pdf::parse": ("parse", "pdfium", {}),
     "b.pdf::clean.1": ("clean", "dedupe_blocks", {}),
     "b.pdf::chunk": ("chunk", "recursive_character", {"chunk_size": 400, "chunk_overlap": 80}),
-    "index": ("index", "lancedb", {"embedder": "qwen3-embedding-0.6b", "metric": "cosine", "build_fts": True}),
+    "index": ("index", "lancedb", {
+        "embedder": "qwen3-embedding-0.6b", "metric": "cosine", "build_fts": True,
+        # Every stored file now names its document on its rows (T4).
+        "doc_sources": {SHA_A: {"id": "a.pdf"}, SHA_B: {"id": "b.pdf"}},
+    }),
 }
 
 

@@ -82,6 +82,7 @@ from typing import Any, ClassVar
 import yaml
 from pydantic import BaseModel, ValidationError
 
+from pandion.access import RULES, AccessConfig, FolderRule
 from pandion.embeddings import embedder_names
 from pandion.models import ModelSettings
 from pandion.plugins import PluginError, discover
@@ -91,7 +92,7 @@ from pandion.registry import UnknownTransformError, registry
 from pandion.routing import CHECKS
 from pandion.stages import _problems, _settings, _strategy
 
-TOP_KEYS = ("version", "plugins", "path", "models", "categories", "route", "index", "retrieve", "answer")
+TOP_KEYS = ("version", "plugins", "path", "models", "categories", "route", "index", "retrieve", "answer", "access")
 CATEGORY_KEYS = ("name", "template", "parse", "clean", "chunk")
 ROUTE_KEYS = ("when", "category")
 RETRIEVE_KEYS = ("rewrite", "search", "rerank")
@@ -232,6 +233,8 @@ class PipelineConfig:
     answer: tuple[str, dict[str, Any]] | None = None
     #: Modules imported before the steps were checked, so their strategies exist.
     plugins: list[str] = field(default_factory=list)
+    #: Who may read which document. None is access off: no search is filtered by roles.
+    access: AccessConfig | None = None
 
 
 def load(file: str | Path) -> PipelineConfig:
@@ -278,6 +281,7 @@ def from_dict(data: Any, *, base: Path) -> PipelineConfig:
         retrieve=_retrieve(data["retrieve"]) if "retrieve" in data else None,
         answer=_answer(data["answer"]) if "answer" in data else None,
         plugins=plugins,
+        access=_access(data["access"]) if "access" in data else None,
     )
     if config.retrieve is not None:
         _check_compatible(config)
@@ -436,7 +440,20 @@ def to_dict(config: PipelineConfig) -> dict[str, Any]:
             data["retrieve"]["rerank"] = [_out(step) for step in retrieve.rerank]
     if config.answer is not None:
         data["answer"] = _out(config.answer)
+    if config.access is not None:
+        data["access"] = _access_out(config.access)
     return data
+
+
+def _access_out(access: AccessConfig) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    if access.default:
+        out["default"] = list(access.default)
+    if access.folders:
+        out["folders"] = [{"match": f.match, "roles": list(f.roles)} for f in access.folders]
+    if access.rules:
+        out["rules"] = list(access.rules)
+    return out
 
 
 def _out(step: tuple[str, dict[str, Any]]) -> dict[str, Any]:
@@ -872,6 +889,41 @@ def _check_version(v: Any) -> None:
             f"This pipeline file is version {v}; this Pandion reads up to version "
             f"{CONFIG_VERSION}. Upgrade pandion."
         )
+
+
+def _roles(value: Any, where: str) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(r, str) and r.strip() for r in value):
+        raise ConfigError(f"{where} must be a list of role names, for example [staff].", step=place(where))
+    return list(value)
+
+
+def _access(data: Any) -> AccessConfig:
+    """The `access:` block. A rule it names must be registered, so a server
+    never starts with a missing rule."""
+    _keys(data, ("default", "folders", "rules"), "access")
+    default = _roles(data.get("default", []), "access.default")
+    folders = data.get("folders", [])
+    if not isinstance(folders, list):
+        raise ConfigError("access.folders must be a list of {match, roles}.", step=place("access.folders"))
+    parsed = []
+    for i, folder in enumerate(folders):
+        where = f"access.folders.{i + 1}"
+        _keys(folder, ("match", "roles"), where)
+        if not isinstance(folder.get("match"), str) or not folder["match"]:
+            raise ConfigError(f"{where} needs a match pattern, such as hr/**.", step=place(where))
+        parsed.append(FolderRule(folder["match"], _roles(folder.get("roles"), f"{where}.roles")))
+    rules = data.get("rules", [])
+    if not isinstance(rules, list) or not all(isinstance(r, str) and r for r in rules):
+        raise ConfigError("access.rules must be a list of access rule names.", step=place("access.rules"))
+    discover()
+    for name in rules:
+        if name not in RULES:
+            raise ConfigError(
+                f"The access rule '{name}' is not registered. List the module that defines it "
+                "under plugins: in the pipeline file.",
+                step=place("access.rules"),
+            )
+    return AccessConfig(default, parsed, list(rules))
 
 
 def _keys(data: Any, valid: tuple[str, ...], where: str) -> None:

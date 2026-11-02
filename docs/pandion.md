@@ -553,6 +553,7 @@ Load it with `plugins: [my_rules]` in the pipeline file, like a strategy. A name
 already taken is refused. A registered check is listed by `pandion.catalog()["route"]` and by
 `GET /strategies` under `stages.route`, with its settings as a JSON schema, so an editor can offer it. Checks are not steps of the graph, so they have no cache and
 no `apply()`. A server that runs other people's requests does not accept `plugins`.
+[`route.py`](../examples/pandion/own_strategies/my_strategies/route.py) in
 [`examples/pandion/own_strategies/`](../examples/pandion/own_strategies) has this check.
 
 ### Context before embedding
@@ -815,7 +816,8 @@ A source that lists nothing is refused with a sentence that says so, and the man
 and the index are left as they were. This stops a wrong location, or a bucket that is
 briefly unreachable, from wiping the index. The pipeline's source step must be
 `upload`, as for a folder. To write your own source, give a class a `name`, a `list()`
-and a `read(doc_id)`, and add it with `register_source` from `pandion.extend`.
+and a `read(doc_id)`, and add it with `register_source` from `pandion.extend`. [`zip_source.py`](../examples/pandion/extensions/zip_source.py)
+is a tested example that reads the documents inside a zip file.
 
 #### Name the source in the pipeline file
 
@@ -2281,7 +2283,8 @@ def by_title(info: DocumentInfo) -> list[str] | None:
 ```
 
 List the module under `plugins:` so the rule is registered before the file is checked. A
-name under `rules` that is not registered refuses the file.
+name under `rules` that is not registered refuses the file. [`owner_access.py`](../examples/pandion/extensions/owner_access.py)
+is a tested rule that gives a document the role of its top folder.
 
 Access fails closed. A rule that raises, or returns anything but a list of role names, gives
 that document no roles, and a document with no roles is found by nobody. The reason is kept in
@@ -2309,7 +2312,7 @@ sync.
 
 ## Index stores
 
-An index store is the place where an index keeps its rows. Pandion defines one contract, `IndexStore` and `Collection`, and you can write a store for the database your team already runs. This contract is **Stable**, and so is `register_store`. The memory store that comes with Pandion is the reference. LanceDB and Qdrant are on the contract.
+An index store is the place where an index keeps its rows. Pandion defines one contract, `IndexStore` and `Collection`, and you can write a store for the database your team already runs. This contract is **Stable**, and so is `register_store`. The memory store that comes with Pandion is the reference. LanceDB and Qdrant are on the contract. [`examples/pandion/extensions/json_file_store.py`](../examples/pandion/extensions/json_file_store.py) is a small store you can copy, proven with `pandion.testing.store_conformance`. A registered store is used from code with `get_store`, and reaches `pipeline.yaml` only through an index step.
 
 A row (`IndexRow`) holds an id, the document id and version, the text, the vector, the `roles` that may see it, some metadata, and the chunk as JSON. Keys that start with `source_` in the metadata belong to Pandion: the built-in index steps write the document id and labels there (see [Sync from a source](#sync-from-a-source)), so a store should keep every metadata key it is given. A row with an empty `roles` list is visible to nobody. A search takes a filter built from `Eq`, `In`, `AnyOf` and `And`, and the store must apply it before it ranks. Roles use `AnyOf("roles", (...))`, so every store must support `any_of`.
 
@@ -2688,6 +2691,12 @@ contract changes only after a deprecation in the changelog.
 | --- | --- |
 | Stable | Source, route check, access rule, index store, conversation store, Policy |
 | Provisional | Step plugins, executor events, online evaluators |
+
+Each Stable point has a tested example: a source ([`zip_source.py`](../examples/pandion/extensions/zip_source.py)),
+a route check ([`route.py`](../examples/pandion/own_strategies/my_strategies/route.py)), an access rule
+([`owner_access.py`](../examples/pandion/extensions/owner_access.py)), an index store
+([`json_file_store.py`](../examples/pandion/extensions/json_file_store.py)) and a Policy
+([`policy_example.py`](../examples/pandion-api/policy_example.py)). The conversation store's example lands with that store.
 
 A strategy only works by name once the module that registers it has been imported. There are
 three ways to make that happen.

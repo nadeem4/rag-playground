@@ -8,7 +8,7 @@ Use Pandion directly when your code is Python and runs in one place. Use pandion
 the code that needs Pandion is not Python, when a web app calls it from a browser, or when
 several clients share one server, one set of documents and one cache.
 
-This folder has two scripts:
+This folder has three scripts:
 
 - `serve.py` starts pandion-api on its own, with the default Policy, which allows
   everything. Its routes are under `/api/v2`, and it keeps every file in `pandion-data/`
@@ -19,6 +19,9 @@ This folder has two scripts:
   and prints the top hits, then evaluates the pipeline on the sample's question set and
   prints the score. The pipeline uses the fake embedder, so nothing downloads. Its scores
   mean little; it is for trying things out.
+- `policy_example.py` starts the same server with a `SizeLimitedPolicy` that
+  refuses a document over a size limit with a 413. It is the smallest real `Policy`:
+  one method changed, the rest left at their defaults.
 
 ## Run it
 
@@ -117,6 +120,7 @@ app = create_app(ApiSettings(data_dir=Path("./pandion-data"), prefix="/api/v2"),
 ```
 
 Every hook is listed in [docs/pandion-api.md](../../docs/pandion-api.md#site-rules-the-policy).
+Run the size-limited server with `uv run python examples/pandion-api/policy_example.py --max-mb 5`.
 For a full, real Policy, read
 [`playground/backend/policy.py`](../../playground/backend/policy.py), the rules of RAG
 Playground's hosted demo.
@@ -124,5 +128,6 @@ Playground's hosted demo.
 ## Tested
 
 [`tests/integration/test_pandion_api_example.py`](../../tests/integration/test_pandion_api_example.py)
-runs `run_pipeline.py` against `serve.py`'s app in-process, so this example cannot go
+runs `run_pipeline.py` against `serve.py`'s app in-process, and checks that
+`policy_example.py` refuses a big document and takes a small one, so this example cannot go
 out of date.

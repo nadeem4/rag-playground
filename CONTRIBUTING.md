@@ -134,6 +134,8 @@ Follow test-driven development: write the failing test first, then the code.
 A strategy is one Python module. The web app builds its settings form from the config
 model, so a new strategy needs no frontend change.
 
+To extend Pandion without changing it (a source, an access rule, an index store, a Policy), copy a tested example from `examples/pandion/extensions/` or `examples/pandion-api/policy_example.py`. Their tests run in the fast suite.
+
 1. Create `packages/pandion/src/pandion/plugins/<stage>/<name>.py` with a Pydantic config
    model and a `Transform` subclass decorated with `@register`. Every step lives in the
    package, the Evaluate step too; the app has no steps of its own. Give every config field a default. Give the class:

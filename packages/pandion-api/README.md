@@ -118,6 +118,8 @@ by raising `fastapi.HTTPException`. These are the hooks, from `pandion_api/polic
 - `scrub(text)`: an error message as it may leave the server.
 - `on_startup(app)` and `on_shutdown(app)`: called once as the server starts and stops.
 
+A complete, tested example is [`policy_example.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion-api/policy_example.py): a `SizeLimitedPolicy` that changes only `check_document` to refuse a document over a size limit with a 413.
+
 Two class attributes set wording: `not_readable` is the message for a document the caller
 may not read, and `not_keeping_note` is what a question set report says when the set was
 not kept.

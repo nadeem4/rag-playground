@@ -164,3 +164,22 @@ def test_place_turns_a_sentences_step_into_its_place_in_the_file():
     assert place("retrieve.rerank") == "retrieve.rerank"
     assert place("answer") == "answer"
     assert place("index") is None and place("models") is None
+
+
+@pytest.mark.parametrize("search", ["bm25", "hybrid_rrf"])
+def test_a_text_search_on_an_index_built_without_one_is_refused_when_the_file_is_checked(search):
+    data = {
+        **with_index(store={"use": "lancedb", "build_fts": False}),
+        "retrieve": {"search": {"use": search}},
+    }
+    with pytest.raises(ConfigError, match=f"'{search}', which needs a text search.*build_fts.*dense") as info:
+        Pipeline.from_dict(data)
+    assert info.value.step == "retrieve.search"
+
+
+def test_dense_on_an_index_built_without_a_text_search_is_fine():
+    data = {
+        **with_index(store={"use": "lancedb", "build_fts": False}),
+        "retrieve": {"search": {"use": "dense"}},
+    }
+    assert Pipeline.from_dict(data)

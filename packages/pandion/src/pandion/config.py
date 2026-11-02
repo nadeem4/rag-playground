@@ -325,6 +325,15 @@ def _check_compatible(config: PipelineConfig) -> None:
                 use=search,
             ) from None
         raise ConfigError(message) from None
+    search = config.retrieve.search[0]
+    needed = registry.get(Stage.RETRIEVE, search).requires.get("index", {})
+    if "fts" in needed.get("backends", []) and config.index.store.get("build_fts") is False:
+        raise ConfigError(
+            f"retrieve.search uses '{search}', which needs a text search, but index.store sets "
+            "build_fts to false. Set build_fts to true, or use dense retrieval.",
+            step="retrieve.search",
+            use=search,
+        )
 
 
 def _capabilities(claims: dict[str, Any]) -> str:

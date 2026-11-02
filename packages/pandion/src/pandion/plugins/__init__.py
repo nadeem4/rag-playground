@@ -160,6 +160,12 @@ def plugin_listing() -> list[dict[str, str]]:
 
     for name in store_names():
         rows.append({"kind": "store", "name": name, "module": store_class(name).__module__, "level": "stable"})
+    from pandion.conversation_store import conversation_store_class, conversation_store_names
+
+    for name in conversation_store_names():
+        rows.append(
+            {"kind": "conversation store", "name": name, "module": conversation_store_class(name).__module__, "level": "stable"}
+        )
     from pandion.document_sources import source_class, source_names
 
     for name in source_names():

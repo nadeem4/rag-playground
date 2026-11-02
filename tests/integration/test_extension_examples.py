@@ -18,7 +18,7 @@ from pandion import Pipeline
 from pandion.access import AccessConfig, resolve_roles
 from pandion.docinfo import DocumentInfo
 from pandion.document_sources import get_source
-from pandion.testing import store_conformance
+from pandion.testing import conversation_store_conformance, store_conformance
 
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLES = ROOT / "examples" / "pandion" / "extensions"
@@ -118,10 +118,22 @@ def test_json_file_store_passes_the_store_conformance_suite(tmp_path):
     store_conformance(factory)
 
 
+def test_dict_conversation_store_passes_the_conformance_suite():
+    store_cls = load("dict_conversation_store").DictStore
+    conversation_store_conformance(lambda: store_cls(store_cls.settings_model()))
+
+
+def test_the_dict_store_is_registered_by_name():
+    from pandion.conversation_store import get_conversation_store
+
+    load("dict_conversation_store")
+    assert type(get_conversation_store("dict")).__name__ == "DictStore"
+
+
 def test_the_example_modules_import_no_heavy_library():
     code = (
         "import sys, importlib.util\n"
-        "for n in ('zip_source', 'owner_access', 'json_file_store'):\n"
+        "for n in ('zip_source', 'owner_access', 'json_file_store', 'dict_conversation_store'):\n"
         f"    s = importlib.util.spec_from_file_location(n, r'{EXAMPLES}/' + n + '.py')\n"
         "    m = importlib.util.module_from_spec(s); s.loader.exec_module(m)\n"
         "heavy = {'numpy', 'torch', 'lancedb', 'fsspec', 'pyarrow', 'pandas'}\n"

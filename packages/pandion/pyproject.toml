@@ -34,6 +34,8 @@ local = ["sentence-transformers>=6.1.0", "torch>=2.14.0"]
 lancedb = ["lancedb>=0.38,<0.39", "pyarrow>=25.0.1"]
 # The Qdrant index store: embedded (a folder or memory) or a server.
 qdrant = ["qdrant-client>=1.12,<2"]
+# The SQL conversation store: SQLite, Postgres, MySQL or SQL Server through SQLAlchemy.
+sql = ["sqlalchemy>=2.0,<3"]
 # Chat models, for llm_rewrite: OpenAI, OpenRouter and any OpenAI-compatible
 # server through the OpenAI SDK, and Claude through the Anthropic SDK.
 openai = ["openai>=3.17.0"]

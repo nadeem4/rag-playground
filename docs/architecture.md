@@ -243,6 +243,8 @@ step (an optional extra), and
 `pandion.testing.store_conformance` proves any store keeps the contract. A store is not a pipeline step, so
 it is not in `PLUGIN_MODULES`. See "Index stores" in [pandion.md](pandion.md#index-stores).
 
+The conversation store sits beside it and is separate from the index: chats and a user's memories live there, so servers keep no state. `pandion.conversation_store` defines the Stable contract (`ConversationStore`, `Turn`, `Conversation`, `Memory` and `register_conversation_store`), `pandion.conversation_sql` is the `sql` store on SQLAlchemy (the `sql` extra, imported only inside functions), and `pandion.testing.conversation_store_conformance` proves any store keeps the contract, including that one user never reaches another's data. See "Conversations" in [pandion.md](pandion.md#conversations).
+
 [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-strategy) walks through adding one to
 Pandion. A strategy that lives outside Pandion is registered the same way, with
 `@register` from `pandion.extend`, and loaded by an import in code, a `plugins:` list in

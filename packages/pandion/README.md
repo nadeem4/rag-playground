@@ -28,6 +28,7 @@ is missing tells you which one to install:
 | `docling` | Docling and its OCR engine | the `docling` parser, for layout, tables and scans |
 | `lancedb` | LanceDB and pyarrow | the index, and the `dense`, `bm25` and `hybrid_rrf` search |
 | `qdrant` | qdrant-client | the `qdrant` index: Qdrant in a folder or on a server |
+| `sql` | SQLAlchemy | the `sql` conversation store: SQLite, Postgres, MySQL or SQL Server |
 | `local` | sentence-transformers and torch | the local embedders, and the `mmr` and `cross_encoder` rerankers |
 | `anthropic` | the Anthropic SDK | `llm_rewrite`, `llm_rerank` and `chat` with Claude |
 | `openai` | the OpenAI SDK | the same steps with OpenAI, OpenRouter or a compatible server |
@@ -113,7 +114,7 @@ from an example that the repository's tests run.
 | Route check | Stable | [`route.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/own_strategies/my_strategies/route.py) |
 | Access rule | Stable | [`owner_access.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/extensions/owner_access.py) |
 | Index store | Stable | [`json_file_store.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/extensions/json_file_store.py) |
-| Conversation store | Stable | recipe lands with that store |
+| Conversation store | Stable | [`dict_conversation_store.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/extensions/dict_conversation_store.py) |
 | Policy | Stable | [`policy_example.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion-api/policy_example.py) |
 | Step plugins, executor events, online evaluators | Provisional | |
 

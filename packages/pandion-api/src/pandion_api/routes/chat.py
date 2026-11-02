@@ -13,7 +13,6 @@ import asyncio
 import logging
 import threading
 import time
-import uuid
 from typing import Any, AsyncIterator, Literal
 
 import anyio
@@ -23,6 +22,7 @@ from pydantic import BaseModel, Field
 from pandion.extend import ConversationNotFound, chat_turn, fold_summary, remember
 from pandion_api.errors import generic
 from pandion_api.jobs import start
+from pandion_api.observability import TurnSpans, content_fields, log_content, log_event
 from pandion_api.runs import event, events_response
 
 router = APIRouter()
@@ -70,7 +70,8 @@ async def chat(body: ChatIn, request: Request):
     if body.conversation_id is not None:
         if await anyio.to_thread.run_sync(store.load, body.conversation_id, user_id) is None:
             raise HTTPException(status_code=404, detail=NO_CONVERSATION)
-    trace_id = uuid.uuid4().hex
+    trace_id = request.state.trace_id
+    spans = TurnSpans(app.tracer, trace_id, log_content(), last.content) if app.tracer else None
 
     def work(on_event, cancel, credentials):
         began = time.monotonic()
@@ -84,7 +85,10 @@ async def chat(body: ChatIn, request: Request):
             on_event(event("done", conversation_id=body.conversation_id, trace_id=trace_id, ok=False))
             return False, cancel.is_set(), failed
 
-        def forward(e):  # the executor's own events stay on the server
+        def forward(e):  # the executor's own events go to the log and the spans, not the client
+            log_event(e, body.conversation_id)
+            if spans:
+                spans.on_event(e)
             if e.get("event") == "chat_rewrite":
                 on_event(e)
 
@@ -98,11 +102,16 @@ async def chat(body: ChatIn, request: Request):
             fail()
             return False, False, {"not_found": True}
         except Exception:  # noqa: BLE001  (the caller sees one sentence; the log has the rest)
-            logger.exception("Chat turn failed (trace %s).", trace_id)
+            logger.exception("Chat turn failed.", extra={"trace_id": trace_id})
             return fail()
         if not result.answer.ok:
-            logger.warning("Chat turn gave no answer (trace %s).", trace_id)
+            logger.warning("Chat turn gave no answer.", extra={"trace_id": trace_id})
             return fail()
+        logger.info(
+            "Chat turn answered.",
+            extra={"trace_id": trace_id, "conversation_id": result.conversation_id,
+                   **content_fields(question=last.content, answer=result.text)},
+        )
         sources = _sources(result.answer)
         on_event(event("sources", sources=sources))
         on_event(event("token", text=result.text))
@@ -132,12 +141,25 @@ async def chat(body: ChatIn, request: Request):
         reply = {"conversation_id": result.conversation_id, "trace_id": trace_id, "text": result.text, "sources": sources, "ok": True}
         return True, False, reply
 
+    def traced(on_event, cancel, credentials):
+        ok = False
+        try:
+            outcome = work(on_event, cancel, credentials)
+            ok = outcome[0]
+            return outcome
+        finally:
+            if spans:
+                spans.finish(ok)
+
     app.limiter.acquire(user_id)
     try:
-        state = app.runs.get(start(request, "chat", work)["run_id"])
-    except BaseException:
+        started = start(request, "chat", traced)
+    except BaseException:  # refused (429): the turn never ran, so end its span
         app.limiter.release(user_id)
+        if spans:
+            spans.finish(False)
         raise
+    state = app.runs.get(started["run_id"])
     # The slot is freed and the deadline dropped however the run ends, even one cancelled unrun.
     deadline = asyncio.get_running_loop().call_later(app.serve.turn_deadline_s, app.runs.cancel, state)
 
@@ -159,6 +181,8 @@ async def chat(body: ChatIn, request: Request):
             async for chunk in inner:
                 yield chunk
         finally:
+            if spans:
+                spans.finish(False)  # a no-op once the turn has ended
             if not state.done:  # the client left: stop the turn, so it stores nothing
                 app.runs.cancel(state)
 

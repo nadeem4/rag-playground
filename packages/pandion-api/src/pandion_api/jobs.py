@@ -136,6 +136,6 @@ def start(request: Request, kind: str, work: Work) -> dict[str, str]:
         ok, cancelled, result = guarded(keys, lambda: work(on_event, cancel, credentials or None))
         return ok, cancelled or bool(seen), clean(result)
 
-    scrub = (lambda text: hide(redact(text, keys))) if serving else (lambda text: policy.scrub(redact(text, keys)))
+    scrub = (lambda text: hide(redact(text, keys), getattr(request.state, "trace_id", None))) if serving else (lambda text: policy.scrub(redact(text, keys)))
     state = request.app.state.runs.start(kind, job, owner=owner, scrub=scrub)
     return {"run_id": state.run_id}

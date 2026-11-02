@@ -110,3 +110,9 @@ def test_idle_users_are_forgotten():
     limiter.acquire("bob")
     limiter.release("bob")
     assert "ann" not in limiter._times and "ann" not in limiter._active
+
+
+def test_a_413_carries_the_trace_id_header(tmp_path):
+    with client(tmp_path, StubPipeline(), max_body_bytes=200) as c:
+        r = c.post("/chat", content=b"x" * 500, headers={"content-type": "application/json"})
+    assert r.status_code == 413 and len(r.headers["x-trace-id"]) == 32

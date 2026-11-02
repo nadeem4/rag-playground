@@ -472,6 +472,13 @@ sequenceDiagram
   A->>S: after the reply, fold the summary
 ```
 
+Serve mode is observable without extra code. A middleware gives each request a trace id
+(`X-Trace-Id`), the app logs one JSON line per request and per step, and the executor's own events
+carry the same id. When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, a turn also becomes one OpenTelemetry
+span tree built from those events, so no span is open while a step runs on its worker thread. The
+OpenTelemetry packages are the optional extra `pandion-api[otel]`. See
+[Logs and traces](pandion-api.md#logs-and-traces).
+
 ## How the web app talks to the API
 
 The web app is React, built with Vite into `playground/frontend/dist`. FastAPI serves it, with a fallback

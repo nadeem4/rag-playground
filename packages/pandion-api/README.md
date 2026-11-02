@@ -59,7 +59,15 @@ curl -N http://127.0.0.1:8000/chat -H 'content-type: application/json' \
   -d '{"messages": [{"role": "user", "content": "How long is the notice period?"}], "stream": true}'
 ```
 
+Serve also has `POST /ask` (one question, nothing stored), `GET /conversations`,
+`GET` and `DELETE /conversations/{id}`, `GET /memories` and `DELETE /memories/{id}`. A user
+only ever sees their own; anything else is a 404.
+
 [docs/pandion-api.md](../../docs/pandion-api.md#serve-mode) has the request, the events and `/ready`.
+
+Serve mode logs one JSON line per request, step and failure, and sets an `X-Trace-Id` header.
+For OpenTelemetry spans, install `pandion-api[otel]` and set `OTEL_EXPORTER_OTLP_ENDPOINT`.
+See [Logs and traces](../../docs/pandion-api.md#logs-and-traces).
 
 ## The routes
 

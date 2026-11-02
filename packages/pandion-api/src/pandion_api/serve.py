@@ -25,17 +25,18 @@ from pandion import Pipeline
 from pandion.extend import ALL_ROLES, EndpointRefused, guard_endpoint
 from pandion.extend import ChatSettings
 from pandion.extend import ConversationStore, get_conversation_store
-from pandion_api.errors import hide
+from pandion_api.errors import generic
 from pandion_api.limits import BodyLimit, TurnLimiter
+from pandion_api.observability import TraceIdMiddleware, configure_logging, setup_tracing
 from pandion_api.policy import AnonymousPolicy, Policy
-from pandion_api.routes import chat, serve_health
+from pandion_api.routes import chat, conversations, serve_ask, serve_health
 from pandion_api.runs import RunManager
 from pandion_api.settings import ApiSettings
 
 logger = logging.getLogger(__name__)
 
 #: Every router serve mounts. Lab's `ROUTERS` is a different tuple.
-SERVE_ROUTERS = (serve_health.router, chat.router)
+SERVE_ROUTERS = (serve_health.router, chat.router, serve_ask.router, conversations.router)
 
 
 @dataclass(frozen=True)
@@ -141,6 +142,7 @@ def create_serve_app(
     is a store, else `default_store`."""
     if pipeline is None:
         raise ValueError('Serve mode needs a pipeline file: pass pipeline="pipeline.yaml" to create_app.')
+    configure_logging()
     loaded = load_pipeline(pipeline, settings)
     policy = check_policy(policy, loaded)
     check_public_endpoints(loaded)
@@ -168,6 +170,7 @@ def create_serve_app(
     state.serve = serve
     state.limiter = TurnLimiter(serve.turns_per_minute, serve.active_turns_per_user)
     state.background = set()
+    state.tracer = setup_tracing()  # None unless OTEL_EXPORTER_OTLP_ENDPOINT is set
     state.pipeline = loaded
     state.conversations = conversations if conversations is not None else default_store(settings)
     for router in SERVE_ROUTERS:
@@ -175,9 +178,13 @@ def create_serve_app(
 
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception) -> JSONResponse:
-        return JSONResponse(status_code=500, content={"detail": hide(type(exc).__name__)})
+        trace_id = request.state.trace_id
+        logger.error("Unhandled error (%s).", type(exc).__name__, extra={"trace_id": trace_id})
+        # This response leaves outside TraceIdMiddleware, so it carries the header itself.
+        return JSONResponse(status_code=500, content={"detail": generic(trace_id)}, headers={"X-Trace-Id": trace_id})
 
     if serve.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=list(serve.cors_origins), allow_methods=["GET", "POST"], allow_headers=["*"])
     app.add_middleware(BodyLimit, max_bytes=serve.max_body_bytes)
+    app.add_middleware(TraceIdMiddleware)  # outermost but the error handler: a 413 carries X-Trace-Id too
     return app

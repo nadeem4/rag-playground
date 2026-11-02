@@ -33,7 +33,7 @@ def test_the_log_holds_the_detail_and_the_trace_id(tmp_path, caplog):
     with caplog.at_level(logging.ERROR, logger="pandion_api"):
         with serve(tmp_path, Boom()) as c:
             body = say(c).json()
-    logged = [r for r in caplog.records if body["trace_id"] in r.getMessage()]
+    logged = [r for r in caplog.records if getattr(r, "trace_id", None) == body["trace_id"] and r.exc_info]
     assert logged and LEAK in str(logged[0].exc_info[1])
 
 
@@ -42,7 +42,7 @@ def test_the_trace_id_in_the_body_matches_the_log(tmp_path, caplog):
         with serve(tmp_path, Boom()) as c:
             body = say(c).json()
     assert trace_in(body["error"]) == body["trace_id"]
-    assert body["trace_id"] in caplog.text
+    assert any(getattr(r, "trace_id", None) == body["trace_id"] for r in caplog.records)
 
 
 def test_an_unhandled_exception_is_a_generic_500(tmp_path, caplog):
@@ -55,7 +55,7 @@ def test_an_unhandled_exception_is_a_generic_500(tmp_path, caplog):
             client = TestClient(c.app, raise_server_exceptions=False)
             r = client.post("/chat", json={"messages": [{"role": "user", "content": "Hi"}], "conversation_id": "x"})
     assert r.status_code == 500 and "Something went wrong" in r.text and "secret" not in r.text
-    assert trace_in(r.text) in caplog.text
+    assert any(getattr(rec, "trace_id", None) == trace_in(r.text) for rec in caplog.records)
 
 
 def test_a_policy_http_exception_keeps_its_sentence(tmp_path):
@@ -92,3 +92,25 @@ def test_lab_errors_are_unchanged(tmp_path, monkeypatch):
     with make_client(tmp_path) as c:
         r = c.get("/runs/nope")
     assert r.status_code == 404 and "Something went wrong" not in r.text
+
+
+def test_the_500_body_trace_id_equals_the_header_and_the_log(tmp_path, caplog):
+    class Broken:
+        def load(self, *a, **k):
+            raise RuntimeError(LEAK)
+
+    with caplog.at_level(logging.ERROR, logger="pandion_api"):
+        with make_serve_client(tmp_path, store=Broken()) as c:
+            client = TestClient(c.app, raise_server_exceptions=False)
+            r = client.post("/chat", json={"messages": [{"role": "user", "content": "Hi"}], "conversation_id": "x"})
+    assert r.status_code == 500
+    assert trace_in(r.json()["detail"]) == r.headers["x-trace-id"]
+    assert any(getattr(rec, "trace_id", None) == r.headers["x-trace-id"] for rec in caplog.records)
+
+
+def test_a_run_error_uses_the_request_trace_id(tmp_path, monkeypatch):
+    monkeypatch.setattr("pandion_api.routes.chat._sources", lambda a: (_ for _ in ()).throw(RuntimeError(LEAK)))
+    with serve(tmp_path, StubPipeline()) as c:
+        r = say(c, stream=True)
+    err = next(e for e in events_of(r.text) if e["event"] == "run_error")
+    assert trace_in(err["error"]) == r.headers["x-trace-id"]

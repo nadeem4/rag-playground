@@ -47,6 +47,8 @@ dev = [
     "pandion[qdrant]",
     # The SQL conversation store tests run it on SQLite (pandion[sql]).
     "pandion[sql]",
+    # The OpenTelemetry span tests (pandion-api[otel]).
+    "pandion-api[otel]",
     "httpx2>=2.13.0",
     "pytest>=8.3",
     "pytest-cov>=5.0",

@@ -342,7 +342,8 @@ path: ./my-index
 
 # Optional. The source `pandion sync` reads: `use` is a registered source (files), the
 # other keys are its settings. Not part of the recipe. Keep credentials in the
-# environment, not here. See Name the source in the pipeline file.
+# environment, not here. A relative location is read from the folder this file is in.
+# See Name the source in the pipeline file.
 source:
   use: files
   location: gs://bucket/docs
@@ -820,7 +821,8 @@ and a `read(doc_id)`, and add it with `register_source` from `pandion.extend`.
 
 A team that syncs on a schedule can name the source in the file instead of in code. Add
 a top-level `source:` block: `use` is a registered source, and every other key is a
-setting of that source.
+setting of that source. A relative `location` is read from the folder this file is in, not
+from where you run the command.
 
 ```yaml
 path: ./index

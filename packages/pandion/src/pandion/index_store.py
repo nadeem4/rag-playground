@@ -177,6 +177,7 @@ def register_store(cls: type) -> type:
 
 
 def _load_builtin() -> None:
+    import pandion.index_lance  # noqa: F401  (registers the lancedb store; imports no heavy library)
     import pandion.index_memory  # noqa: F401  (registers the memory store)
 
 

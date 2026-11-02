@@ -7,13 +7,14 @@ The reply has the same shape as /chat's JSON reply, with `conversation_id` null.
 from __future__ import annotations
 
 import logging
-import uuid
+import asyncio
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
 from pandion_api.jobs import start
-from pandion_api.routes.chat import FAILED, _sources
+from pandion_api.errors import generic
+from pandion_api.routes.chat import _sources
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -29,11 +30,11 @@ async def ask(body: AskIn, request: Request):
     policy = app.policy
     policy.limit(request)
     roles = policy.roles(request)
-    policy.user_id(request)  # so a Policy can refuse the caller (401), though /ask stores nothing
-    trace_id = uuid.uuid4().hex
+    user_id = policy.user_id(request)  # so a Policy can refuse the caller (401); /ask stores nothing
+    trace_id = request.state.trace_id
 
     def work(on_event, cancel, credentials):
-        failed = {"conversation_id": None, "trace_id": trace_id, "text": "", "sources": [], "ok": False, "error": FAILED}
+        failed = {"conversation_id": None, "trace_id": trace_id, "text": "", "sources": [], "ok": False, "error": generic(trace_id)}
         try:
             answer = app.pipeline.ask(
                 body.question, roles=roles, credentials=credentials, cancel=cancel, trace_id=trace_id,
@@ -53,6 +54,18 @@ async def ask(body: AskIn, request: Request):
         }
         return True, False, reply
 
-    state = app.runs.get(start(request, "ask", work)["run_id"])
+    app.limiter.acquire(user_id)
+    try:
+        state = app.runs.get(start(request, "ask", work)["run_id"])
+    except BaseException:
+        app.limiter.release(user_id)
+        raise
+    deadline = asyncio.get_running_loop().call_later(app.serve.turn_deadline_s, app.runs.cancel, state)
+
+    def finished(_task) -> None:
+        deadline.cancel()
+        app.limiter.release(user_id)
+
+    state.task.add_done_callback(finished)
     await state.task
     return state.result

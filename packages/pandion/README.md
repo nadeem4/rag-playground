@@ -118,6 +118,11 @@ help the rewrite only, never the answer. All are
 Provisional. See [A chat turn](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#a-chat-turn)
 and [`chat_turn.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/chat_turn.py).
 
+Answers are made safer by default: sources are fenced in the prompt as untrusted data, and
+`chat_turn` removes links and images from a reply unless a source holds the same address
+(`ChatSettings(strip_urls=False)` turns that off). See
+[Answer safety](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#answer-safety).
+
 ## Extend Pandion
 
 These are the extension points and how steady each one is. Pandion is 0.x, and a Stable

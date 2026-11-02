@@ -22,6 +22,10 @@ This folder has three scripts:
 - `policy_example.py` starts the same server with a `SizeLimitedPolicy` that
   refuses a document over a size limit with a 413. It is the smallest real `Policy`:
   one method changed, the rest left at their defaults.
+- `serve_policy.py` is a serve-mode `Policy` that trusts a signed token from your gateway:
+  `user_id`, `roles` and `limit` all read it, and a missing or forged token is a 401. It signs
+  with HMAC so it needs no extra package; production uses the gateway's published keys with
+  a JWT library.
 
 ## Run it
 

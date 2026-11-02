@@ -8,7 +8,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
 
-from pandion_api import Policy
+from pandion_api.policy import AnonymousPolicy
 from pandion_api.observability import TurnSpans
 from test_api_chat import StubPipeline, rewrites, say, serve  # noqa: F401
 
@@ -93,7 +93,7 @@ def test_a_chat_request_exports_spans_under_its_trace_id(exporter, tmp_path, rew
 
 
 def test_a_refused_start_ends_the_root_span(exporter, tmp_path, rewrites):
-    class OneRun(Policy):
+    class OneRun(AnonymousPolicy):
         def run_owner(self, request):
             return "me"
 
@@ -117,4 +117,16 @@ def test_spans_end_even_when_the_client_disconnects(exporter):
     turn = turn_of(exporter)
     turn.finish(False)  # the turn was cancelled before any step ended
     turn.finish(False)  # a second finish does nothing
+    assert [s.name for s in exporter.get_finished_spans()] == ["chat"]
+
+
+def test_a_rate_limited_turn_ends_the_root_span(exporter, tmp_path, rewrites):
+    client = serve(tmp_path, StubPipeline())
+    from pandion_api.limits import TurnLimiter
+
+    client.app.state.limiter = TurnLimiter(0, 2)
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    client.app.state.tracer = provider.get_tracer("t")
+    assert say(client).status_code == 429
     assert [s.name for s in exporter.get_finished_spans()] == ["chat"]

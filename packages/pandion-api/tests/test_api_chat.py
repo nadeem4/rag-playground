@@ -13,10 +13,11 @@ from pandion.extend import ChatSettings
 from pandion.extend import ConversationNotFound
 from pandion.llm import Completion
 from pandion_api import Policy, ServeSettings
+from pandion_api.policy import AnonymousPolicy
 
 
 def answer(text="The notice period is 30 days.", ok=True, dollars=None):
-    hit = SimpleNamespace(chunk=SimpleNamespace(id="c1", doc_id="lease.pdf", page_span=(2, 3)), score=0.5)
+    hit = SimpleNamespace(chunk=SimpleNamespace(id="c1", doc_id="lease.pdf", page_span=(2, 3), text="Notice is 30 days."), score=0.5)
     payload = {"answer": [{"text": text}], "citations": [{"chunk_id": "c1"}]}
     return SimpleNamespace(
         ok=ok, text=text if ok else "", output=SimpleNamespace(payload=payload) if ok else None,
@@ -39,6 +40,9 @@ class ByHeader(Policy):
 
     def roles(self, request):
         return ["hr"]
+
+    def limit(self, request):
+        return None
 
 
 @pytest.fixture
@@ -146,7 +150,7 @@ def test_user_id_from_the_policy_owns_the_conversation(tmp_path):
 
 
 def test_limit_refusal_is_returned_and_nothing_runs(tmp_path):
-    class Full(Policy):
+    class Full(AnonymousPolicy):
         def limit(self, request):
             raise HTTPException(status_code=429, detail="Too many questions. Try again later.")
 
@@ -285,7 +289,7 @@ def test_shutdown_waits_for_the_summary_to_finish(tmp_path, monkeypatch):
 
 
 def test_a_refused_limit_counts_even_for_a_bad_request(tmp_path):
-    class Full(Policy):
+    class Full(AnonymousPolicy):
         def limit(self, request):
             raise HTTPException(status_code=429, detail="Too many questions.")
 

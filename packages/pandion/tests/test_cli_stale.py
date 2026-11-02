@@ -38,7 +38,10 @@ def test_a_stale_set_exits_1_and_names_the_questions_on_stderr(run):
     assert "The question set is stale: 1 expected passage is not in the current parse" in err and "spain" in err
 
 
-def test_a_stale_set_runs_no_search(run):
+def test_a_stale_set_runs_no_search(run, monkeypatch):
+    from pandion.pipeline import RetrievalPipeline as Retrieval
+
+    monkeypatch.setattr(Retrieval, "_retrieve", lambda *a, **k: pytest.fail("searched"))
     run([GONE])
     assert run.searched == []
 

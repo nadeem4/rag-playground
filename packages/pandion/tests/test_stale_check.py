@@ -37,6 +37,11 @@ def test_a_passage_in_the_document_is_not_stale(tmp_path, docs):
     assert check.ok and check.stale == [] and check.warnings == []
 
 
+def test_a_reworded_passage_that_matches_after_normalising_is_not_stale(tmp_path, docs):
+    spaced = {**PARIS, "gold_answer": "the  CAPITAL of france   is paris."}
+    assert stale_check(pipeline(tmp_path), [spaced], documents=docs).ok
+
+
 def test_every_missing_passage_is_listed_by_question_id(tmp_path, docs):
     check = stale_check(pipeline(tmp_path), [GONE, PARIS, GONE_TOO], documents=docs)
     assert not check.ok and check.stale == ["spain", "italy"]

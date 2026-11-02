@@ -205,6 +205,10 @@ class EvaluationReport:
     document_shas: list[str] = field(default_factory=list)
     #: The retrieval steps that may give a different result each run, such as llm_rerank.
     nondeterministic: list[str] = field(default_factory=list)
+    #: Steps of an ask whose result was not kept (a re-ask), so the cost still counts them.
+    spent_again: list[StageResult] = field(default_factory=list, repr=False)
+    #: The ids of questions asked a second time (`reask_missed`).
+    asked_again: list[str] = field(default_factory=list)
 
     @property
     def total(self) -> int:
@@ -215,7 +219,8 @@ class EvaluationReport:
         return sum(q.found for q in self.questions)
 
     def _steps(self) -> list[StageResult]:
-        return [s for q in self.questions if q.retrieval is not None for s in q.retrieval._costed()]
+        kept = [s for q in self.questions if q.retrieval is not None for s in q.retrieval._costed()]
+        return kept + self.spent_again
 
     def cost(
         self,
@@ -281,6 +286,7 @@ class EvaluationReport:
             "questions_fingerprint": _fingerprint([q.to_dict() for q in self.questions]),
             "document_shas": list(self.document_shas),
             "nondeterministic": list(self.nondeterministic),
+            "asked_again": list(self.asked_again),
             **self.totals(),
             "by_tag": self.by_tag(),
             "by_document": self.by_document(),
@@ -474,7 +480,11 @@ def _regression(now: dict[str, Any], before: dict[str, Any]) -> Regression:
     if shaky:
         notes.append(
             f"{', '.join(shaky)} can give a different result each run, so a newly missed "
-            "question may be noise. Run it again before you trust the change."
+            + (
+                "question was asked again; the ones listed as newly missed were missed both times."
+                if now.get("asked_again")
+                else "question may be noise. Run it again before you trust the change."
+            )
         )
     by_category = _by_category(pairs)
     for name, c in by_category.items():
@@ -761,7 +771,11 @@ def reask_missed(
         p, [q for q in asked if q["id"] in missed], top_k, documents=documents, credentials=credentials
     )
     passed = {q.id: q for q in again.questions if q.found}
-    return replace(report, questions=[passed.get(q.id, q) for q in report.questions]), missed
+    # The ask that is not kept still cost something.
+    dropped = [s for q in report.questions if q.id in passed and q.retrieval for s in q.retrieval._costed()]
+    dropped += [s for q in again.questions if q.id not in passed and q.retrieval for s in q.retrieval._costed()]
+    merged = [passed.get(q.id, q) for q in report.questions]
+    return replace(report, questions=merged, spent_again=[*report.spent_again, *dropped], asked_again=missed), missed
 
 
 @dataclass

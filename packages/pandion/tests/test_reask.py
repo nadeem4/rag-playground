@@ -115,3 +115,19 @@ def test_only_the_newly_missed_questions_are_re_asked(setup, docs):
     report = pandion.evaluate(p, [FOUND], documents=docs)
     again, reasked = reask_missed(p, report, baseline_found(), [FOUND], 5, documents=docs)
     assert reasked == [] and calls["n"] == 1
+
+
+def test_the_first_ask_still_counts_in_the_cost(setup, docs):
+    p, _ = setup("test_flaky_rerank", fail_first=1)
+    report = pandion.evaluate(p, [FOUND], documents=docs)
+    again, _ = reask_missed(p, report, baseline_found(), [FOUND], 5, documents=docs)
+    assert len(again._costed()) == 2 * len(report._costed())
+
+
+def test_the_note_does_not_say_to_run_it_again_once_it_was_asked_again(setup, docs):
+    p, _ = setup("test_flaky_rerank", fail_first=99)
+    report = pandion.evaluate(p, [FOUND], documents=docs)
+    assert "Run it again" in str(report.against(baseline_found()).notes)
+    again, _ = reask_missed(p, report, baseline_found(), [FOUND], 5, documents=docs)
+    notes = " ".join(again.against(baseline_found()).notes)
+    assert "Run it again" not in notes and "missed both times" in notes

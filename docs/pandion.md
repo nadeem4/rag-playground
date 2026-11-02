@@ -38,6 +38,7 @@ installs the built package in new environments, with and without extras, and tes
 - [Models](#models)
 - [Install what a file needs](#install-what-a-file-needs)
 - [The pandion command](#the-pandion-command)
+- [Who may read a document](#who-may-read-a-document)
 - [Index stores](#index-stores)
 - [Write your own strategy](#write-your-own-strategy)
 - [Loading your strategies](#loading-your-strategies)
@@ -2156,6 +2157,73 @@ The command exits with 0 when it is done, 1 when a step failed (the line for tha
 says why) or `pandion eval --baseline` found more newly missed questions than `--allow`,
 and 2 when the file, a flag or the baseline file is wrong (the message starts with
 `pandion: `).
+
+## Who may read a document
+
+Add an `access:` block to the pipeline file and every document gets roles, and every search
+is limited to the roles of the person asking. Without the block, access is off and nothing
+changes. Access needs documents added as files (the default `upload` source or `index.sync`
+of a folder or a `Source`), because an index row finds its roles by the file's hash.
+
+```yaml
+access:
+  default: [staff]                        # a document nothing else decides about
+  folders:                                # the first match wins; * also matches /
+    - {match: "hr/**", roles: [hr]}
+  rules: [sharepoint]                     # @access_rule functions, in order
+```
+
+A document's roles come from the first of these that has an opinion:
+
+1. a `roles` label on the document, as a comma-separated list (`sync(..., metadata={"hr/a.pdf": {"roles": "hr, legal"}})`,
+   or the `roles` metadata of a `SourceEntry`)
+2. the first matching entry under `folders`
+3. each name under `rules`, in order: the first rule that returns a list
+4. `default`
+
+Roles are worked out again on every sync and recorded in `manifest.json` beside the
+category (`roles` and `roles_reason`), so a role change reaches the index at the next sync
+without parsing the files again. An index built before the block was added is rebuilt once.
+
+An access rule is a function from a `DocumentInfo` to a list of role names, or `None` for no
+opinion:
+
+```python
+from pandion.extend import DocumentInfo, access_rule
+
+@access_rule("by_title")
+def by_title(info: DocumentInfo) -> list[str] | None:
+    if info.properties.get("Title", "").startswith("HR"):
+        return ["hr"]
+    return None   # no opinion: the next rule, then the default
+```
+
+List the module under `plugins:` so the rule is registered before the file is checked. A
+name under `rules` that is not registered refuses the file.
+
+Access fails closed. A rule that raises, or returns anything but a list of role names, gives
+that document no roles, and a document with no roles is found by nobody. The reason is kept in
+`roles_reason`.
+
+Searches take the caller's roles:
+
+```python
+p.retrieve("What is the pay date?", roles=["staff"])
+p.ask("What is the pay date?", roles=["hr", "staff"])
+```
+
+With an `access:` block, a search without `roles` raises `AccessDenied` before any step runs,
+`roles=[]` finds nothing, and `roles=ALL_ROLES` (from `pandion.extend`) skips the filter, for an
+admin run. The filter is applied inside the store search, before ranking. The roles are part
+of the search step's settings, so two people with different roles never share a cached answer.
+Without an `access:` block, `roles` is ignored. Pandion does not read roles from a request; an
+app passes the roles of the signed-in user. This does not protect the files on disk, only what
+a search returns.
+
+While access is on, evaluation, `pandion retrieve` and `pandion eval` raise `AccessDenied`
+because they pass no roles. Admin runs for them come later. A `roles` label is read again on
+every sync, so a changed label from a source or from `sync(metadata=...)` applies at the next
+sync.
 
 ## Index stores
 

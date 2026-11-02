@@ -52,6 +52,7 @@ from pandion.executor import NodeResult, RunResult, run
 from pandion.fetch import fetch_url, is_url
 from pandion.filters import check_where, resolve as _resolve_where
 from pandion.document_sources import Source
+from pandion.access import ALL_ROLES, AccessDenied, Resolved, resolve_roles
 from pandion.docinfo import DocumentInfo, document_info
 from pandion.formats import UnreadableFormat, check_contents, check_readable, format_of
 from pandion.synclock import sync_lock
@@ -87,6 +88,8 @@ URL_MAX_BYTES = 20 * 1024 * 1024
 #: What index.run, retrieve and ask take as documents: a file, a folder, a
 #: list of both, or a mapping of document id to file.
 Documents = Any
+#: The roles of the person searching: a list of names, `ALL_ROLES` for an admin run, or None.
+Roles = Any
 
 #: The callback a run reports each event to (see IndexPipeline.execute).
 OnEvent = Callable[[dict[str, Any]], None]
@@ -116,6 +119,9 @@ class DocumentReport:
     category: str = "default"
     #: Why the document went to that category, in plain words.
     reason: str = ""
+    #: Who may read the document, and why. Empty when the pipeline has no `access:` block.
+    roles: list[str] = field(default_factory=list)
+    roles_reason: str = ""
 
 
 @dataclass
@@ -489,6 +495,7 @@ class Pipeline:
         *,
         documents: Documents = None,
         where: dict[str, Any] | None = None,
+        roles: Roles = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
@@ -501,7 +508,7 @@ class Pipeline:
                 "search with. Add a retrieve section with at least a search step."
             )
         return self.retrieval.retrieve(
-            question, k, documents=documents, where=where, credentials=credentials,
+            question, k, documents=documents, where=where, roles=roles, credentials=credentials,
             on_event=on_event, cancel=cancel, force=force,
         )
 
@@ -512,6 +519,7 @@ class Pipeline:
         *,
         documents: Documents = None,
         where: dict[str, Any] | None = None,
+        roles: Roles = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
@@ -524,7 +532,7 @@ class Pipeline:
                 "with. Add answer: with any answer strategy, for example search or chat."
             )
         return self.query.ask(
-            question, k, documents=documents, where=where, credentials=credentials,
+            question, k, documents=documents, where=where, roles=roles, credentials=credentials,
             on_event=on_event, cancel=cancel, force=force,
         )
 
@@ -666,6 +674,37 @@ class IndexPipeline:
                 info = self._info(doc_id, doc, labels.get(doc_id), records.get(doc_id))
             out[doc_id] = sort_document(self.config.index.route, info, pinned=pinned)
         return out
+
+    def _access(
+        self, documents: dict[str, SourceFile | str], labels: dict[str, dict[str, str]] | None = None
+    ) -> dict[str, Resolved]:
+        """Each document's roles, worked out now from its file, folder and labels
+        (empty when the pipeline has no `access:` block). Roles are never sticky:
+        every run and sync works them out again."""
+        access = self.config.access
+        if access is None:
+            return {}
+        if not self._uploads():
+            raise AccessDenied(
+                "Access control needs documents added as files: the index step keeps each "
+                "document's roles by the file's hash. Use the upload source."
+            )
+        labels = {**self._labels, **(labels or {})}
+        return {
+            doc_id: resolve_roles(doc_id, self._info(doc_id, doc, labels.get(doc_id)), access)
+            for doc_id, doc in documents.items()
+        }
+
+    def _roles_for(self, documents: dict[str, SourceFile | str]) -> dict[str, Resolved]:
+        """The roles the index of `documents` was built with: the manifest's,
+        else worked out again."""
+        if self.config.access is None:
+            return {}
+        recorded = Manifest.load(self.config.path / MANIFEST).documents
+        if all("roles" in recorded.get(d, {}) for d in documents):
+            return {d: Resolved(recorded[d]["roles"], recorded[d].get("roles_reason", "")) for d in documents}
+        saved = {d: e["metadata"] for d, e in recorded.items() if e.get("metadata")}
+        return self._access(documents, saved)
 
     def _source_records(self, documents: dict[str, Any]) -> dict[str, dict[str, Any]]:
         """What a custom source gives for each document: its source step alone
@@ -856,8 +895,11 @@ class IndexPipeline:
         versions: dict[str, str] | None = None
         unread: dict[str, str] = {}
         entry_labels: dict[str, dict[str, str]] = {}
+        #: The roles label each listed document has now (None: it has none), taken on
+        #: every sync, unlike the other labels, which a document keeps from when it was added.
+        role_labels: dict[str, str | None] = {}
         if isinstance(paths, Source):
-            documents, versions, entry_labels, unread = self._from_source(paths, before)
+            documents, versions, entry_labels, unread = self._from_source(paths, before, role_labels)
         else:
             documents = self._documents(paths)
         # A document in a category the pipeline no longer has goes back through the route.
@@ -865,12 +907,16 @@ class IndexPipeline:
         known.update({d: Sorting(c, "Chosen when added") for d, c in (categories or {}).items()})
         new = {d: m for d, m in (metadata or {}).items() if d not in before.documents}
         new = {**{d: m for d, m in entry_labels.items() if d not in new}, **new}
+        for doc_id, given in (metadata or {}).items():
+            if doc_id in documents and "roles" in given:
+                role_labels[doc_id] = given["roles"]
         return self._commit(
-            documents, before, known, new, versions=versions, credentials=credentials, failed=unread
+            documents, before, known, new, versions=versions, credentials=credentials, failed=unread,
+            role_labels=role_labels,
         )
 
     def _from_source(
-        self, source: Source, before: Manifest
+        self, source: Source, before: Manifest, role_labels: dict[str, str | None] | None = None
     ) -> tuple[dict[str, SourceFile], dict[str, str], dict[str, dict[str, str]], dict[str, str]]:
         """The documents of `source` by id, their versions, the labels of
         the ids new to the manifest, and the entries that could not be read
@@ -901,6 +947,8 @@ class IndexPipeline:
                 file = self.sources.add_bytes(data, PurePosixPath(entry.doc_id).name)
             documents[entry.doc_id] = file
             versions[entry.doc_id] = entry.version
+            if role_labels is not None:
+                role_labels[entry.doc_id] = entry.metadata.get("roles")
             if old is None and entry.metadata:
                 labels[entry.doc_id] = dict(entry.metadata)
         return documents, versions, labels, unread
@@ -942,6 +990,7 @@ class IndexPipeline:
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
         failed: dict[str, str] | None = None,
+        role_labels: dict[str, str | None] | None = None,
     ) -> SyncReport:
         """Index `documents` (every document the index should hold), then, if
         every step worked, write the manifest and delete the previous index.
@@ -951,6 +1000,9 @@ class IndexPipeline:
             **{d: e["metadata"] for d, e in before.documents.items() if e.get("metadata")},
             **(labels or {}),
         }
+        for doc_id, given in (role_labels or {}).items():
+            label = {k: v for k, v in labels.get(doc_id, {}).items() if k != "roles"}
+            labels[doc_id] = {**label, "roles": given} if given is not None else label
         failed = {**(failed or {}), **(self._unreadable(documents) if self._uploads() else {})}
         documents = {d: f for d, f in documents.items() if d not in failed}
         if not documents:
@@ -982,6 +1034,11 @@ class IndexPipeline:
                     "chunk_set": report.documents[doc_id].stages["chunk"].artifact_id,
                     "category": report.documents[doc_id].category,
                     "reason": report.documents[doc_id].reason,
+                    **(
+                        {"roles": report.documents[doc_id].roles, "roles_reason": report.documents[doc_id].roles_reason}
+                        if self.config.access is not None
+                        else {}
+                    ),
                     **({"metadata": labels[doc_id]} if labels.get(doc_id) else {}),
                     **({"version": versions[doc_id]} if versions and doc_id in versions else {}),
                     # A fetched page's file name comes from its content type.
@@ -1243,7 +1300,8 @@ class IndexPipeline:
                 raise UnreadableFormat(message)
         sorted_ = self._sort(documents, categories, reuse=not remember, known=known, labels=labels)
         chosen = {doc_id: s.category for doc_id, s in sorted_.items()}
-        graph, roles = self.graph(documents, chosen)
+        resolved = self._access(documents, labels)
+        graph, roles = self.graph(documents, chosen, resolved)
         known = self.config.index.categories
         targets = {f"{d}::{self._stop_for(stop, known[chosen[d]])}" for d in documents} if stop else None
         result = self.execute(
@@ -1255,7 +1313,15 @@ class IndexPipeline:
             force=force,
             roles=roles,
         )
-        reports = {doc_id: DocumentReport(category=chosen[doc_id], reason=sorted_[doc_id].reason) for doc_id in documents}
+        reports = {
+            doc_id: DocumentReport(
+                category=chosen[doc_id],
+                reason=sorted_[doc_id].reason,
+                roles=resolved[doc_id].roles if doc_id in resolved else [],
+                roles_reason=resolved[doc_id].reason if doc_id in resolved else "",
+            )
+            for doc_id in documents
+        }
         index = None
         for node in graph.nodes:
             if result.nodes[node.id].status == "pruned":
@@ -1354,7 +1420,10 @@ class IndexPipeline:
         return stored
 
     def graph(
-        self, documents: dict[str, SourceFile | str], categories: dict[str, str] | None = None
+        self,
+        documents: dict[str, SourceFile | str],
+        categories: dict[str, str] | None = None,
+        resolved: dict[str, Resolved] | None = None,
     ) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The graph for `documents`, and each node's (document id, step name).
 
@@ -1362,7 +1431,9 @@ class IndexPipeline:
         the one in `categories` (document id to name), else `category_of`.
         The index takes every document's chunks in document-id order. With
         the upload source a document is a stored file; with another source it
-        is the location that source is told to read.
+        is the location that source is told to read. With an `access:` block the
+        index step also gets each file's roles (`resolved`, else the manifest's),
+        by the file's hash.
         """
         index = self.config.index
         nodes: list[Node] = []
@@ -1406,9 +1477,23 @@ class IndexPipeline:
                 edges.append(Edge(chunk, enrich, "chunks"))
                 chunk = enrich
             chunk_nodes.append(chunk)
-        store = add(None, "index", Stage.INDEX, index.store_use, index.store)
+        store_settings = index.store
+        if self.config.access is not None:
+            resolved = resolved if resolved is not None else self._roles_for(documents)
+            store_settings = {**store_settings, "doc_roles": self._roles_by_sha(documents, resolved)}
+        store = add(None, "index", Stage.INDEX, index.store_use, store_settings)
         edges += [Edge(chunk, store, "chunks") for chunk in chunk_nodes]
         return Graph(nodes=nodes, edges=edges), roles
+
+    @staticmethod
+    def _roles_by_sha(documents: dict[str, SourceFile | str], resolved: dict[str, Resolved]) -> dict[str, list[str]]:
+        """Roles by file hash, which is what an index row holds. Two documents
+        with the same bytes share a hash: they keep only the roles both have."""
+        out: dict[str, list[str]] = {}
+        for doc_id, file in documents.items():
+            roles = resolved[doc_id].roles
+            out[file.sha] = roles if file.sha not in out else [r for r in out[file.sha] if r in roles]
+        return out
 
     def stage_result(self, node: Node, role: str, result: RunResult) -> StageResult:
         """What the node did in `result`, with its stored output read back."""
@@ -1452,6 +1537,7 @@ class RetrievalPipeline:
             index=base["index"],
             retrieve={"rewrite": rewrite, "search": search, "rerank": rerank},
             plugins=index.config.plugins,
+            access=base.get("access"),
         )
         self._setup(config, index)
 
@@ -1483,13 +1569,17 @@ class RetrievalPipeline:
         k: int | None = None,
         documents: dict[str, SourceFile | str] | None = None,
         where: dict[str, Any] | None = None,
+        user_roles: Roles = None,
     ) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The graph that searches the index for `question`, and each node's
         (document id, step name): the index's nodes, then rewrite, search and
         rerank.1, rerank.2 ... with no document id. `documents` (resolved by
         `IndexPipeline._documents`) are the ones to search; None means what
         the index holds. `where` is the search filter (see `pandion.filters`);
-        it travels in the rewrite step's settings like the question does."""
+        it travels in the rewrite step's settings like the question does.
+        With an `access:` block `user_roles` is required: the caller's roles (or
+        `ALL_ROLES` for an admin run) join the filter, so a cached answer is
+        keyed by question and roles."""
         retrieve = self.config.retrieve
         documents = documents if documents is not None else self.index.indexed()
         graph, roles = self.index.graph(documents)
@@ -1498,6 +1588,18 @@ class RetrievalPipeline:
         use, settings = retrieve.rewrite or ("text", {})
         settings = {**settings, "text": question}
         filters = _resolve_where(where, documents)
+        if self.config.access is not None:
+            if user_roles is None:
+                raise AccessDenied(
+                    "This pipeline has access control on, so a search needs the user's roles. "
+                    "Pass roles=[...]."
+                )
+            if user_roles is not ALL_ROLES:
+                if not isinstance(user_roles, (list, tuple)) or not all(
+                    isinstance(r, str) and r for r in user_roles
+                ):
+                    raise AccessDenied("roles must be a list of role names, for example roles=['staff'].")
+                filters = {**(filters or {}), "roles": sorted(set(user_roles))}
         if filters:
             settings["filters"] = filters
         nodes.append(Node("rewrite", Stage.QUERY, use, settings))
@@ -1527,6 +1629,7 @@ class RetrievalPipeline:
         *,
         documents: Documents = None,
         where: dict[str, Any] | None = None,
+        roles: Roles = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
@@ -1550,11 +1653,16 @@ class RetrievalPipeline:
         example `{"document": ["guide.pdf"], "pages": [10, 30], "section":
         "Installing"}`; see `pandion.filters` for the rules. A bad `where`
         raises ValueError before anything runs.
+
+        `roles` are the roles of the person searching. With an `access:` block
+        in the pipeline file a search without them is refused (`AccessDenied`),
+        `[]` finds nothing, and `ALL_ROLES` skips the filter (an admin run).
+        Without an `access:` block `roles` is ignored.
         """
         check_where(where)
         resolved = self.index._documents(documents) if documents is not None else None
         return self._retrieve(
-            question, k, resolved, where=where, credentials=credentials,
+            question, k, resolved, where=where, roles=roles, credentials=credentials,
             on_event=on_event, cancel=cancel, force=force,
         )
 
@@ -1565,14 +1673,15 @@ class RetrievalPipeline:
         documents: dict[str, SourceFile | str] | None,
         *,
         where: dict[str, Any] | None = None,
+        roles: Roles = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
         force: bool = False,
     ) -> Retrieval:
-        graph, roles = self.graph(question, k, documents, where)
+        graph, nodes = self.graph(question, k, documents, where, roles)
         result = self.index.execute(
-            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=roles
+            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=nodes
         )
         return self._retrieval(graph, result)
 
@@ -1637,6 +1746,7 @@ class QueryPipeline:
             retrieve=base["retrieve"],
             answer=answer,
             plugins=retrieval.config.plugins,
+            access=base.get("access"),
         )
         self._setup(config, retrieval)
 
@@ -1669,9 +1779,10 @@ class QueryPipeline:
         k: int | None = None,
         documents: dict[str, SourceFile | str] | None = None,
         where: dict[str, Any] | None = None,
+        user_roles: Roles = None,
     ) -> tuple[Graph, dict[str, tuple[str | None, str]]]:
         """The retrieval's graph for `question` with the answer step at the end."""
-        graph, roles = self.retrieval.graph(question, k, documents, where)
+        graph, roles = self.retrieval.graph(question, k, documents, where, user_roles)
         nodes, edges = list(graph.nodes), list(graph.edges)
         last = graph.nodes[-1].id
         use, settings = self.config.answer
@@ -1692,6 +1803,7 @@ class QueryPipeline:
         *,
         documents: Documents = None,
         where: dict[str, Any] | None = None,
+        roles: Roles = None,
         credentials: dict[str, str] | None = None,
         on_event: OnEvent | None = None,
         cancel: threading.Event | None = None,
@@ -1699,7 +1811,7 @@ class QueryPipeline:
     ) -> Answer:
         """Retrieve for `question`, then run the answer step on what was found.
 
-        `k`, `documents`, `where`, `credentials`, `on_event`, `cancel` and `force` work
+        `k`, `documents`, `where`, `roles`, `credentials`, `on_event`, `cancel` and `force` work
         as for `RetrievalPipeline.retrieve`: chat's model key goes in
         `credentials`, for example `{"anthropic_api_key": ...}`. A search
         answer is cached like any step; a chat answer is a new model call
@@ -1707,9 +1819,9 @@ class QueryPipeline:
         """
         check_where(where)
         resolved = self.index._documents(documents) if documents is not None else None
-        graph, roles = self.graph(question, k, resolved, where)
+        graph, nodes = self.graph(question, k, resolved, where, roles)
         result = self.index.execute(
-            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=roles
+            graph, credentials, on_event=on_event, cancel=cancel, force=force, roles=nodes
         )
         answer = next(node for node in graph.nodes if node.id == "answer")
         return Answer(

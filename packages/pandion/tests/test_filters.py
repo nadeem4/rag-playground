@@ -54,7 +54,8 @@ def filtered_index(tmp_path: Path, pieces=PIECES) -> dict:
     ctx.extras.update(index_location=str(tmp_path / "lancedb"), artifact_id="b" * 64, recipe_hash="r" * 64)
     payload = LanceDbIndex().apply({"chunks": payloads}, LanceDbIndexConfig(embedder="fake-deterministic"), ctx)
     store.put(Artifact(id="b" * 64, type=ArtifactType.INDEX), payload)
-    return store.load("b" * 64, ArtifactType.INDEX)
+    loaded = store.load("b" * 64, ArtifactType.INDEX)
+    return {**loaded, "settings": {**loaded["settings"], "location": str(tmp_path / "lancedb")}}
 
 
 ALL = [DenseRetriever(), Bm25Retriever(), HybridRrfRetriever()]

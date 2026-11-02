@@ -214,10 +214,20 @@ def get_store(name: str, settings: dict | None = None) -> IndexStore:
     return cls(cls.settings_model(**(settings or {})))
 
 
-def open_binding(binding: dict) -> Collection:
+def binding_settings(binding: dict, location: str | None = None) -> dict:
+    """The store settings of a binding. A binding made at the pipeline's default
+    place has no `location`; the opener says where that place is now, so a moved
+    pipeline folder still finds its rows."""
+    settings = dict(Binding.model_validate(binding).settings)
+    if location and not settings.get("location"):
+        settings["location"] = str(location)
+    return settings
+
+
+def open_binding(binding: dict, location: str | None = None) -> Collection:
     """The collection an index binding names."""
     parsed = Binding.model_validate(binding)
-    collection = get_store(parsed.store, parsed.settings).open(parsed.collection)
+    collection = get_store(parsed.store, binding_settings(binding, location)).open(parsed.collection)
     if collection is None:
         raise ValueError(
             f"The index collection '{parsed.collection}' is not in the {parsed.store} store. "

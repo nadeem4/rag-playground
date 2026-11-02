@@ -17,8 +17,8 @@ Several keys must all hold. A filter belongs to a question, so it is never
 part of the pipeline file.
 
 The filter reaches a retriever on `Query.filters`, with document names
-already turned into shas (`doc_ids`), and the retriever turns it into a store filter
-here into a store filter. It is built only from checked values, so no caller
+already turned into shas (`doc_ids`), and the retriever turns it into a store
+filter here. It is built only from checked values, so no caller
 ever writes a query. A pages filter covers only pieces that have pages.
 """
 

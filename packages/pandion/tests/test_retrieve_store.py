@@ -138,7 +138,7 @@ def roled(*pairs):
 @pytest.fixture
 def leaky(monkeypatch):
     real = _base.open_binding
-    monkeypatch.setattr(_base, "open_binding", lambda binding: Leaky(real(binding)))
+    monkeypatch.setattr(_base, "open_binding", lambda binding, location=None: Leaky(real(binding, location)))
 
 
 @pytest.mark.parametrize("retriever", ALL, ids=lambda t: t.name)
@@ -250,4 +250,22 @@ def test_a_store_that_cannot_filter_any_of_is_refused_when_access_is_on(tmp_path
 
     with pytest.raises(ValueError, match="cannot filter by any of a list of roles.*another store"):
         run(DenseRetriever(), binding, Query(text="piece"), tmp_path, extras={"roles": ["staff"]})
+    assert run(DenseRetriever(), binding, Query(text="piece"), tmp_path).hits
+
+
+def test_a_store_that_cannot_filter_and_is_refused(tmp_path, capped):
+    binding, _, _ = build(tmp_path, paged(None))
+    capped(filters={"eq", "in", "any_of"})
+
+    with pytest.raises(ValueError, match="cannot combine filters"):
+        run(DenseRetriever(), binding, Query(text="piece"), tmp_path)
+
+
+def test_a_store_that_cannot_filter_in_is_refused_for_a_document_filter(tmp_path, capped):
+    binding, _, _ = build(tmp_path, paged(None))
+    capped(filters={"eq", "and", "any_of"})
+    query = Query(text="piece", filters={"doc_ids": ["doc-1"]})
+
+    with pytest.raises(ValueError, match="cannot filter by a list"):
+        run(DenseRetriever(), binding, query, tmp_path)
     assert run(DenseRetriever(), binding, Query(text="piece"), tmp_path).hits

@@ -351,8 +351,11 @@ class LanceDbIndex(Transform[LanceDbIndexConfig]):
         # what a downstream transform actually reads.
         ctx.extras["meta"] = {"index_descriptor": descriptor}
 
+        # The pipeline's own place is not kept in the binding (the artifact id
+        # does not cover it, and the folder may move); whoever opens it says.
+        kept = {"fts": config.build_fts} if ctx.extras.get("index_location") else settings
         return Binding(
-            store="lancedb", settings=settings, collection=name, recipe_hash=recipe, descriptor=descriptor
+            store="lancedb", settings=kept, collection=name, recipe_hash=recipe, descriptor=descriptor
         ).model_dump(mode="json")
 
 

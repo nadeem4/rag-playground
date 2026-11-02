@@ -11,7 +11,8 @@ def test_the_index_artifact_is_a_json_binding_not_a_directory(tmp_path):
 
     assert isinstance(binding, dict)
     folder = store.path_for("a" * 64)
-    assert json.loads((folder / "payload.json").read_text(encoding="utf-8")) == binding
+    kept = json.loads((folder / "payload.json").read_text(encoding="utf-8"))
+    assert kept == {**binding, "settings": {"fts": True}}
     assert not (folder / "lancedb").exists()
 
 

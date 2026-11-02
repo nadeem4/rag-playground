@@ -67,11 +67,11 @@ class Bm25Retriever(Transform[Bm25Config]):
         self, inputs: Mapping[str, Any], config: Bm25Config, ctx: RunContext
     ) -> dict[str, Any]:
         query = Query.model_validate(inputs["query"])
-        collection, descriptor = _base.open_index(inputs["index"])
+        collection, descriptor = _base.open_index(inputs["index"], ctx.extras)
         # Checked here and not only at graph validation: `provides` says what the
         # index transform *can* build, the descriptor says what it *did*.
         roles = _base.caller_roles(query, ctx.extras)
-        _base.check_pairing(inputs["index"], descriptor, "fts", self.name, roles)
+        _base.check_pairing(inputs["index"], descriptor, "fts", self.name, roles, query, ctx.extras)
         where = _base.search_filter(query, descriptor, roles)
 
         timings: dict[str, float] = {}

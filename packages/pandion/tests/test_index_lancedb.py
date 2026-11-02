@@ -83,6 +83,9 @@ def build(
     store.put(Artifact(id=artifact_id, type=ArtifactType.INDEX), payload)
     loaded = store.load(artifact_id, ArtifactType.INDEX)
     assert isinstance(loaded, dict)
+    assert "location" not in loaded["settings"], "the pipeline's own place is not kept in the binding"
+    # A retriever is told where the pipeline's index folder is; so is this helper.
+    loaded = {**loaded, "settings": {**loaded["settings"], "location": str(location or tmp_path / "lancedb")}}
     return loaded, ctx, store
 
 

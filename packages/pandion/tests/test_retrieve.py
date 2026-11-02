@@ -65,7 +65,7 @@ def build_index(tmp_path: Path, *texts: str, embed_texts=None, **config) -> Path
     store.put(Artifact(id=aid, type=ArtifactType.INDEX), payload)
     loaded = store.load(aid, ArtifactType.INDEX)
     assert isinstance(loaded, dict)
-    return loaded
+    return {**loaded, "settings": {**loaded["settings"], "location": str(tmp_path / "lancedb")}}
 
 
 def _ctx(root: Path) -> RunContext:

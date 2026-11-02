@@ -64,7 +64,7 @@ def test_index_run_indexes_every_file_in_a_folder(setup):
     assert all(s.status == "executed" and s.artifact_id for s in stages.values())
 
     binding = report.index.output
-    rows = lancedb.connect(binding["settings"]["location"]).open_table(binding["collection"]).to_arrow().to_pylist()
+    rows = lancedb.connect(str(config.parent / "index" / "index")).open_table(binding["collection"]).to_arrow().to_pylist()
     chunks = [c for d in report.documents.values() for c in d.stages["chunk"].output.chunks]
     assert sorted(r["id"] for r in rows) == sorted(c.id for c in chunks)
     descriptor = binding["descriptor"]

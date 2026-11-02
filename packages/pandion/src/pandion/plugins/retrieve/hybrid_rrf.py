@@ -186,10 +186,10 @@ class HybridRrfRetriever(Transform[HybridRrfConfig]):
         self, inputs: Mapping[str, Any], config: HybridRrfConfig, ctx: RunContext
     ) -> dict[str, Any]:
         query = Query.model_validate(inputs["query"])
-        collection, descriptor = _base.open_index(inputs["index"])
+        collection, descriptor = _base.open_index(inputs["index"], ctx.extras)
         roles = _base.caller_roles(query, ctx.extras)
         for backend in ("dense", "fts"):
-            _base.check_pairing(inputs["index"], descriptor, backend, self.name, roles)
+            _base.check_pairing(inputs["index"], descriptor, backend, self.name, roles, query, ctx.extras)
         where = _base.search_filter(query, descriptor, roles)
 
         timings: dict[str, float] = {}

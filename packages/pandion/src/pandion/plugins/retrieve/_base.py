@@ -33,6 +33,7 @@ from pandion.index_store import (
     Collection,
     Filter,
     StoreHit,
+    binding_settings,
     check_store,
     get_store,
     matches,
@@ -74,13 +75,14 @@ PRF_POOL = 1000
 _access_log = logging.getLogger("pandion.access")
 
 
-def open_index(raw: Any) -> tuple[Collection, dict[str, Any]]:
+def open_index(raw: Any, extras: Mapping[str, Any] | None = None) -> tuple[Collection, dict[str, Any]]:
     """Return `(collection, descriptor)` for the index binding the executor loaded.
 
     The `index` port arrives as the small JSON binding the index step wrote:
     the store, its settings and the collection that holds the rows.
     """
-    return open_binding(raw), read_descriptor(raw)
+    location = (extras or {}).get("index_location")
+    return open_binding(raw, location), read_descriptor(raw)
 
 
 def read_descriptor(raw: Any) -> dict[str, Any]:
@@ -105,7 +107,13 @@ def require_backend(descriptor: dict[str, Any], backend: str, retriever: str) ->
 
 
 def check_pairing(
-    raw: Any, descriptor: dict[str, Any], backend: str, retriever: str, roles: list[str] | None
+    raw: Any,
+    descriptor: dict[str, Any],
+    backend: str,
+    retriever: str,
+    roles: list[str] | None,
+    query: Query | None = None,
+    extras: Mapping[str, Any] | None = None,
 ) -> None:
     """Refuse an index this retriever cannot read, with one plain sentence.
 
@@ -116,7 +124,20 @@ def check_pairing(
     """
     require_backend(descriptor, backend, retriever)
     binding = Binding.model_validate(raw)
-    caps = get_store(binding.store, binding.settings).capabilities()
+    caps = get_store(
+        binding.store, binding_settings(raw, (extras or {}).get("index_location"))
+    ).capabilities()
+    # The filters the retrievers send are combined with "and"; a document
+    # filter is a list, so it needs "in".
+    if "and" not in caps.filters:
+        raise ValueError(
+            f"The {binding.store} store cannot combine filters, so it cannot serve a search. Use another store."
+        )
+    if (query is not None and (query.filters or {}).get("doc_ids")) and "in" not in caps.filters:
+        raise ValueError(
+            f"The {binding.store} store cannot filter by a list, so it cannot serve a document filter. "
+            "Use another store."
+        )
     if roles is None and "any_of" not in caps.filters:
         # Access is off: the store need not filter by roles.
         caps = caps.model_copy(update={"filters": caps.filters | {"any_of"}})

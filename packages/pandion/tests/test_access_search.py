@@ -54,9 +54,9 @@ def docs(tmp_path: Path) -> Path:
     return docs
 
 
-def rows(report) -> list[dict]:
+def rows(report, tmp_path) -> list[dict]:
     binding = report.index.output
-    return lancedb.connect(binding["settings"]["location"]).open_table(binding["collection"]).to_arrow().to_pylist()
+    return lancedb.connect(str(tmp_path / "index" / "index")).open_table(binding["collection"]).to_arrow().to_pylist()
 
 
 def manifest(folder: Path) -> dict:
@@ -66,7 +66,7 @@ def manifest(folder: Path) -> dict:
 def roles_by_doc(report, folder: Path) -> dict[str, list[str]]:
     """The roles on the rows, by document id (a row holds the file's sha)."""
     by_sha = {e["content_hash"]: doc_id for doc_id, e in manifest(folder).items()}
-    return {by_sha[r["doc_id"]]: list(r["roles"]) for r in rows(report)}
+    return {by_sha[r["doc_id"]]: list(r["roles"]) for r in rows(report, folder)}
 
 
 def test_rows_carry_the_roles_of_their_document(tmp_path, docs):

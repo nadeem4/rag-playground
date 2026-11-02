@@ -298,7 +298,7 @@ def test_in_a_pipeline_only_the_enrich_result_and_the_index_move(tmp_path, docs,
 
     # BM25 reads the text column, which holds what was embedded: the context too.
     binding = report.index.output
-    rows = lancedb.connect(binding["settings"]["location"]).open_table(binding["collection"]).to_arrow().to_pylist()
+    rows = lancedb.connect(str(tmp_path / "index" / "index")).open_table(binding["collection"]).to_arrow().to_pylist()
     assert all(r["text"].startswith("About ") for r in rows)
     assert stages["enrich"].usage["output_tokens"] == 7 * len(pieces)
     assert report.cost()["output_tokens"] == 7 * len(pieces)

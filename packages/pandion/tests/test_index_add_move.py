@@ -48,9 +48,9 @@ def pdfs(tmp_path: Path) -> tuple[Path, Path]:
     return folder / "a.pdf", folder / "b.pdf"
 
 
-def rows(report) -> list[str]:
+def rows(report, tmp_path) -> list[str]:
     binding = report.index.output
-    table = lancedb.connect(binding["settings"]["location"]).open_table(binding["collection"])
+    table = lancedb.connect(str(tmp_path / "index" / "index")).open_table(binding["collection"])
     return sorted(r["id"] for r in table.to_arrow().to_pylist())
 
 
@@ -107,8 +107,8 @@ def test_move_reruns_only_that_document(tmp_path, pdfs):
     entry = p.documents()[0]
     assert (entry.category, entry.reason) == ("text", "Chosen when moved")
     assert report.index.artifact_id != first.index.artifact_id
-    assert not set(old_pieces) & set(rows(report))
-    assert set(chunk_ids(report, "a.pdf")) <= set(rows(report))
+    assert not set(old_pieces) & set(rows(report, tmp_path))
+    assert set(chunk_ids(report, "a.pdf")) <= set(rows(report, tmp_path))
     assert not p.index.store.has(first.index.artifact_id)
 
 

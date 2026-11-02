@@ -365,7 +365,7 @@ def _report(report: EvaluationReport | dict[str, Any] | str | Path, name: str) -
             report = json.loads(Path(report).read_text(encoding="utf-8"))
         except FileNotFoundError:
             raise ValueError(
-                f"There is no baseline file at {name}. Save one with pandion eval ... --json > {name}."
+                f"There is no baseline file at {name}. Record one with pandion eval ... --record-baseline {name}."
             ) from None
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ValueError(f"{name} cannot be read as JSON: {exc}") from None
@@ -489,17 +489,27 @@ def _regression(now: dict[str, Any], before: dict[str, Any]) -> Regression:
     )
 
 
-def _llm_models(block: Any) -> list[str]:
-    """The model ids a step block (or a list of rules) names."""
+def _step_models(stage: Stage, block: Any) -> list[str]:
+    """The model ids a step block (or a list of steps) uses, with each
+    strategy's default filled in for a `model` the file leaves out."""
     from pandion.llm import CHAT_MODELS, model_name_for
+    from pandion.registry import registry
 
     out: list[str] = []
     for b in block if isinstance(block, list) else [block]:
-        model = b.get("model") if isinstance(b, dict) else None
+        if not isinstance(b, dict) or "use" not in b:
+            continue
+        discover()
+        settings = registry.get(stage, b["use"]).config_model(**{k: v for k, v in b.items() if k != "use"})
+        model = getattr(settings, "model", None)
         if not isinstance(model, str):
             continue
         chat = CHAT_MODELS.get(model)
-        typed = model_name_for(chat, b.get("custom_model", ""), b.get("openrouter_model", "")) if chat else None
+        typed = (
+            model_name_for(chat, getattr(settings, "custom_model", ""), getattr(settings, "openrouter_model", ""))
+            if chat
+            else None
+        )
         out.append(typed or model)
     return out
 
@@ -514,10 +524,16 @@ def environment(p: Pipeline) -> dict[str, Any]:
 
     d = p.to_dict()
     models = {(d.get("index", {}).get("embed") or {}).get("use")}
-    for stage, step in (("retrieve", "rewrite"), ("retrieve", "rerank"), ("index", "enrich"), (None, "answer")):
-        block = (d.get(stage, {}) if stage else d).get(step)
+    steps = (
+        ("retrieve", "rewrite", Stage.QUERY),
+        ("retrieve", "rerank", Stage.RERANK),
+        ("index", "enrich", Stage.ENRICH),
+        (None, "answer", Stage.USE_CASE),
+    )
+    for where, step, stage in steps:
+        block = (d.get(where, {}) if where else d).get(step)
         if block:
-            models.update(_llm_models(block))
+            models.update(_step_models(stage, block))
     return {
         "platform": f"{platform.system()}-{platform.machine()}".lower(),
         "models": sorted(m for m in models if m),

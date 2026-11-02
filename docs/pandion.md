@@ -2208,8 +2208,11 @@ pandion eval pipeline.yaml questions.json --record-baseline base.json      # onc
 pandion eval pipeline.yaml questions.json --baseline base.json --allow 1   # on every change
 ```
 
-With `--json`, the comparison is under `"regression"` (with `by_category`) and the run's
-`environment` is under `"environment"`.
+With `--json`, the comparison is under `"regression"` (with `by_category`, and a `gate_ok`
+that already counts `--allow`, so it matches the exit code) and the run's `environment` is
+under `"environment"`. With `--record-baseline --json`, the "Baseline recorded" line goes
+to stderr so stdout stays JSON. `environment` records the default model of a step that
+names none (for example `cross-encoder/ms-marco-MiniLM-L-6-v2` for `cross_encoder`).
 
 **`pandion compare FILE --vary SPEC DOC... [--questions QUESTIONS] [--top-k K] [--json]`**
 runs `pandion.compare`: the pipeline once per value of one setting, indexing `DOC...`

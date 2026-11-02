@@ -247,7 +247,7 @@ def test_a_missing_baseline_is_a_plain_error_before_anything_runs(cli_run, monke
     missing = str(cli_run.tmp / "missing.json")
     code, _, err = cli_run("--baseline", missing)
     assert code == 2
-    assert err.strip() == f"pandion: There is no baseline file at {missing}. Save one with pandion eval ... --json > {missing}."
+    assert err.strip() == f"pandion: There is no baseline file at {missing}. Record one with pandion eval ... --record-baseline {missing}."
 
 
 def test_the_baseline_is_read_once_before_the_run(cli_run, monkeypatch):

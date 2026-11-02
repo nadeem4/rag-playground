@@ -83,3 +83,17 @@ def test_a_baseline_without_environment_passes_with_a_note():
 def test_a_different_pandion_version_is_not_refused():
     then = {"platform": "linux-x86_64", "models": ["a"], "pandion": "0.1.0"}
     assert check_environment({"environment": then}, {**then, "pandion": "9.9.9"}) == []
+
+
+def test_a_step_on_its_default_model_records_that_model():
+    p = pipeline(
+        retrieve={
+            "rewrite": {"use": "llm_rewrite"},
+            "search": {"use": "dense"},
+            "rerank": {"use": "cross_encoder"},
+        },
+        answer={"use": "chat"},
+    )
+    models = environment(p)["models"]
+    assert "cross-encoder/ms-marco-MiniLM-L-6-v2" in models
+    assert "claude-haiku-4-5" in models and "claude-opus-5" in models

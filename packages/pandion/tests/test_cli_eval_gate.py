@@ -125,3 +125,24 @@ def test_json_holds_the_category_results_and_the_environment(run):
     assert code == 1
     assert data["regression"]["by_category"]["a"]["newly_missed"] == ["a2"]
     assert data["environment"]["platform"] == ENV
+
+
+def test_record_baseline_with_json_keeps_stdout_pure_json(run):
+    run.state["report"] = BEFORE
+    code, out, err = run("--record-baseline", str(run.tmp / "b.json"), "--json")
+    assert code == 0
+    json.loads(out)  # nothing but the report on stdout
+    assert "Baseline recorded at" in err
+
+
+def test_json_gate_ok_follows_allow_like_the_exit_code(run):
+    base = baseline_file(run.tmp)
+    code, out, _ = run("--baseline", base, "--json")
+    assert code == 1 and json.loads(out)["regression"]["gate_ok"] is False
+    code, out, _ = run("--baseline", base, "--json", "--allow", "1")
+    assert code == 0 and json.loads(out)["regression"]["gate_ok"] is True
+
+
+def test_a_missing_baseline_points_to_record_baseline(run):
+    code, _, err = run("--baseline", str(run.tmp / "missing.json"))
+    assert code == 2 and "--record-baseline" in err and "--json >" not in err

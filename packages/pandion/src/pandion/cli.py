@@ -345,7 +345,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
     if args.json:
         data = {**report.to_dict(), "cost": report.cost(), "environment": env}
         if regression is not None:
-            data["regression"] = regression.to_dict()
+            data["regression"] = {**regression.to_dict(), "gate_ok": regression.gate_ok(args.allow or 0)}
         print(json.dumps(data, indent=2))
     else:
         print(report)
@@ -361,7 +361,11 @@ def cmd_eval(args: argparse.Namespace) -> int:
         path = Path(args.record_baseline)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps({**report.to_dict(), "environment": env}, indent=2), encoding="utf-8")
-        print(f"Baseline recorded at {args.record_baseline} (platform {env['platform']}, {len(report.questions)} questions).")
+        # On stderr with --json, so stdout stays the report alone.
+        print(
+            f"Baseline recorded at {args.record_baseline} (platform {env['platform']}, {len(report.questions)} questions).",
+            file=sys.stderr if args.json else sys.stdout,
+        )
     return 0 if regression is None or regression.gate_ok(args.allow or 0) else 1
 
 
@@ -540,8 +544,8 @@ def parser() -> argparse.ArgumentParser:
         "--top-k", dest="top_k", type=int, default=DEFAULT_TOP_K, help=f"how many of the top pieces are checked (default {DEFAULT_TOP_K})"
     )
     sub.add_argument("--documents", nargs="+", help="evaluate on exactly these documents, indexing them first if needed")
-    sub.add_argument("--json", action="store_true", help="print the report as JSON; save it as a baseline with --json > base.json")
-    sub.add_argument("--baseline", help="a report saved with --json: say which questions this run newly missed or newly found")
+    sub.add_argument("--json", action="store_true", help="print the report as JSON; to save a baseline use --record-baseline")
+    sub.add_argument("--baseline", help="a report saved with --record-baseline: say which questions this run newly missed or newly found")
     sub.add_argument("--allow", type=int, help="with --baseline, how many newly missed questions per category still exit 0 (default 0)")
     sub.add_argument("--record-baseline", dest="record_baseline", metavar="PATH", help="write this run as a baseline, with its platform and models, to PATH")
 

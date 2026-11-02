@@ -35,6 +35,10 @@ logger = logging.getLogger(__name__)
 SERVE_ROUTERS = (serve_health.router, chat.router, serve_ask.router, conversations.router)
 
 
+#: Seconds between two retention sweeps.
+DAY = 24 * 60 * 60
+
+
 @dataclass(frozen=True)
 class ServeSettings:
     """What serve mode is set up with, in code and not in the pipeline file.
@@ -43,6 +47,22 @@ class ServeSettings:
 
     chat: ChatSettings = field(default_factory=ChatSettings)
     retention_days: int = 90
+
+    def __post_init__(self) -> None:
+        if self.retention_days < 1:
+            raise ValueError("retention_days must be at least 1.")
+
+
+async def retention_loop(store: ConversationStore, days: int, sleep=asyncio.sleep) -> None:
+    """Delete conversations older than `days` now and every 24 hours, until cancelled.
+    A sweep that fails is logged, and the next day tries again."""
+    while True:
+        try:
+            removed = await asyncio.to_thread(store.expire, days)
+            logger.info("retention sweep: removed %d conversations older than %d days", removed, days)
+        except Exception as exc:  # noqa: BLE001  (a failed sweep must never stop the server)
+            logger.warning("Retention sweep failed (%s); trying again in 24 hours.", type(exc).__name__)
+        await sleep(DAY)
 
 
 def load_pipeline(path: str | Path, settings: ApiSettings) -> Pipeline:
@@ -60,12 +80,12 @@ def load_pipeline(path: str | Path, settings: ApiSettings) -> Pipeline:
 
 
 def default_store(settings: ApiSettings) -> ConversationStore:
-    """The conversation store: SQL on `PANDION_CONVERSATIONS_URL`, else a SQLite file in the data folder."""
-    url = os.environ.get("PANDION_CONVERSATIONS_URL")
-    if not url:
-        Path(settings.data_dir).mkdir(parents=True, exist_ok=True)
-        url = f"sqlite:///{(Path(settings.data_dir) / 'conversations.db').as_posix()}"
-    return get_conversation_store("sql", {"url": url})
+    """The conversation store: SQL on `PANDION_CONVERSATIONS_URL`, else a SQLite file in the data folder.
+    The store reads the url from the variable itself, so the server never holds it."""
+    if os.environ.get("PANDION_CONVERSATIONS_URL"):
+        return get_conversation_store("sql", {"url_env": "PANDION_CONVERSATIONS_URL"})
+    Path(settings.data_dir).mkdir(parents=True, exist_ok=True)
+    return get_conversation_store("sql", {"url": f"sqlite:///{(Path(settings.data_dir) / 'conversations.db').as_posix()}"})
 
 
 def warm_up(p: Pipeline) -> None:
@@ -98,9 +118,13 @@ def create_serve_app(
     async def lifespan(app: FastAPI):
         await policy.on_startup(app)
         warming = asyncio.create_task(anyio.to_thread.run_sync(warm_up, loaded))
+        retention = app.state.retention = asyncio.create_task(
+            retention_loop(app.state.conversations, app.state.serve.retention_days))
         try:
             yield
         finally:
+            retention.cancel()
+            await asyncio.gather(retention, return_exceptions=True)
             await warming
             for thread in list(app.state.background):  # replies still saving a summary or a memory
                 await anyio.to_thread.run_sync(thread.join)

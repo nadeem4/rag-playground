@@ -10,12 +10,13 @@ functions, and the url is a secret: it never appears in a repr or an error.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, SecretStr
+from pydantic import BaseModel, SecretStr, model_validator
 
 from pandion.conversation_store import (
     TITLE_LENGTH, Conversation, ConversationInfo, ConversationNotFound, Memory, Turn, register_conversation_store,
@@ -28,8 +29,28 @@ _SCHEMA_VERSION = 1
 _RETRIES = 5
 
 
+_DEFAULT_URL = "sqlite:///pandion_conversations.db"
+
+
 class SqlSettings(BaseModel):
-    url: SecretStr = SecretStr("sqlite:///pandion_conversations.db")
+    url: SecretStr = SecretStr(_DEFAULT_URL)
+    #: The name of an environment variable that holds the url, so the secret stays out of code and files.
+    url_env: str = ""
+
+    @model_validator(mode="after")
+    def _one_source_for_the_url(self) -> "SqlSettings":
+        if self.url_env and self.url.get_secret_value() != _DEFAULT_URL:
+            raise ValueError("Set either url or url_env for the sql conversation store, not both.")
+        return self
+
+    def resolved_url(self) -> str:
+        """The url to connect to. A missing variable is named; its value is never shown."""
+        if not self.url_env:
+            return self.url.get_secret_value()
+        value = os.environ.get(self.url_env)
+        if not value:
+            raise ValueError(f"The sql conversation store reads its url from the environment variable {self.url_env}, which is not set.")
+        return value
 
 
 @register_conversation_store
@@ -48,8 +69,11 @@ class SqlStore:
 
     # -- setup -------------------------------------------------------------
 
+    def _url(self) -> str:
+        return self.settings.resolved_url()
+
     def _scrub(self, text: str) -> str:
-        url = self.settings.url.get_secret_value()
+        url = self._url()
         text = text.replace(url, "<url>")
         try:
             password = require("sqlalchemy.engine", extra="sql", step=_STEP).make_url(url).password
@@ -65,8 +89,9 @@ class SqlStore:
             if self._engine is not None:
                 return
             sa = require("sqlalchemy", extra="sql", step=_STEP)
+            url = self._url()  # a missing variable is a plain sentence, raised before anything opens
             try:
-                engine = sa.create_engine(self.settings.url.get_secret_value())
+                engine = sa.create_engine(url)
                 tables = self._make_tables(sa)
                 self._prepare(sa, engine, tables)
             except (FormatTooNew, ImportError):
@@ -226,6 +251,18 @@ class SqlStore:
         m = self._t["memories"]
         with self._engine.begin() as conn:
             conn.execute(sa.delete(m).where(m.c.id == memory_id, m.c.user_id == user_id))
+
+    def delete_user(self, user_id: str) -> dict[str, int]:
+        """Remove the user's conversations, turns and memories in one transaction."""
+        sa = self._sa()
+        c, turns, m = self._t["conversations"], self._t["turns"], self._t["memories"]
+        with self._engine.begin() as conn:
+            ids = conn.execute(sa.select(c.c.id).where(c.c.user_id == user_id)).scalars().all()
+            for chunk in range(0, len(ids), 500):
+                conn.execute(sa.delete(turns).where(turns.c.conversation_id.in_(ids[chunk:chunk + 500])))
+            conn.execute(sa.delete(c).where(c.c.user_id == user_id))
+            gone = conn.execute(sa.delete(m).where(m.c.user_id == user_id)).rowcount
+        return {"conversations": len(ids), "memories": gone}
 
     # -- expiry ------------------------------------------------------------
 

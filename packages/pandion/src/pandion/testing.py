@@ -362,6 +362,28 @@ def check_expire_keeps_memories(store):
 
 
 @_conv_check
+def check_delete_user_removes_only_that_users_data(store):
+    store.append("c1", "u1", _turn("a"))
+    store.append("c1", "u1", _turn("b"))
+    store.append("c2", "u1", _turn("c"))
+    store.add_memory("u1", Memory(text="mine"))
+    store.append("c3", "u2", _turn("theirs"))
+    store.add_memory("u2", Memory(text="theirs"))
+    _expect(store.delete_user("u1") == {"conversations": 2, "memories": 1},
+            "delete_user must return how many conversations and memories it removed")
+    _expect(store.list("u1") == [] and store.memories("u1") == [],
+            "delete_user must remove the user's conversations and memories")
+    _expect(store.load("c3", "u2") is not None and [m.text for m in store.memories("u2")] == ["theirs"],
+            "delete_user must leave other users' data alone")
+    store.append("c1", "u2", _turn("new owner"))
+    got = store.load("c1", "u2")
+    _expect(got is not None and [t.question for t in got.turns] == ["new owner"],
+            "delete_user must remove the conversations' turns too, not only the conversations")
+    _expect(store.delete_user("u1") == {"conversations": 0, "memories": 0},
+            "delete_user of a user with no data must return zeros")
+
+
+@_conv_check
 def check_a_turn_round_trips_every_field(store):
     turn = Turn(question="q", answer="a", rewrite="standalone q", source_ids=["s1", "s2"],
                 trace_id="t1", created_at="2026-01-02T03:04:05+00:00")

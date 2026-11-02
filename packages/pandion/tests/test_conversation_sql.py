@@ -6,7 +6,7 @@ import threading
 import pytest
 
 from pandion.conversation_sql import SqlSettings, SqlStore
-from pandion.conversation_store import Turn, get_conversation_store
+from pandion.conversation_store import Memory, Turn, get_conversation_store
 from pandion.errors import FormatTooNew, MissingExtra
 from pandion.testing import conversation_store_conformance
 
@@ -156,3 +156,71 @@ def test_times_in_any_offset_sort_as_one_utc_format(tmp_path):
     store.append("b", "u1", Turn(question="earlier", answer="a", created_at="2026-01-02T04:00:00+02:00"))
     assert [i.id for i in store.list("u1")] == ["a", "b"]
     assert store.load("b", "u1").turns[0].created_at == "2026-01-02T02:00:00+00:00"
+
+
+def test_delete_user_removes_conversations_turns_and_memories_and_returns_counts(tmp_path):
+    store = SqlStore(SqlSettings(url=sqlite_url(tmp_path / "d.db")))
+    store.append("c1", "u1", Turn(question="a", answer="b"))
+    store.append("c1", "u1", Turn(question="c", answer="d"))
+    store.append("c2", "u1", Turn(question="e", answer="f"))
+    store.add_memory("u1", Memory(text="one"))
+    store.add_memory("u1", Memory(text="two"))
+    assert store.delete_user("u1") == {"conversations": 2, "memories": 2}
+    assert store.list("u1") == [] and store.memories("u1") == []
+    store.append("c1", "u2", Turn(question="new", answer="x"))
+    assert [t.question for t in store.load("c1", "u2").turns] == ["new"]  # no turns left behind
+
+
+def test_delete_user_leaves_other_users_alone(tmp_path):
+    store = SqlStore(SqlSettings(url=sqlite_url(tmp_path / "d.db")))
+    store.append("c1", "u1", Turn(question="a", answer="b"))
+    store.append("c2", "u2", Turn(question="c", answer="d"))
+    store.add_memory("u2", Memory(text="theirs"))
+    store.delete_user("u1")
+    assert store.load("c2", "u2") is not None and [m.text for m in store.memories("u2")] == ["theirs"]
+
+
+def test_a_second_delete_user_returns_zeros(tmp_path):
+    store = SqlStore(SqlSettings(url=sqlite_url(tmp_path / "d.db")))
+    store.append("c1", "u1", Turn(question="a", answer="b"))
+    store.delete_user("u1")
+    assert store.delete_user("u1") == {"conversations": 0, "memories": 0}
+    assert store.delete_user("nobody") == {"conversations": 0, "memories": 0}
+
+
+def test_a_failure_in_the_middle_of_delete_user_deletes_nothing(tmp_path):
+    store = SqlStore(SqlSettings(url=sqlite_url(tmp_path / "d.db")))
+    store.append("c1", "u1", Turn(question="a", answer="b"))
+    store.add_memory("u1", Memory(text="one"))
+    store.check()
+    from sqlalchemy import event
+
+    def boom(conn, cursor, statement, *rest):
+        if statement.startswith("DELETE FROM memories"):
+            raise RuntimeError("disk gone")
+
+    event.listen(store._engine, "before_cursor_execute", boom)
+    with pytest.raises(Exception):
+        store.delete_user("u1")
+    event.remove(store._engine, "before_cursor_execute", boom)
+    assert store.load("c1", "u1") is not None and len(store.memories("u1")) == 1
+
+
+def test_url_env_reads_the_url_from_the_variable(tmp_path, monkeypatch):
+    monkeypatch.setenv("MY_CONV_URL", sqlite_url(tmp_path / "env.db"))
+    store = SqlStore(SqlSettings(url_env="MY_CONV_URL"))
+    store.append("c1", "u1", Turn(question="q", answer="a"))
+    assert (tmp_path / "env.db").exists()
+
+
+def test_a_missing_variable_is_named_and_its_value_never_printed(monkeypatch):
+    monkeypatch.delenv("NOT_SET_CONV_URL", raising=False)
+    store = SqlStore(SqlSettings(url_env="NOT_SET_CONV_URL"))
+    with pytest.raises(ValueError, match="NOT_SET_CONV_URL"):
+        store.check()
+
+
+def test_url_env_with_a_url_set_too_is_refused(tmp_path, monkeypatch):
+    monkeypatch.setenv("MY_CONV_URL", sqlite_url(tmp_path / "env.db"))
+    with pytest.raises(ValueError, match="url_env"):
+        SqlSettings(url=sqlite_url(tmp_path / "x.db"), url_env="MY_CONV_URL")

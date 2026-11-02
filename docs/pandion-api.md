@@ -522,6 +522,25 @@ request's trace id. Question text is a span attribute only when `PANDION_LOG_CON
 A failed step marks its span, and the turn's span, as an error. Spans for sync runs are not
 part of release 1.
 
+## Your users' data
+
+Serve keeps each user's conversations and memories in the conversation store, under the user's id.
+
+- **Where the store is.** Set `PANDION_CONVERSATIONS_URL` to a SQLAlchemy url. The store reads it itself, so the url never sits in your code or files. With no variable, serve uses a SQLite file in `data_dir`.
+- **Retention.** `ServeSettings(retention_days=90)` is how long a conversation is kept after its newest turn. The server deletes older ones at startup and then every 24 hours, and logs `retention sweep: removed N conversations older than D days`. A sweep that fails is logged and tried again the next day; it never stops the server. Memories are not removed by the sweep. The value must be at least 1.
+- **Forget one user.** `pandion forget-user USER_ID --url-env PANDION_CONVERSATIONS_URL --yes` deletes all of that user's conversations and memories. See [Forget one user](pandion.md#forget-one-user). Backups of the database and the retention of your model providers are out of its reach.
+- **Where the data goes.** Fill in the region column for your deployment. The same table is in [privacy.md](privacy.md#in-a-pandion-server-serve-mode).
+
+| Where your users' data goes | What is sent or kept | Region |
+|---|---|---|
+| LLM provider | The rewritten question, the retrieved pieces and the history, for the rewrite and the answer | (the team fills this in) |
+| Remote embedder (if you use one) | The text of your documents and each question | (the team fills this in) |
+| Judge model (online checks, when used) | The question, the answer and its sources | (the team fills this in) |
+| OpenTelemetry exporter (if you set an endpoint) | Step names, timings, model names and token counts; the question only when `PANDION_LOG_CONTENT=true` | (the team fills this in) |
+| Conversation store | Conversations, turns and memories, under the user's id | (the team fills this in) |
+
+Run `pip-audit` against your pinned dependencies now and then, so a known security fix does not wait.
+
 ## Site rules: the Policy
 
 Subclass `pandion_api.Policy` and override what your site needs. A method that refuses

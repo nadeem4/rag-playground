@@ -61,6 +61,13 @@ class RefStore:
     def delete_memory(self, user_id, memory_id):
         self.mems[user_id] = [m for m in self.mems.get(user_id, []) if m.id != memory_id]
 
+    def delete_user(self, user_id):
+        mine = [cid for cid, c in self.convs.items() if c.user_id == user_id]
+        for cid in mine:
+            del self.convs[cid]
+        kept = self.mems.pop(user_id, [])
+        return {"conversations": len(mine), "memories": len(kept)}
+
     def expire(self, older_than_days):
         from datetime import UTC, datetime, timedelta
 
@@ -226,3 +233,36 @@ def test_a_turn_time_is_normalised_to_one_utc_format():
     assert Turn(question="q", answer="a").created_at == ""
     with pytest.raises(ValueError):
         Turn(question="q", answer="a", created_at="yesterday")
+
+
+def test_conformance_catches_a_delete_user_that_removes_other_users_data():
+    class Leaky(RefStore):
+        def delete_user(self, user_id):
+            counts = super().delete_user(user_id)
+            self.convs.clear()
+            return counts
+
+    with pytest.raises(AssertionError, match="delete_user_removes_only_that_users_data"):
+        conversation_store_conformance(Leaky)
+
+
+def test_conformance_catches_a_delete_user_that_keeps_memories():
+    class KeepsMemories(RefStore):
+        def delete_user(self, user_id):
+            mems = {u: list(m) for u, m in self.mems.items()}
+            counts = super().delete_user(user_id)
+            self.mems = mems
+            return counts
+
+    with pytest.raises(AssertionError, match="delete_user_removes_only_that_users_data"):
+        conversation_store_conformance(KeepsMemories)
+
+
+def test_conformance_catches_a_delete_user_with_wrong_counts():
+    class Miscounts(RefStore):
+        def delete_user(self, user_id):
+            super().delete_user(user_id)
+            return {"conversations": 0, "memories": 0}
+
+    with pytest.raises(AssertionError, match="delete_user_removes_only_that_users_data"):
+        conversation_store_conformance(Miscounts)

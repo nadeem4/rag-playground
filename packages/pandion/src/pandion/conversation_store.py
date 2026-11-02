@@ -2,7 +2,7 @@
 
 `ConversationStore` is a Stable contract. A store keeps conversations (turns and
 a running summary) and a user's memories, and every one belongs to a `user_id`:
-a user reads, lists, changes and deletes only their own. `register_conversation_store`
+a user reads, lists, changes and deletes only their own, and `delete_user` removes all of them. `register_conversation_store`
 adds a store by name, and `pandion.testing.conversation_store_conformance` checks
 that it keeps the contract.
 
@@ -93,6 +93,10 @@ class ConversationStore(Protocol):
         ...
     def add_memory(self, user_id: str, memory: Memory) -> None: ...
     def delete_memory(self, user_id: str, memory_id: str) -> None: ...
+    def delete_user(self, user_id: str) -> dict[str, int]:
+        """Remove all of the user's conversations (with their turns) and memories.
+        Returns `{"conversations": n, "memories": m}`; an unknown user gives zeros."""
+        ...
     def expire(self, older_than_days: int) -> int: ...
 
 

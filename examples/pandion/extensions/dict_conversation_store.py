@@ -73,6 +73,13 @@ class DictStore:
     def delete_memory(self, user_id, memory_id):
         self.kept[user_id] = [m for m in self.kept.get(user_id, []) if m.id != memory_id]
 
+    def delete_user(self, user_id):
+        mine = [cid for cid, c in self.conversations.items() if c.user_id == user_id]
+        for cid in mine:
+            del self.conversations[cid]  # the turns live inside the conversation, so they go too
+        kept = self.kept.pop(user_id, [])
+        return {"conversations": len(mine), "memories": len(kept)}  # unknown user: zeros
+
     def expire(self, older_than_days):
         cutoff = (datetime.now(UTC) - timedelta(days=older_than_days)).isoformat(timespec="seconds")
         old = [cid for cid, c in self.conversations.items() if c.updated_at < cutoff]

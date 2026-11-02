@@ -33,8 +33,7 @@ import yaml
 
 import pandion
 from pandion import ConfigError, Pipeline
-from pandion.conversation_store import get_conversation_store
-from pandion.extend import PluginError, load_plugins as load_modules, plugin_listing
+from pandion.extend import PluginError, get_conversation_store, load_plugins as load_modules, plugin_listing
 from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K
 
 #: Pandion's name for each key, and the environment variable it is read from.

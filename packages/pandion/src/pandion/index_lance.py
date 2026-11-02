@@ -29,7 +29,7 @@ from pandion.index_store import (
 META_TABLE = "_pandion_meta"
 _STEP = "The lancedb store"
 _ROW_COLUMNS = ("id", "vector", "text", "doc_id", "doc_version", "roles", "chunk_json")
-_COLUMN = {"chunk": "chunk_json"}  # a row field whose column has another name
+_UNFILTERABLE = ("chunk", "chunk_json", "vector")  # row payload; no filter can match it
 
 
 class LanceSettings(BaseModel):
@@ -46,6 +46,8 @@ def _lit(value) -> tuple[str, str]:
     if isinstance(value, bool):
         return ("true" if value else "false"), "bool"
     if isinstance(value, (int, float)):
+        if isinstance(value, float) and not math.isfinite(value):
+            raise NoRows(value)
         return repr(value), "num"
     if isinstance(value, str):
         return "'" + value.replace("'", "''") + "'", "str"
@@ -61,8 +63,11 @@ def to_sql(where: Filter, kinds: dict[str, str] | None = None) -> str | None:
     if isinstance(where, And):
         parts = [p for p in (to_sql(f, kinds) for f in where.filters) if p]
         return " AND ".join(f"({p})" for p in parts) if parts else None
-    col = _COLUMN.get(where.field, where.field)
+    col = where.field
+    if col in _UNFILTERABLE:
+        raise NoRows(col)
     kind = (kinds or {"roles": "list"}).get(col)
+    name = "`" + col.replace("`", "``") + "`"
     if kinds is not None and kind is None:
         raise NoRows(col)
     if isinstance(where, AnyOf):
@@ -70,10 +75,10 @@ def to_sql(where: Filter, kinds: dict[str, str] | None = None) -> str | None:
             raise NoRows(col)
         values = ", ".join(_lit(v)[0] for v in where.values)
         if kind == "list" or (kinds is None and col == "roles"):
-            return f"array_has_any({col}, [{values}])"
+            return f"array_has_any({name}, [{values}])"
         if kind != "str":
             raise NoRows(col)
-        return f"{col} IN ({values})"
+        return f"{name} IN ({values})"
     values = (where.value,) if isinstance(where, Eq) else where.values
     if not values:
         raise NoRows(col)
@@ -81,8 +86,8 @@ def to_sql(where: Filter, kinds: dict[str, str] | None = None) -> str | None:
     if kinds is not None and any(k != kind for _, k in lits):
         raise NoRows(col)
     if isinstance(where, Eq):
-        return f"{col} = {lits[0][0]}"
-    return f"{col} IN ({', '.join(s for s, _ in lits)})"
+        return f"{name} = {lits[0][0]}"
+    return f"{name} IN ({', '.join(s for s, _ in lits)})"
 
 
 def _quote(text: str) -> str:
@@ -242,12 +247,12 @@ class LanceCollection:
             query = build(table)
             if sql:
                 query = query.where(sql, prefilter=True)
-            found = query.limit(k).to_list()
+            found = query.limit(k + 1).to_list()  # one extra, so ties at the cut-off order by id
         finally:
             del table, db
         hits = [self._to_hit(r, score(r)) for r in found]
         hits.sort(key=lambda h: (-h.score, h.row.id))
-        return hits
+        return hits[:k]
 
     def search_dense(self, vector: list[float], k: int, where: Filter) -> list[StoreHit]:
         metric = self._meta.metric
@@ -293,7 +298,10 @@ class LanceStore:
         db.create_table(name, schema=pa.schema(collection._base_fields(pa)))
         row = [{"name": name, "meta_json": meta.model_dump_json()}]
         if META_TABLE in self._tables(db):
-            db.open_table(META_TABLE).add(row)
+            meta_table = db.open_table(META_TABLE)
+            meta_table.delete(f"name = {_quote(name)}")  # a stale row from a half-dropped collection
+            meta_table.add(row)
+            del meta_table
         else:
             db.create_table(META_TABLE, data=row)
         del db

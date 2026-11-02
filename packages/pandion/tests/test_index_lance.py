@@ -90,9 +90,8 @@ def test_a_filter_on_a_missing_column_or_the_wrong_type_matches_nothing(tmp_path
 
 def test_to_sql_quotes_values():
     assert "'o''brien'" in to_sql(Eq("category", "o'brien"))
-    assert to_sql(AnyOf("roles", ("a", "b"))) == "array_has_any(roles, ['a', 'b'])"
-    assert to_sql(In("pages", (2, 3))) == "pages IN (2, 3)"
-    assert to_sql(Eq("chunk", "x")) == "chunk_json = 'x'"
+    assert to_sql(AnyOf("roles", ("a", "b"))) == "array_has_any(`roles`, ['a', 'b'])"
+    assert to_sql(In("pages", (2, 3))) == "`pages` IN (2, 3)"
     assert to_sql(NO_FILTER) is None
     with pytest.raises(NoRows):
         to_sql(And((Eq("a", "x"), AnyOf("roles", ()))))
@@ -142,3 +141,53 @@ def test_a_wrong_width_vector_is_refused_with_the_row_id(tmp_path):
         col.write_all([_row("bad", [1, 0])])
     with pytest.raises(ValueError, match="Row 'bad'"):
         col.replace_document("d", [_row("bad", [1, 0])])
+
+
+def test_a_hyphenated_metadata_key_filters_like_the_memory_store(tmp_path):
+    from pandion.index_memory import MemorySettings, MemoryStore
+
+    rows = [_row("1", [1, 0, 0], metadata={"doc-type": "memo"}), _row("2", [0, 1, 0], metadata={"doc-type": "log"})]
+    lance = LanceStore(LanceSettings(location=str(tmp_path))).create("c", _meta())
+    memory = MemoryStore(MemorySettings()).create("c", _meta())
+    for col in (lance, memory):
+        col.write_all(rows)
+    for where in (Eq("doc-type", "memo"), In("doc-type", ("log",)), AnyOf("doc-type", ("memo", "log"))):
+        got = [h.row.id for h in lance.search_dense([1, 1, 0], 10, where)]
+        assert got and got == [h.row.id for h in memory.search_dense([1, 1, 0], 10, where)]
+
+
+def test_to_sql_quotes_column_names_with_backticks():
+    assert to_sql(Eq("a`b", "x")) == "`a``b` = 'x'"
+
+
+def test_a_non_finite_float_filter_matches_nothing(tmp_path):
+    col = LanceStore(LanceSettings(location=str(tmp_path))).create("c", _meta())
+    col.write_all([_row("1", [1, 0, 0], metadata={"score": 0.5})])
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(NoRows):
+            to_sql(Eq("score", bad))
+        assert col.search_dense([1, 0, 0], 10, Eq("score", bad)) == []
+
+
+@pytest.mark.parametrize("field", ["chunk", "chunk_json", "vector"])
+def test_a_filter_on_a_row_payload_field_matches_nothing(tmp_path, field):
+    col = LanceStore(LanceSettings(location=str(tmp_path))).create("c", _meta())
+    col.write_all([_row("1", [1, 0, 0], chunk="{}")])
+    with pytest.raises(NoRows):
+        to_sql(Eq(field, "{}"))
+    assert col.search_dense([1, 0, 0], 10, Eq(field, "{}")) == []
+
+
+def test_create_replaces_a_stale_meta_row_for_the_name(tmp_path):
+    import lancedb
+
+    store = LanceStore(LanceSettings(location=str(tmp_path)))
+    store.create("c", _meta())
+    db = lancedb.connect(str(tmp_path))
+    db.drop_table("c")
+    del db
+    store.create("c", _meta(dims=5))
+    db = lancedb.connect(str(tmp_path))
+    rows = db.open_table("_pandion_meta").search().where("name = 'c'").limit(10).to_list()
+    del db
+    assert len(rows) == 1 and store.open("c").meta().dims == 5

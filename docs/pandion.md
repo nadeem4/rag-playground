@@ -1300,7 +1300,29 @@ example `llm_rewrite` and `llm_rerank`, which ask a model. When either run used 
 step, `report.nondeterministic` names it, and a note says that a newly missed question
 may be noise: the model may simply have answered differently this time. Run it again
 before you trust the change. A pipeline without a model step gives the same result
-every run.
+every run. `pandion eval --baseline` does that for you: see
+[Ask again before failing](#ask-again-before-failing).
+
+### Check the question set first
+
+A passage that is gone from the documents fails its question however good the retrieval
+is, so check the set before you score it. `pandion.evaluation.stale_check(p, questions,
+documents)` parses and chunks the documents (it embeds and searches nothing) and looks
+for every expected passage in the parse, by the rule the `eval` step matches by. It
+returns a `StaleCheck`: `stale` (the ids of the questions with a passage missing, or
+`question N` for a question with no id), `warnings`, `ok`, `str()` and `to_dict()`. A
+passage longer than the biggest piece of its document adds a warning, because no piece
+can ever hold it whole. A document that does not parse is a `ValueError` naming it. A
+library caller runs `stale_check` before `evaluate`; `pandion eval` does it for you.
+
+### Ask again before failing
+
+`pandion.evaluation.reask_missed(p, report, baseline, questions, top_k, documents=...)`
+asks each question that is newly missed against `baseline` one more time, when
+`report.nondeterministic` names a step (such as `llm_rewrite` or `llm_rerank`). It
+returns the report, with a question found on the second ask counted as found, and the
+ids it asked again. A question missed on both asks stays newly missed. A pipeline with
+only deterministic steps is never asked twice.
 
 `pandion.evaluation.best(reports)` gives the places of the best reports in a list,
 every one tied for first: the highest hit rate, then the highest mean reciprocal rank.
@@ -2191,7 +2213,18 @@ notes. It is a per-category gate: it exits with 1 when any category has more tha
 questions newly missed (0 when `--allow` is left out), and names each failed category and
 its newly missed ids, such as `Category "billing" newly missed: q4, q7.` A gain in one
 category does not pay for a loss in another. The baseline file is checked before anything
-runs, and a missing one exits with 2.
+runs, and a missing one exits with 2. When a step can differ between runs (see
+[the noise warning](#compare-with-a-baseline)), each newly missed question is asked once more
+first, and counts as newly missed only if it is missed again. A line says which were asked
+again, such as "Asked again because llm_rerank can differ between runs: q4 (found), q7
+(missed again).", and `--json` lists them under `"reasked"` as `{"id", "found"}`.
+
+**Before it searches**, `pandion eval` runs the [stale check](#check-the-question-set-first). When an
+expected passage is not in the current parse, it prints "The question set is stale: ... Fix or
+rewrite those questions; this is not a retrieval regression." to stderr, searches nothing and
+exits with 1; with `--json` it prints `{"stale": [...], "warnings": [...]}` to stdout instead.
+A passage longer than any piece is a warning on stderr and the run goes on. `--record-baseline`
+checks first too, so a baseline is never made of a stale set. There is no override flag.
 
 **`--record-baseline PATH`** writes this run as a baseline: the report's `to_dict()` plus an
 `environment` block (platform, model ids, Pandion version), creating the folders in `PATH`,

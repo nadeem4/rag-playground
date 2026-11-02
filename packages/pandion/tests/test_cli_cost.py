@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from pandion import cli
+from pandion.evaluation import StaleCheck
 
 CONFIG = """\
 path: ./index
@@ -107,6 +108,7 @@ def test_a_missing_count_is_said_as_such():
 
 
 def test_eval_prints_the_cost_line_after_the_report(config, monkeypatch, capsys):
+    monkeypatch.setattr(cli.pandion.evaluation, "stale_check", lambda *a, **kw: StaleCheck())
     monkeypatch.setattr(cli.pandion, "evaluate", lambda *a, **kw: FakeReport())
     assert cli.main(["eval", config, "q.json"]) == 0
     assert capsys.readouterr().out == (
@@ -118,6 +120,7 @@ def test_eval_prints_the_cost_line_after_the_report(config, monkeypatch, capsys)
 
 
 def test_eval_json_holds_the_cost(config, monkeypatch, capsys):
+    monkeypatch.setattr(cli.pandion.evaluation, "stale_check", lambda *a, **kw: StaleCheck())
     monkeypatch.setattr(cli.pandion, "evaluate", lambda *a, **kw: FakeReport())
     cli.main(["eval", config, "q.json", "--json"])
     data = json.loads(capsys.readouterr().out)

@@ -93,7 +93,9 @@ questions per `category:<name>` tag, so one category's loss is never hidden by a
 and `pandion eval --baseline` exits 1 on any category over `--allow`. A baseline written by
 `--record-baseline` carries an `environment` block (platform, model ids, Pandion version);
 `check_environment` refuses a comparison made on another platform or with other models
-before any search runs. The `mmr` reranker and the `chat` step embed with the
+before any search runs. Before it scores, `stale_check` looks for every expected passage in the
+current parse and fails a missing one as a stale question, not a regression; and a newly
+missed question is asked once more (`reask_missed`) when a step is nondeterministic. The `mmr` reranker and the `chat` step embed with the
 index's own model through two public names of `pandion.plugins.retrieve`,
 `read_descriptor` and `embedder_for`.
 

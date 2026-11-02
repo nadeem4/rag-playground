@@ -11,6 +11,8 @@ that document; one that names none is found in a piece from any.
 that lost it. `evaluate` asks every question in a set and runs `trace` for every miss.
 `report.against(baseline)` says which questions a run newly missed or newly found, in total
 and per `category:<name>` tag (`gate_ok` fails when any category lost a question).
+`stale_check` finds expected passages gone from the current parse, before any search; `reask_missed`
+asks newly missed questions once more when a step is nondeterministic.
 `environment(p)` and `check_environment` record and check the platform and models a baseline was made with.
 `compare` runs a pipeline once per variant of one stage and evaluates each.
 See docs/pandion.md, "Evaluate a pipeline" and "Compare settings".
@@ -74,7 +76,9 @@ __all__ = [
     "documents_named",
     "environment",
     "evaluate",
+    "StaleCheck",
     "reask_missed",
+    "stale_check",
     "find_gold",
     "load_baseline",
     "load_questions",
@@ -758,6 +762,74 @@ def reask_missed(
     )
     passed = {q.id: q for q in again.questions if q.found}
     return replace(report, questions=[passed.get(q.id, q) for q in report.questions]), missed
+
+
+@dataclass
+class StaleCheck:
+    """Questions whose expected passage is not in the current parse, and warnings."""
+
+    stale: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return not self.stale
+
+    def __str__(self) -> str:
+        if self.ok:
+            return "No expected passage is missing from the current parse."
+        n = len(self.stale)
+        return (
+            f"The question set is stale: {n} expected passage{'s are' if n != 1 else ' is'} not in the "
+            f"current parse of the documents: {', '.join(self.stale)}. "
+            "Fix or rewrite those questions; this is not a retrieval regression."
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"stale": list(self.stale), "warnings": list(self.warnings)}
+
+
+def stale_check(
+    p: Pipeline,
+    questions: Any,
+    documents: Any = None,
+    *,
+    credentials: dict[str, str] | None = None,
+) -> StaleCheck:
+    """Look for every expected passage in the documents as the pipeline now
+    parses them, before any search. Run it before `evaluate`: a passage that
+    is gone fails a question however good the retrieval is. Nothing is
+    searched or embedded. A passage longer than the biggest piece of its
+    document is a warning, as it can never be found whole. A document that
+    does not parse is a ValueError naming it."""
+    asked = load_questions(questions)["questions"]
+    searched = p.index._documents(documents) if documents is not None else p.index.indexed()
+    index = p.index._index(searched, stop="chunk", credentials=credentials, remember=False)
+    texts: dict[str, str] = {}
+    biggest: dict[str, int] = {}
+    for doc_id, doc in index.documents.items():
+        for name in ("parse", "chunk"):
+            step = doc.stages.get(name)
+            if step is None or step.output is None:
+                reason = ((step.error if step else None) or "it gave no output").strip().splitlines()
+                raise ValueError(f"The document {doc_id} could not be read: the {name} step failed: {reason[-1] if reason else ''}")
+        texts[doc_id] = document_text(doc.stages["parse"])
+        biggest[doc_id] = max((len(c.text) for c in ChunkSet.model_validate(doc.stages["chunk"].output).chunks), default=0)
+    named = documents_named(asked, searched)
+    rows = check_questions_across([{**q, "document": d} for q, d in zip(asked, named)], texts)
+    check = StaleCheck()
+    for n, (q, row) in enumerate(zip(asked, rows), start=1):
+        qid = q["id"] or f"question {n}"
+        if row["status"] == "not_found":
+            check.stale.append(qid)
+            continue
+        for gold in row["golds"]:
+            if len(gold["gold"]) > biggest[gold["document"]]:
+                check.warnings.append(
+                    f"{qid}: the expected passage is {len(gold['gold'])} characters, longer than the biggest piece "
+                    f"({biggest[gold['document']]}), so it can never be found."
+                )
+    return check
 
 
 #: The registry stage of each retrieval step, by its name in `Retrieval.stages`.

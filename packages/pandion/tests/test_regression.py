@@ -14,7 +14,7 @@ import pytest
 
 import pandion
 from pandion import Pipeline, cli, llm
-from pandion.evaluation import EvaluationReport, QuestionResult, Regression
+from pandion.evaluation import EvaluationReport, QuestionResult, Regression, StaleCheck
 from pandion.llm import Completion
 from pdfs import SAMPLE_PAGES, build_pdf
 
@@ -214,6 +214,7 @@ def cli_run(tmp_path, monkeypatch, capsys):
     base = tmp_path / "base.json"
     base.write_text(json.dumps(BEFORE.to_dict()), encoding="utf-8")
     monkeypatch.setattr(cli.pandion, "evaluate", lambda *a, **kw: NOW)
+    monkeypatch.setattr(cli.pandion.evaluation, "stale_check", lambda *a, **kw: StaleCheck())
 
     def run(*args: str) -> tuple[int, str, str]:
         code = cli.main(["eval", str(config), "q.json", *args])

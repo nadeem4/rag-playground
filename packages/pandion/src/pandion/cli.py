@@ -338,6 +338,13 @@ def cmd_eval(args: argparse.Namespace) -> int:
     env = pandion.evaluation.environment(p)
     # A baseline from another platform or with other models is refused before any search is paid for.
     env_notes = pandion.evaluation.check_environment(baseline, env) if baseline is not None else []
+    # An expected passage that is gone fails the run here, before any search is paid for.
+    stale = pandion.evaluation.stale_check(p, args.questions, _documents(args), credentials=credentials_from_env())
+    if not stale.ok:
+        print(json.dumps(stale.to_dict(), indent=2) if args.json else stale, file=None if args.json else sys.stderr)
+        return 1
+    for warning in stale.warnings:
+        print(warning, file=sys.stderr)
     report = pandion.evaluate(p, args.questions, args.top_k, documents=_documents(args), credentials=credentials_from_env())
     reasked: list[str] = []
     if baseline is not None:
@@ -557,7 +564,7 @@ def parser() -> argparse.ArgumentParser:
     )
     sub.add_argument("--documents", nargs="+", help="evaluate on exactly these documents, indexing them first if needed")
     sub.add_argument("--json", action="store_true", help="print the report as JSON; to save a baseline use --record-baseline")
-    sub.add_argument("--baseline", help="a report saved with --record-baseline: say which questions this run newly missed or newly found")
+    sub.add_argument("--baseline", help="a report saved with --record-baseline: say which questions this run newly missed or newly found (each is asked once more first when a step can differ between runs)")
     sub.add_argument("--allow", type=int, help="with --baseline, how many newly missed questions per category still exit 0 (default 0)")
     sub.add_argument("--record-baseline", dest="record_baseline", metavar="PATH", help="write this run as a baseline, with its platform and models, to PATH")
 

@@ -25,6 +25,7 @@ from pandion import Pipeline
 from pandion.extend import ALL_ROLES, EndpointRefused, guard_endpoint
 from pandion.extend import ChatSettings
 from pandion.extend import ConversationStore, get_conversation_store
+from pandion_api.metrics import Metrics, start_server, stop_server
 from pandion_api.errors import generic
 from pandion_api.limits import BodyLimit, TurnLimiter
 from pandion_api.observability import TraceIdMiddleware, configure_logging, setup_tracing
@@ -47,10 +48,15 @@ DAY = 24 * 60 * 60
 class ServeSettings:
     """What serve mode is set up with, in code and not in the pipeline file.
     `chat` is how a turn rewrites, folds and remembers; `retention_days` is how
-    long a conversation is kept without a new turn."""
+    long a conversation is kept without a new turn. `metrics_port` and `metrics_on_app`
+    turn on the Prometheus metrics (extra `pandion-api[metrics]`)."""
 
     chat: ChatSettings = field(default_factory=ChatSettings)
     retention_days: int = 90
+    #: The port Prometheus scrapes (9464 is the usual one); None turns metrics off.
+    metrics_port: int | None = None
+    #: Also serve GET /metrics on the API port, for a gateway that blocks a second port.
+    metrics_on_app: bool = False
     #: Default limits for each user (see `pandion_api.limits`). In memory, per server copy.
     turns_per_minute: int = 20
     active_turns_per_user: int = 2
@@ -58,6 +64,10 @@ class ServeSettings:
     turn_deadline_s: float = 120.0
     #: Sites allowed to call the API from a browser. Empty: CORS is off. No "*".
     cors_origins: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.retention_days < 1:
+            raise ValueError("retention_days must be at least 1.")
 
 
 NEEDS_POLICY = (
@@ -99,10 +109,6 @@ def check_public_endpoints(pipeline: Pipeline) -> None:
                 walk(item)
 
     walk(pipeline.to_dict())
-
-    def __post_init__(self) -> None:
-        if self.retention_days < 1:
-            raise ValueError("retention_days must be at least 1.")
 
 
 async def retention_loop(store: ConversationStore, days: int, sleep=asyncio.sleep) -> None:
@@ -170,10 +176,12 @@ def create_serve_app(
     if "*" in serve.cors_origins:
         raise ValueError("cors_origins must list the sites by name. A wildcard is not allowed in serve mode.")
     manager = RunManager(limit=policy.max_active_runs)
+    metrics = Metrics() if serve.metrics_port is not None or serve.metrics_on_app else None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         await policy.on_startup(app)
+        port_server = start_server(metrics, serve.metrics_port) if metrics and serve.metrics_port is not None else None
         warming = asyncio.create_task(anyio.to_thread.run_sync(warm_up, loaded))
         retention = app.state.retention = asyncio.create_task(
             retention_loop(app.state.conversations, app.state.serve.retention_days))
@@ -186,12 +194,14 @@ def create_serve_app(
             for thread in list(app.state.background):  # replies still saving a summary or a memory
                 await anyio.to_thread.run_sync(thread.join)
             await manager.shutdown()
+            if port_server:
+                await anyio.to_thread.run_sync(stop_server, *port_server)
             await policy.on_shutdown(app)
 
     app = FastAPI(title=settings.title, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     state: Any = app.state
     state.settings, state.policy, state.runs = settings, policy, manager
-    state.serve = serve
+    state.serve, state.metrics = serve, metrics
     state.limiter = TurnLimiter(serve.turns_per_minute, serve.active_turns_per_user)
     state.background = set()
     state.tracer = setup_tracing()  # None unless OTEL_EXPORTER_OTLP_ENDPOINT is set
@@ -210,5 +220,5 @@ def create_serve_app(
     if serve.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=list(serve.cors_origins), allow_methods=["GET", "POST"], allow_headers=["*"])
     app.add_middleware(BodyLimit, max_bytes=serve.max_body_bytes)
-    app.add_middleware(TraceIdMiddleware)  # outermost but the error handler: a 413 carries X-Trace-Id too
+    app.add_middleware(TraceIdMiddleware, metrics=metrics)  # outermost but the error handler: a 413 carries X-Trace-Id too
     return app

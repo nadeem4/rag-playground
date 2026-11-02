@@ -37,6 +37,7 @@ with a run, and a question set while it is checked.
 | What | Where | How long |
 |---|---|---|
 | Logs | Standard error, one JSON line per request, step and failure | As long as your log system keeps them. They hold the trace id and counts, and no question or answer text unless you set `PANDION_LOG_CONTENT=true`. |
+| Prometheus metrics | Served on the port you set in `ServeSettings.metrics_port`, to whoever scrapes it | Off unless you set the port. They hold counts, timings, step names, route templates and estimated cost. They never hold a question, an answer or a user id. |
 | OpenTelemetry spans | Sent to the endpoint you set in `OTEL_EXPORTER_OTLP_ENDPOINT`, and nowhere else | Off unless you set that variable. A span holds step names, timings, the model name and token counts, and the question only when `PANDION_LOG_CONTENT=true`. |
 
 Where a site's users' data goes (record the region for your own deployment). Retention and forgetting a user are in [pandion-api.md](pandion-api.md#your-users-data).

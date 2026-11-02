@@ -71,6 +71,8 @@ Serve deletes conversations older than `ServeSettings(retention_days=90)` every 
 Serve mode logs one JSON line per request, step and failure, and sets an `X-Trace-Id` header.
 For OpenTelemetry spans, install `pandion-api[otel]` and set `OTEL_EXPORTER_OTLP_ENDPOINT`.
 See [Logs and traces](../../docs/pandion-api.md#logs-and-traces).
+For Prometheus metrics on their own port, install `pandion-api[metrics]` and set
+`ServeSettings(metrics_port=9464)`. See [Metrics](../../docs/pandion-api.md#metrics).
 
 ## The routes
 

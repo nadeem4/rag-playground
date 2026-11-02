@@ -89,6 +89,8 @@ async def chat(body: ChatIn, request: Request):
             log_event(e, body.conversation_id)
             if spans:
                 spans.on_event(e)
+            if app.metrics:
+                app.metrics.on_event(e)
             if e.get("event") == "chat_rewrite":
                 on_event(e)
 
@@ -104,6 +106,8 @@ async def chat(body: ChatIn, request: Request):
         except Exception:  # noqa: BLE001  (the caller sees one sentence; the log has the rest)
             logger.exception("Chat turn failed.", extra={"trace_id": trace_id})
             return fail()
+        if app.metrics:  # spend counts even when the turn gave no answer
+            app.metrics.turn_done(result.answer)
         if not result.answer.ok:
             logger.warning("Chat turn gave no answer.", extra={"trace_id": trace_id})
             return fail()

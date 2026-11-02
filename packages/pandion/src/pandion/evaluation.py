@@ -9,7 +9,9 @@ document that answers it. `id`, `answer`, `tags` and `document` are optional. A 
 that document; one that names none is found in a piece from any.
 `trace` follows one question's answer down a finished run and says the first step
 that lost it. `evaluate` asks every question in a set and runs `trace` for every miss.
-`report.against(baseline)` says which questions a run newly missed or newly found.
+`report.against(baseline)` says which questions a run newly missed or newly found, in total
+and per `category:<name>` tag (`gate_ok` fails when any category lost a question).
+`environment(p)` and `check_environment` record and check the platform and models a baseline was made with.
 `compare` runs a pipeline once per variant of one stage and evaluates each.
 See docs/pandion.md, "Evaluate a pipeline" and "Compare settings".
 """
@@ -63,11 +65,14 @@ __all__ = [
     "Regression",
     "StepInput",
     "best",
+    "category_of",
+    "check_environment",
     "check_questions",
     "check_questions_across",
     "compare",
     "document_text",
     "documents_named",
+    "environment",
     "evaluate",
     "find_gold",
     "load_baseline",
@@ -304,13 +309,25 @@ class Regression:
     unmatched: list[str]
     partial: bool
     notes: list[str]
+    #: Per category (the `category:<name>` tag): `compared`, `found_before`,
+    #: `found_now`, `newly_missed` and `newly_found`.
+    by_category: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def ok(self, allow: int = 0) -> bool:
-        """At most `allow` questions were newly missed."""
+        """At most `allow` questions were newly missed, over the whole set."""
         return len(self.newly_missed) <= allow
 
+    def failed_categories(self, allow: int = 0) -> list[str]:
+        """The categories with more than `allow` newly missed questions."""
+        return [c for c, r in self.by_category.items() if len(r["newly_missed"]) > allow]
+
+    def gate_ok(self, allow: int = 0) -> bool:
+        """Every category has at most `allow` newly missed questions, so one
+        category's loss is not hidden by another's gain."""
+        return not self.failed_categories(allow)
+
     def to_dict(self) -> dict[str, Any]:
-        return {**asdict(self), "ok": self.ok()}
+        return {**asdict(self), "ok": self.ok(), "gate_ok": self.gate_ok()}
 
     def __str__(self) -> str:
         line = f"Found {self.found_now} of {self.compared}; the baseline found {self.found_before} of {self.compared}."
@@ -348,7 +365,7 @@ def _report(report: EvaluationReport | dict[str, Any] | str | Path, name: str) -
             report = json.loads(Path(report).read_text(encoding="utf-8"))
         except FileNotFoundError:
             raise ValueError(
-                f"There is no baseline file at {name}. Save one with pandion eval ... --json > {name}."
+                f"There is no baseline file at {name}. Record one with pandion eval ... --record-baseline {name}."
             ) from None
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ValueError(f"{name} cannot be read as JSON: {exc}") from None
@@ -370,6 +387,36 @@ def regression(
     with the set's `questions_fingerprint` or every question's `golds`. A
     report that is not one is a ValueError with a plain sentence."""
     return _regression(_report(now, "The run to compare"), load_baseline(baseline))
+
+
+#: A category with fewer questions than this has a gate that one question can flip.
+WEAK_GATE_BELOW = 10
+
+
+def category_of(question: dict[str, Any]) -> str:
+    """The name in a question's first `category:<name>` tag, else "uncategorized"."""
+    for tag in question.get("tags") or []:
+        if isinstance(tag, str) and tag.startswith("category:") and tag[9:]:
+            return tag[9:]
+    return "uncategorized"
+
+
+def _by_category(pairs: list[tuple[dict[str, Any], dict[str, Any]]]) -> dict[str, dict[str, Any]]:
+    """Count the paired questions per category, as the current run tags them."""
+    out: dict[str, dict[str, Any]] = {}
+    for q, b in pairs:
+        c = out.setdefault(
+            category_of(q),
+            {"compared": 0, "found_before": 0, "found_now": 0, "newly_missed": [], "newly_found": []},
+        )
+        c["compared"] += 1
+        c["found_before"] += bool(b["found"])
+        c["found_now"] += bool(q["found"])
+        if b["found"] and not q["found"]:
+            c["newly_missed"].append(q["id"])
+        if q["found"] and not b["found"]:
+            c["newly_found"].append(q["id"])
+    return dict(sorted(out.items()))
 
 
 def _key(q: dict[str, Any]) -> tuple[str, str]:
@@ -424,6 +471,11 @@ def _regression(now: dict[str, Any], before: dict[str, Any]) -> Regression:
             f"{', '.join(shaky)} can give a different result each run, so a newly missed "
             "question may be noise. Run it again before you trust the change."
         )
+    by_category = _by_category(pairs)
+    for name, c in by_category.items():
+        # Only a category the author named: a set with no categories is one gate, as before.
+        if name != "uncategorized" and c["compared"] < WEAK_GATE_BELOW:
+            notes.append(f'The "{name}" category has {c["compared"]} questions, so its gate is weak.')
     return Regression(
         found_before=sum(b["found"] for _, b in pairs),
         found_now=sum(q["found"] for q, _ in pairs),
@@ -433,7 +485,77 @@ def _regression(now: dict[str, Any], before: dict[str, Any]) -> Regression:
         unmatched=unmatched,
         partial=partial,
         notes=notes,
+        by_category=by_category,
     )
+
+
+def _step_models(stage: Stage, block: Any) -> list[str]:
+    """The model ids a step block (or a list of steps) uses, with each
+    strategy's default filled in for a `model` the file leaves out."""
+    from pandion.llm import CHAT_MODELS, model_name_for
+    from pandion.registry import registry
+
+    out: list[str] = []
+    for b in block if isinstance(block, list) else [block]:
+        if not isinstance(b, dict) or "use" not in b:
+            continue
+        discover()
+        settings = registry.get(stage, b["use"]).config_model(**{k: v for k, v in b.items() if k != "use"})
+        model = getattr(settings, "model", None)
+        if not isinstance(model, str):
+            continue
+        chat = CHAT_MODELS.get(model)
+        typed = (
+            model_name_for(chat, getattr(settings, "custom_model", ""), getattr(settings, "openrouter_model", ""))
+            if chat
+            else None
+        )
+        out.append(typed or model)
+    return out
+
+
+def environment(p: Pipeline) -> dict[str, Any]:
+    """Where a baseline is made: the platform, the model ids the pipeline
+    uses (the embedder and every chat model, a typed custom or OpenRouter
+    name in place of its key), and the Pandion version."""
+    import platform
+
+    import pandion
+
+    d = p.to_dict()
+    models = {(d.get("index", {}).get("embed") or {}).get("use")}
+    steps = (
+        ("retrieve", "rewrite", Stage.QUERY),
+        ("retrieve", "rerank", Stage.RERANK),
+        ("index", "enrich", Stage.ENRICH),
+        (None, "answer", Stage.USE_CASE),
+    )
+    for where, step, stage in steps:
+        block = (d.get(where, {}) if where else d).get(step)
+        if block:
+            models.update(_step_models(stage, block))
+    return {
+        "platform": f"{platform.system()}-{platform.machine()}".lower(),
+        "models": sorted(m for m in models if m),
+        "pandion": pandion.__version__,
+    }
+
+
+def check_environment(baseline: dict[str, Any], now: dict[str, Any]) -> list[str]:
+    """Notes on comparing a run in `now` with `baseline`, or a ValueError with
+    one plain sentence when the platform or the models differ. The Pandion
+    version is recorded but not compared."""
+    then = baseline.get("environment")
+    if not then:
+        return ["The baseline has no environment record, so its platform and models were not checked."]
+    if then.get("platform") != now["platform"] or then.get("models") != now["models"]:
+        raise ValueError(
+            f"This baseline was recorded on {then.get('platform')} with models {', '.join(then.get('models', []))}; "
+            f"this run is on {now['platform']} with models {', '.join(now['models'])}, "
+            "so the comparison would not be fair. Re-record it here with --record-baseline, "
+            "or run on the machine that recorded it."
+        )
+    return []
 
 
 def best(reports: list[EvaluationReport] | list[dict[str, Any]]) -> list[int]:

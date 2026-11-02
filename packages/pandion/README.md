@@ -98,7 +98,9 @@ writes the same folder for any pipeline. See
 `pandion validate pipeline.yaml`, `pandion index pipeline.yaml report.pdf`, `pandion ask pipeline.yaml "..."`,
 and `pandion sync pipeline.yaml` (reads the `source:` block of the file, needs `pandion[files]`
 for the `files` source, prints one JSON summary line and exits non-zero when a document was
-left out): the same pipeline, from the command line. See
+left out): the same pipeline, from the command line. `pandion eval pipeline.yaml questions.json
+--record-baseline base.json` saves a baseline with the platform and models it was made with, and
+`--baseline base.json` then fails when any category newly misses a question. See
 [the pandion command](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#the-pandion-command).
 
 ## Extend Pandion

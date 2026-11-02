@@ -87,7 +87,13 @@ and scores it with the same `eval` step; the app's Evaluate page runs it through
 `POST /api/v2/evaluations` and shows the totals it returns.
 `pandion.compare(p, stage, variants, documents, questions)` builds one pipeline per
 variant and evaluates each; the app's Compare page runs it through
-`POST /api/v2/comparisons` and shows the best it names. The `mmr` reranker and the `chat` step embed with the
+`POST /api/v2/comparisons` and shows the best it names. The offline gate is
+`report.against(baseline)` (`Regression` in `pandion/evaluation.py`): it counts newly missed
+questions per `category:<name>` tag, so one category's loss is never hidden by another's gain,
+and `pandion eval --baseline` exits 1 on any category over `--allow`. A baseline written by
+`--record-baseline` carries an `environment` block (platform, model ids, Pandion version);
+`check_environment` refuses a comparison made on another platform or with other models
+before any search runs. The `mmr` reranker and the `chat` step embed with the
 index's own model through two public names of `pandion.plugins.retrieve`,
 `read_descriptor` and `embedder_for`.
 

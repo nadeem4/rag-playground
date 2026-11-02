@@ -15,6 +15,7 @@ the caller runs after replying so the user never waits for it.
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from dataclasses import dataclass
 from collections.abc import Sequence
@@ -31,6 +32,8 @@ from pandion.llm import CHAT_MODELS
 MAX_REWRITE = 300
 
 #: The newest memories placed in a rewrite prompt, and the limits on what is kept.
+logger = logging.getLogger(__name__)
+
 MAX_MEMORIES = 20
 MAX_FACTS = 3
 MAX_FACT = 200
@@ -252,14 +255,16 @@ def remember(
     try:
         user = f"<message>\n{question}\n</message>"
         facts = json.loads(_call(settings.summary_model, MEMORY_SYSTEM, user, credentials, 300))
-    except Exception:
+    except Exception as exc:
+        logger.warning("Memory skipped: the model call or its reply failed (%s: %s).", type(exc).__name__, exc)
         return []
     if not isinstance(facts, list):
+        logger.warning("Memory skipped: the model reply was not a list of facts.")
         return []
     seen = {_norm(m.text) for m in store.memories(user_id)}
     added: list[Memory] = []
     for fact in facts:
-        text = " ".join(fact.split())[:MAX_FACT] if isinstance(fact, str) else ""
+        text = " ".join(fact.replace("<", "").replace(">", "").split())[:MAX_FACT] if isinstance(fact, str) else ""
         if len(added) == MAX_FACTS:
             break
         if text and _norm(text) not in seen:

@@ -152,3 +152,45 @@ def chat_turn(
         Turn(question=question, answer=text, rewrite=standalone, source_ids=sources, trace_id=trace_id or ""),
     )
     return TurnResult(conversation_id, question, standalone, text, sources, answer)
+
+
+def _cap(summary: str) -> str:
+    """Cut a too-long summary at the last sentence end that fits."""
+    if len(summary) <= MAX_SUMMARY:
+        return summary
+    cut = summary[:MAX_SUMMARY]
+    end = max(cut.rfind(mark) for mark in (". ", "! ", "? "))
+    if end == -1 and cut[-1] in ".!?":
+        return cut
+    return cut[: end + 1] if end != -1 else cut
+
+
+def fold_summary(
+    store: ConversationStore,
+    *,
+    conversation_id: str,
+    user_id: str,
+    settings: ChatSettings | None = None,
+    credentials: dict | None = None,
+) -> bool:
+    """Fold the turns older than the last N into the running summary.
+
+    Run it after replying so the user never waits. Returns False, calling no
+    model, when there is nothing new to fold or the conversation is not this
+    user's. A failed model call raises and changes nothing, so the next call
+    folds the same turns again.
+    """
+    settings = settings or ChatSettings()
+    conversation = store.load(conversation_id, user_id)
+    if conversation is None:
+        return False
+    upto = len(conversation.turns) - settings.last_turns
+    if upto <= conversation.summary_upto:
+        return False
+    old = f"Earlier summary: {conversation.summary}\n" if conversation.summary else ""
+    user = f"{old}<turns>\n{_lines(conversation.turns[conversation.summary_upto:upto])}\n</turns>"
+    summary = _cap(_call(settings.summary_model, SUMMARY_SYSTEM, user, credentials, 600))
+    if not summary:
+        raise ValueError("The model gave no summary, so the older turns were not folded.")
+    store.set_summary(conversation_id, summary, upto)
+    return True

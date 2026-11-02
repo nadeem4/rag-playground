@@ -251,6 +251,30 @@ it is not in `PLUGIN_MODULES`. See "Index stores" in [pandion.md](pandion.md#ind
 
 The conversation store sits beside it and is separate from the index: chats and a user's memories live there, so servers keep no state. `pandion.conversation_store` defines the Stable contract (`ConversationStore`, `Turn`, `Conversation`, `Memory` and `register_conversation_store`), `pandion.conversation_sql` is the `sql` store on SQLAlchemy (the `sql` extra, imported only inside functions), and `pandion.testing.conversation_store_conformance` proves any store keeps the contract, including that one user never reaches another's data. See "Conversations" in [pandion.md](pandion.md#conversations).
 
+`pandion.chat_turn` runs one turn on top of it. History gives meaning, sources give facts: the follow-up is rewritten into a standalone question using the summary and the last turns, and the answer step is asked only that question, so a stored answer can never reach it as a fact.
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%
+sequenceDiagram
+  participant C as Caller
+  participant T as chat_turn
+  participant S as Conversation store
+  participant M as Cheap model
+  participant P as Pipeline
+  C->>T: question, user, conversation id
+  T->>S: load (owner only)
+  S-->>T: summary and turns
+  T->>M: rewrite (only with history)
+  M-->>T: standalone question
+  T->>P: ask(standalone question only)
+  P-->>T: answer and sources
+  T->>S: append turn
+  T-->>C: TurnResult
+  C->>T: fold_summary (after replying)
+  T->>M: fold older turns
+  T->>S: set_summary
+```
+
 [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-strategy) walks through adding one to
 Pandion. A strategy that lives outside Pandion is registered the same way, with
 `@register` from `pandion.extend`, and loaded by an import in code, a `plugins:` list in

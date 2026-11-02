@@ -101,3 +101,11 @@ def test_fold_summary_for_another_users_conversation_does_nothing(store, fake):
     assert fold_summary(store, conversation_id="c", user_id="intruder", settings=SETTINGS) is False
     assert fake.calls == []
     assert store.load("c", "u").summary_upto == 0
+
+
+def test_an_empty_summary_reply_is_an_error_and_changes_nothing(store, monkeypatch):
+    monkeypatch.setattr("pandion.llm.complete", Fake(reply=""))
+    fill(store, 5)
+    with pytest.raises(ValueError):
+        fold_summary(store, conversation_id="c", user_id="u", settings=SETTINGS)
+    assert store.load("c", "u").summary_upto == 0

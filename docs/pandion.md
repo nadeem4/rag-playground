@@ -2479,6 +2479,33 @@ conversation_store_conformance(lambda: MyStore(MySettings()))
 
 `pandion plugins` lists every conversation store, with the kind `conversation store`.
 
+### A chat turn
+
+`pandion.chat_turn` runs one turn of a conversation. It is **Provisional** until the server uses it. The rule is simple: history gives a question its meaning, and only the sources give facts. A follow-up such as "and the notice period?" means nothing alone, so the turn first rewrites it into a question that stands alone, using the running summary and the last few turns. The answer step is then asked that one question and nothing else. A past answer never reaches it, so an answer you gave earlier can never come back as a fact.
+
+```python
+from pandion.chat_turn import ChatSettings, chat_turn, fold_summary
+from pandion.conversation_store import get_conversation_store
+
+store = get_conversation_store("sql", {"url": "sqlite:///conversations.db"})
+first = chat_turn(p, store, user_id="ana", question="What does the lease say about rent?")
+second = chat_turn(p, store, user_id="ana", question="And the notice period?",
+                   conversation_id=first.conversation_id)
+print(second.standalone)   # what was searched, for example "What is the notice period in the lease?"
+print(second.text, second.source_ids)
+fold_summary(store, conversation_id=first.conversation_id, user_id="ana")  # after replying
+```
+
+`chat_turn(p, store, *, user_id, question, conversation_id=None, settings=None, roles=None, credentials=None, on_event=None, trace_id=None)` returns a `TurnResult`: `conversation_id`, `question` (as typed), `standalone`, `text`, `source_ids` (the unique piece ids the answer cites, or the pieces a `search` answer returned), and `answer`, the pipeline's `Answer`. Leave `conversation_id` out to start a new conversation. An id that belongs to another user raises `ConversationNotFound` before anything is asked. When the answer fails, `text` is empty, no turn is stored, and `answer` says why.
+
+- A first turn costs no rewrite call. When the rewrite call fails, or its reply is empty, longer than 300 characters or more than one line, the question is searched as typed, so a reply is never lost to a rewrite.
+- The history is placed inside a labelled block and the model is told it is text to read, not instructions.
+- `ChatSettings` holds `last_turns` (default 6, at least 1), `rewrite_model` and `summary_model` (default `claude-haiku-4-5`, any key of `pandion.llm.CHAT_MODELS`) and `memory` (default off; it is used by a later release).
+- The turn emits one event, `chat_rewrite`, with `standalone` and `reason` (`no history`, `rewritten`, `failed` or `too long`), through `on_event`.
+- `fold_summary(store, *, conversation_id, user_id, settings=None, credentials=None)` folds the turns older than the last `last_turns` into the running summary, keeps those last turns verbatim, and returns `True`. It returns `False`, calling no model, when there is nothing new to fold or the conversation is not the user's, so calling it again does no harm. A summary over 1,500 characters is cut at a sentence end. A failed model call raises and changes nothing, so the next call folds the same turns again. Pandion starts no thread: run it after replying so the user never waits.
+
+The example [`chat_turn.py`](../examples/pandion/chat_turn.py) runs a first turn offline, and with `ANTHROPIC_API_KEY` set a follow-up too.
+
 ## Rolling out a new index
 
 Every sync builds its rows into a new collection in the store. The name is made of two
@@ -2783,7 +2810,7 @@ contract changes only after a deprecation in the changelog.
 | Level | Extension points |
 | --- | --- |
 | Stable | Source, route check, access rule, index store, conversation store, Policy |
-| Provisional | Step plugins, executor events, online evaluators |
+| Provisional | Step plugins, executor events, online evaluators, the chat turn (`ChatSettings`, `chat_turn`, `fold_summary`) |
 
 Each Stable point has a tested example: a source ([`zip_source.py`](../examples/pandion/extensions/zip_source.py)),
 a route check ([`route.py`](../examples/pandion/own_strategies/my_strategies/route.py)), an access rule

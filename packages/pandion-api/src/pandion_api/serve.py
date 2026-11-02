@@ -23,6 +23,7 @@ from pandion import Pipeline
 from pandion.extend import ALL_ROLES
 from pandion.extend import ChatSettings
 from pandion.extend import ConversationStore, get_conversation_store
+from pandion_api.observability import TraceIdMiddleware, configure_logging, setup_tracing
 from pandion_api.policy import Policy
 from pandion_api.routes import chat, serve_health
 from pandion_api.runs import RunManager
@@ -88,6 +89,7 @@ def create_serve_app(
     is a store, else `default_store`."""
     if pipeline is None:
         raise ValueError('Serve mode needs a pipeline file: pass pipeline="pipeline.yaml" to create_app.')
+    configure_logging()
     policy = policy or Policy()
     loaded = load_pipeline(pipeline, settings)
     manager = RunManager(limit=policy.max_active_runs)
@@ -110,8 +112,10 @@ def create_serve_app(
     state.settings, state.policy, state.runs = settings, policy, manager
     state.serve = serve or ServeSettings()
     state.background = set()
+    state.tracer = setup_tracing()  # None unless OTEL_EXPORTER_OTLP_ENDPOINT is set
     state.pipeline = loaded
     state.conversations = conversations if conversations is not None else default_store(settings)
+    app.add_middleware(TraceIdMiddleware)
     for router in SERVE_ROUTERS:
         app.include_router(router, prefix=settings.prefix, dependencies=policy.dependencies())
     return app

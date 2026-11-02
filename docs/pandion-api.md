@@ -18,6 +18,7 @@ plus the playground's teaching routes.
 - [Endpoints](#endpoints)
 - [Runs](#runs)
 - [Serve mode](#serve-mode)
+- [Logs and traces](#logs-and-traces)
 - [Site rules: the Policy](#site-rules-the-policy)
 - [What a request cannot set](#what-a-request-cannot-set)
 - [The playground on pandion-api](#the-playground-on-pandion-api)
@@ -462,6 +463,41 @@ resumed on another server copy: there is no events route in serve.
 `GET /health` says `{"status": "ok"}` and names no version. `GET /ready` is `200
 {"ready": true}` when the conversation store opens and the pipeline's index is there, else
 `503 {"ready": false}` with no reason. The reason goes to the log.
+
+## Logs and traces
+
+Serve mode writes one JSON object per line to standard error. Each line has `ts`, `level`,
+`msg`, `trace_id` and `conversation_id`, plus the fields of its kind:
+
+| Line | Extra fields |
+|---|---|
+| One per request | `route` (the route template, never the raw path), `method`, `status`, `duration_ms` |
+| One per finished or failed step | `stage`, `duration_ms`, `usage` (model and token counts) |
+| One per failure | `exc` (the traceback) |
+| One per answered turn | `question` and `answer`, only when `PANDION_LOG_CONTENT=true` |
+
+Text a user wrote or an answer gave is never logged unless you set `PANDION_LOG_CONTENT=true`.
+
+Every response has an `X-Trace-Id` header. The server makes the id for each request and never
+trusts one the client sends. The same id is in the `done` event, the error sentence, the stored
+turn, every log line and every executor event, so one search finds a whole turn.
+
+To send OpenTelemetry spans, install the extra and set the standard variables:
+
+```bash
+pip install "pandion-api[otel]"
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer ..."   # optional, from the environment only
+```
+
+With no endpoint set, OpenTelemetry is not imported and the extra is not needed. With an
+endpoint but no extra, the server stops at startup and names `pandion-api[otel]`. Each turn
+is one `chat` span with one child span per step, named after the step. A step that called a
+model has the GenAI attributes `gen_ai.operation.name`, `gen_ai.request.model`,
+`gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens`. The span's trace id is the
+request's trace id. Question text is a span attribute only when `PANDION_LOG_CONTENT=true`.
+A failed step marks its span, and the turn's span, as an error. Spans for sync runs are not
+part of release 1.
 
 ## Site rules: the Policy
 

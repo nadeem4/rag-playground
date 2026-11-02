@@ -52,6 +52,10 @@ curl -N http://127.0.0.1:8000/chat -H 'content-type: application/json' \
 
 [docs/pandion-api.md](../../docs/pandion-api.md#serve-mode) has the request, the events and `/ready`.
 
+Serve mode logs one JSON line per request, step and failure, and sets an `X-Trace-Id` header.
+For OpenTelemetry spans, install `pandion-api[otel]` and set `OTEL_EXPORTER_OTLP_ENDPOINT`.
+See [Logs and traces](../../docs/pandion-api.md#logs-and-traces).
+
 ## The routes
 
 Each path is under `prefix`.

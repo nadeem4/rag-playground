@@ -114,7 +114,7 @@ from an example that the repository's tests run.
 | Route check | Stable | [`route.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/own_strategies/my_strategies/route.py) |
 | Access rule | Stable | [`owner_access.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/extensions/owner_access.py) |
 | Index store | Stable | [`json_file_store.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/extensions/json_file_store.py) |
-| Conversation store | Stable | [`dict_conversation_store.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/extensions/dict_conversation_store.py) |
+| Conversation store | Stable | example in the next PR |
 | Policy | Stable | [`policy_example.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion-api/policy_example.py) |
 | Step plugins, executor events, online evaluators | Provisional | |
 

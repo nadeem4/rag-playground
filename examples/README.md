@@ -5,7 +5,7 @@ them, so they stay in step with the code.
 
 - [`pandion/`](pandion): Pandion used directly from Python, and the `pandion` command.
   Start here if your code is Python.
-- [`pandion/extensions/`](pandion/extensions): a source, an access rule, an index store and a conversation store
+- [`pandion/extensions/`](pandion/extensions): a source, an access rule and an index store
   of your own, each with its test.
 - [`pandion-api/`](pandion-api): Pandion served over HTTP by pandion-api, with a Python
   client and the same steps as curl commands. Start here if the code that needs Pandion

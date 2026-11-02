@@ -2421,7 +2421,7 @@ The `url` is a secret: it never appears in a repr, and its password is hidden in
 
 ### Your own conversation store
 
-Write a class with the nine methods, a `name` and a `settings_model`, and register it. [`dict_conversation_store.py`](../examples/pandion/extensions/dict_conversation_store.py) is a small store you can copy, with each rule of the contract in a comment. Prove it with the same suite the `sql` store passes, which includes the checks that one user can never read, list, append to or delete another user's conversation, or list or delete another user's memory.
+Write a class with the nine methods, a `name` and a `settings_model`, and register it. Prove it with the same suite the `sql` store passes, which includes the checks that one user can never read, list, append to or delete another user's conversation, or list or delete another user's memory.
 
 ```python
 from pandion.extend import register_conversation_store
@@ -2745,8 +2745,7 @@ Each Stable point has a tested example: a source ([`zip_source.py`](../examples/
 a route check ([`route.py`](../examples/pandion/own_strategies/my_strategies/route.py)), an access rule
 ([`owner_access.py`](../examples/pandion/extensions/owner_access.py)), an index store
 ([`json_file_store.py`](../examples/pandion/extensions/json_file_store.py)) and a Policy
-([`policy_example.py`](../examples/pandion-api/policy_example.py)). a conversation store
-([`dict_conversation_store.py`](../examples/pandion/extensions/dict_conversation_store.py)).
+([`policy_example.py`](../examples/pandion-api/policy_example.py)). The conversation store's example lands with that store.
 
 A strategy only works by name once the module that registers it has been imported. There are
 three ways to make that happen.

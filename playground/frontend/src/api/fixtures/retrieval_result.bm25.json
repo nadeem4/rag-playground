@@ -179,7 +179,7 @@
   "fetch_k": 20,
   "total_candidates": 5,
   "timings_ms": {
-    "search": 21.226499986369163
+    "search": 146.17039999575354
   },
   "expanded_query": null,
   "expansion_terms": []

@@ -80,12 +80,22 @@ class Registry:
                         }
                         for port_name, port in cls.inputs.items()
                     },
-                    "config_schema": cls.config_model.model_json_schema(),
+                    "config_schema": _form_schema(cls.config_model),
                     "learn": cls.learn,
                 }
                 for name, cls in bucket.items()
             }
         return out
+
+
+def _form_schema(model: type) -> dict[str, Any]:
+    """The settings schema a form is drawn from. A setting marked
+    `"x-internal": True` is set by Pandion, never typed, so it is left out."""
+    schema = model.model_json_schema()
+    props = schema.get("properties", {})
+    for name in [n for n, p in props.items() if p.get("x-internal")]:
+        del props[name]
+    return schema
 
 
 #: The process-wide registry that the `@register` decorator writes to.

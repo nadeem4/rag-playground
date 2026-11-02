@@ -34,7 +34,8 @@ const CHUNK_SET_KEYS: (keyof ChunkSet)[] = [
 
 describe("types mirror the engine's real payloads", () => {
   it("registry entries carry exactly the TransformInfo fields", () => {
-    const entries = Object.values(registry).flatMap((stage) => Object.values(stage))
+    // `route` sits beside the stages and lists checks, not steps (routeChecksOf).
+    const entries = Object.entries(registry).filter(([stage]) => stage !== "route").flatMap(([, stage]) => Object.values(stage))
     expect(entries.length).toBeGreaterThanOrEqual(14)
     for (const t of entries) {
       // `summary` (plan I-11) and `learn` (plan I-22) are additive: older fixtures lack them.

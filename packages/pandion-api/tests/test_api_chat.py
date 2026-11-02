@@ -17,7 +17,7 @@ from pandion_api.policy import AnonymousPolicy
 
 
 def answer(text="The notice period is 30 days.", ok=True):
-    hit = SimpleNamespace(chunk=SimpleNamespace(id="c1", doc_id="lease.pdf", page_span=(2, 3)), score=0.5)
+    hit = SimpleNamespace(chunk=SimpleNamespace(id="c1", doc_id="lease.pdf", page_span=(2, 3), text="Notice is 30 days."), score=0.5)
     payload = {"answer": [{"text": text}], "citations": [{"chunk_id": "c1"}]}
     return SimpleNamespace(
         ok=ok, text=text if ok else "", output=SimpleNamespace(payload=payload) if ok else None,

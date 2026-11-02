@@ -46,6 +46,7 @@ from typing import Any
 from pandion.access import ALL_ROLES, AccessDenied, access_rule
 from pandion.artifacts import ArtifactType
 from pandion.chat_turn import ChatSettings, TurnResult, chat_turn, fold_summary, remember
+from pandion.errors import MissingExtra
 from pandion.conversation_store import (
     Conversation, ConversationInfo, ConversationNotFound, ConversationStore, Memory, Turn, get_conversation_store,
     register_conversation_store,
@@ -68,7 +69,7 @@ from pandion.transform import Explanation, Transform
 
 __all__ = [
     "ALL_ROLES", "AccessDenied", "ChatSettings", "TurnResult", "chat_turn", "fold_summary", "remember", "get_conversation_store", "access_rule", "FORMATS", "And", "AnyOf", "ArtifactType", "Capabilities", "Chunk", "ChunkSet", "Conversation", "ConversationInfo", "ConversationNotFound", "ConversationStore", "DocumentInfo", "Element", "Embedder",
-    "EndpointRefused", "Eq", "Explanation", "FetchRefused", "Hit", "In", "IndexMeta", "IndexRow", "Memory", "Output", "ParsedDoc",
+    "EndpointRefused", "Eq", "Explanation", "FetchRefused", "Hit", "In", "IndexMeta", "IndexRow", "Memory", "MissingExtra", "Output", "ParsedDoc",
     "PluginError", "PortSpec", "Query", "RetrievalResult", "RunContext", "Source", "SourceEntry", "Stage", "StoreHit", "Transform", "Turn", "UnreadableFormat",
     "check_contents", "document_info", "fetch_url", "format_of", "get_embedder", "guard_endpoint", "load_plugins",
     "openai_client_kwargs", "plugin_listing", "raw_file", "register", "register_conversation_store", "register_source", "register_store", "route_check", "set_note", "set_usage",

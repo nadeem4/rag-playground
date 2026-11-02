@@ -18,6 +18,7 @@ plus the playground's teaching routes.
 - [Endpoints](#endpoints)
 - [Runs](#runs)
 - [Serve mode](#serve-mode)
+- [Logs and traces](#logs-and-traces)
 - [Site rules: the Policy](#site-rules-the-policy)
 - [What a request cannot set](#what-a-request-cannot-set)
 - [The playground on pandion-api](#the-playground-on-pandion-api)
@@ -378,7 +379,7 @@ stop it: the set is already paid for, so the run finishes with it.
 
 `create_app` has two modes. The default, `mode="lab"`, is everything above: a client sends a
 pipeline with each request. `mode="serve"` is for a site's own users. It loads one pipeline
-file once, at startup, and answers one question route, `POST /chat`. No lab route is
+file once, at startup, and answers `POST /chat`, a one-turn `POST /ask`, and a user's own conversations and memories. No lab route is
 mounted, so `/documents`, `/runs`, `/strategies` and the rest are a 404.
 
 ```python
@@ -457,6 +458,27 @@ the server folds old turns into the running summary and, when `ServeSettings.cha
 is on, keeps facts the user shared. The user never waits for either. Cancel on disconnect applies to streams only: a JSON request runs to its end. A stream cannot be
 resumed on another server copy: there is no events route in serve.
 
+### POST /ask, conversations and memories
+
+`POST /ask` takes `{"question": "..."}` (1 to 8,000 characters) and answers once, with no
+conversation. It gives the same JSON reply as `/chat`, with `conversation_id` set to `null`,
+and stores nothing: no history, no rewrite, no summary, no memory.
+
+Every route below asks the Policy `limit` first, then `user_id`. Anything that is not the
+caller's own is a 404, the same as something that does not exist, so a guessed id tells
+nothing.
+
+| Route | What it does |
+|---|---|
+| `GET /conversations` | The user's conversations, newest first: `id`, `title`, `turns`, `updated_at`. |
+| `GET /conversations/{id}` | The turns in order. Each has `question`, `answer`, `source_ids`, `trace_id` and `created_at`. The rewrite and the running summary are never shown. |
+| `DELETE /conversations/{id}` | Deletes it and answers `204`. A second delete is a 404. |
+| `GET /memories` | The user's memories, oldest first. |
+| `DELETE /memories/{memory_id}` | Deletes one memory by id and answers `204`. There is no delete-all route. |
+
+The memory routes work even while `ServeSettings.chat.memory` is off, so a user can still
+see and delete memories kept while it was on.
+
 Answers are made safer by Pandion, not by the route: sources are fenced in the prompt, and a reply's links and images are removed unless a source holds the same address. The `token` event, the JSON reply and the stored turn all carry the cleaned text. Even so, a client should not load images or follow links in answers automatically. See [Answer safety](pandion.md#answer-safety).
 
 ### GET /health and GET /ready
@@ -464,6 +486,41 @@ Answers are made safer by Pandion, not by the route: sources are fenced in the p
 `GET /health` says `{"status": "ok"}` and names no version. `GET /ready` is `200
 {"ready": true}` when the conversation store opens and the pipeline's index is there, else
 `503 {"ready": false}` with no reason. The reason goes to the log.
+
+## Logs and traces
+
+Serve mode writes one JSON object per line to standard error. Each line has `ts`, `level`,
+`msg`, `trace_id` and `conversation_id`, plus the fields of its kind:
+
+| Line | Extra fields |
+|---|---|
+| One per request | `route` (the route template, never the raw path), `method`, `status`, `duration_ms` |
+| One per finished or failed step | `stage`, `duration_ms`, `usage` (model and token counts) |
+| One per failure | `exc` (the traceback) |
+| One per answered turn | `Chat turn answered.` is always logged. Its `question` and `answer` fields are added only when `PANDION_LOG_CONTENT=true` |
+
+The server adds its JSON handler to the `pandion_api` logger only if that logger has no handler yet, so your own logging setup wins. Records still reach the root logger. Text a user wrote or an answer gave is never logged unless you set `PANDION_LOG_CONTENT=true`.
+
+Every response has an `X-Trace-Id` header. The server makes the id for each request and never
+trusts one the client sends. The same id is in the `done` event, the error sentence, the stored
+turn, every log line and every executor event, so one search finds a whole turn.
+
+To send OpenTelemetry spans, install the extra and set the standard variables:
+
+```bash
+pip install "pandion-api[otel]"
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer ..."   # optional, from the environment only
+```
+
+With no endpoint set, OpenTelemetry is not imported and the extra is not needed. With an
+endpoint but no extra, the server stops at startup and names `pandion-api[otel]`. Each turn
+is one `chat` span with one child span per step, named after the step. A step that called a
+model has the GenAI attributes `gen_ai.operation.name`, `gen_ai.request.model`,
+`gen_ai.usage.input_tokens` and `gen_ai.usage.output_tokens`. The span's trace id is the
+request's trace id. Question text is a span attribute only when `PANDION_LOG_CONTENT=true`.
+A failed step marks its span, and the turn's span, as an error. Spans for sync runs are not
+part of release 1.
 
 ## Site rules: the Policy
 

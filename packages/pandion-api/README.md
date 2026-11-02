@@ -43,7 +43,16 @@ and a small Policy.
 For a site's own users, `create_app(settings, policy, mode="serve", pipeline="pipeline.yaml")`
 loads one pipeline file once and answers `POST /chat`, as JSON or as server-sent events. Your
 `Policy` says who is asking (`user_id`), which roles they have (`roles`) and whether they may
-ask now (`limit`). Build the index first with `pandion sync`.
+ask now (`limit`). Serve refuses to start without a Policy that overrides all three; pass
+`Policy.anonymous()` to say on purpose that everyone is one user. Build the index first with
+`pandion sync`.
+
+Serve is hardened by default: generic errors with a trace id, model keys from the environment
+only, public model endpoints only, a limit of 20 turns a minute and 2 active turns for each
+user, a 64 KB request body, a 120 second turn, no `/docs` and no CORS. See
+[Serve mode: hardened defaults](../../docs/pandion-api.md#serve-mode-hardened-defaults).
+[`serve_policy.py`](../../examples/pandion-api/serve_policy.py) shows a Policy that checks a
+signed gateway token.
 
 ```bash
 curl -N http://127.0.0.1:8000/chat -H 'content-type: application/json' \

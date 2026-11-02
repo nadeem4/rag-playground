@@ -393,15 +393,24 @@ class MyPolicy(Policy):
     def roles(self, request):
         return request.state.roles
 
+    def limit(self, request):
+        pass  # raise HTTPException(429, "...") to refuse
+
 app = create_app(
     ApiSettings(data_dir=Path("./pandion-data")),
     MyPolicy(),
     mode="serve",
     pipeline="pipeline.yaml",
     conversations=None,           # None: SQL on PANDION_CONVERSATIONS_URL, else a SQLite file in data_dir
-    serve=ServeSettings(),        # chat settings and retention_days
+    serve=ServeSettings(),        # chat settings, retention_days and the limits below
 )
 ```
+
+Serve refuses to start without a Policy that says who is asking. `create_app` raises a
+`ValueError` when the Policy is missing, or when its class does not override all of `user_id`,
+`roles` and `limit`; the message names the ones it does not. If one shared identity is what you
+want, say so with `Policy.anonymous()`. It is refused when the pipeline file has an `access:`
+block, because every caller would be the same person. Lab mode keeps the default Policy.
 
 The index is built beforehand with `pandion sync`, using the same pipeline file and the same
 `data_dir`. Serve does not index. At startup it runs one throwaway search so the first user
@@ -414,8 +423,32 @@ Serve asks the Policy three more questions on every `/chat` request.
 | Method | Default | Called |
 |---|---|---|
 | `roles(request)` | `None` | the roles of the person asking, matched against the pipeline's `access:` block, so a user only finds what their roles allow. It is never "every role" by default. |
-| `user_id(request)` | `"anonymous"` | a stable id. Conversations and memories are kept under it, and another user's conversation id is a 404. The default shares one id between everyone, which suits a demo and no real site. |
+| `user_id(request)` | `"anonymous"` | a stable id. Conversations and memories are kept under it, and another user's conversation id is a 404. The default shares one id between everyone, which suits a demo and no real site. Serve refuses to start with the default. |
 | `limit(request)` | allows | before anything runs. Raise `HTTPException(429, "...")` to refuse, for example for a rate limit. |
+
+A Policy is usually a thin check of a signed token your gateway or login service issues, such as a
+JWT. [`examples/pandion-api/serve_policy.py`](../examples/pandion-api/serve_policy.py) shows the
+shape with an HMAC-signed token and no extra package.
+
+### Serve mode: hardened defaults
+
+Serve starts safe. Each default below is on until you change it.
+
+| Default | What it does | What turns it off |
+|---|---|---|
+| Policy required | Startup fails without a Policy that overrides `user_id`, `roles` and `limit`. | `Policy.anonymous()`, on purpose. |
+| Generic errors | A caller sees only "Something went wrong. Quote this trace id when you ask for help: ..." The reason is logged at ERROR with the same trace id, under the `pandion_api` logger. A refusal your Policy raises, and a 422 for bad input, keep their own sentence. | Nothing. |
+| Keys from the environment | Model keys come only from the server's environment variables. A key header is ignored, and `Policy.key` and `Policy.credentials` are not called. | Nothing. |
+| Public endpoints only | A custom model endpoint in the pipeline file must be a public https address, or startup fails. A URL document is held to the same rule. | Nothing. |
+| 20 turns a minute | A user past `ServeSettings.turns_per_minute` gets a 429. | A bigger number. |
+| 2 active turns | A user with `ServeSettings.active_turns_per_user` questions being answered gets a 429. | A bigger number. |
+| 64 KB request body | A larger body is a 413 before it is parsed. | `ServeSettings.max_body_bytes`. |
+| 120 second turn | A turn past `ServeSettings.turn_deadline_s` is cancelled and ends with the generic error. | `ServeSettings.turn_deadline_s`. |
+| No docs, no CORS | `/docs`, `/redoc` and `/openapi.json` are a 404. No CORS header is sent. | `ServeSettings.cors_origins`, a list of sites. A `"*"` entry stops startup. |
+
+The limits count in memory, per user id, for one server copy. With several copies, put a shared
+limit in `Policy.limit` (a gateway, or Redis). `/health` returns only `{"status": "ok"}` and
+`/ready` never says why it is not ready.
 
 ### POST /chat
 

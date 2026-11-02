@@ -9,6 +9,7 @@ not stream yet), `done` and, after a failure, `error` before `done`.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 import time
@@ -20,14 +21,13 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from pandion.extend import ConversationNotFound, chat_turn, fold_summary, remember
+from pandion_api.errors import generic
 from pandion_api.jobs import start
 from pandion_api.runs import event, events_response
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-#: What a caller is told when a turn fails; the trace id finds the real reason in the log.
-FAILED = "Sorry, that question could not be answered. Please try again."
 NO_CONVERSATION = "There is no conversation with that id."
 
 
@@ -74,10 +74,13 @@ async def chat(body: ChatIn, request: Request):
 
     def work(on_event, cancel, credentials):
         began = time.monotonic()
-        failed = {"conversation_id": body.conversation_id, "trace_id": trace_id, "text": "", "sources": [], "ok": False, "error": FAILED}
+        failed = {
+            "conversation_id": body.conversation_id, "trace_id": trace_id, "text": "", "sources": [], "ok": False,
+            "error": generic(trace_id),
+        }
 
         def fail():
-            on_event(event("error", error=FAILED, trace_id=trace_id))
+            on_event(event("error", error=generic(trace_id), trace_id=trace_id))
             on_event(event("done", conversation_id=body.conversation_id, trace_id=trace_id, ok=False))
             return False, cancel.is_set(), failed
 
@@ -129,7 +132,20 @@ async def chat(body: ChatIn, request: Request):
         reply = {"conversation_id": result.conversation_id, "trace_id": trace_id, "text": result.text, "sources": sources, "ok": True}
         return True, False, reply
 
-    state = app.runs.get(start(request, "chat", work)["run_id"])
+    app.limiter.acquire(user_id)
+    try:
+        state = app.runs.get(start(request, "chat", work)["run_id"])
+    except BaseException:
+        app.limiter.release(user_id)
+        raise
+    # The slot is freed and the deadline dropped however the run ends, even one cancelled unrun.
+    deadline = asyncio.get_running_loop().call_later(app.serve.turn_deadline_s, app.runs.cancel, state)
+
+    def finished(_task) -> None:
+        deadline.cancel()
+        app.limiter.release(user_id)
+
+    state.task.add_done_callback(finished)
     if not body.stream:
         await state.task
         if isinstance(state.result, dict) and state.result.get("not_found"):

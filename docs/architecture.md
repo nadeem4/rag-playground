@@ -449,6 +449,11 @@ are (`user_id`), what they may find (`roles`) and how often they may ask (`limit
 conversation store keeps each user's turns. The route reuses the run manager, so a turn is a run
 on a worker thread, and the client's disconnect cancels it.
 
+Serve starts hardened: it will not start without a Policy that overrides all three methods
+(`Policy.anonymous()` says so on purpose), a caller sees a generic error with a trace id, keys come
+from the environment only, and each user has a rate limit and an active-turn cap. See
+[pandion-api.md](pandion-api.md#serve-mode-hardened-defaults).
+
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%
 sequenceDiagram

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import traceback
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,13 +18,17 @@ from typing import Any
 
 import anyio
 import yaml
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from pandion import Pipeline
-from pandion.extend import ALL_ROLES
+from pandion.extend import ALL_ROLES, EndpointRefused, guard_endpoint
 from pandion.extend import ChatSettings
 from pandion.extend import ConversationStore, get_conversation_store
-from pandion_api.policy import Policy
+from pandion_api.errors import hide
+from pandion_api.limits import BodyLimit, TurnLimiter
+from pandion_api.policy import AnonymousPolicy, Policy
 from pandion_api.routes import chat, serve_health
 from pandion_api.runs import RunManager
 from pandion_api.settings import ApiSettings
@@ -42,19 +47,68 @@ class ServeSettings:
 
     chat: ChatSettings = field(default_factory=ChatSettings)
     retention_days: int = 90
+    #: Default limits for each user (see `pandion_api.limits`). In memory, per server copy.
+    turns_per_minute: int = 20
+    active_turns_per_user: int = 2
+    max_body_bytes: int = 65536
+    turn_deadline_s: float = 120.0
+    #: Sites allowed to call the API from a browser. Empty: CORS is off. No "*".
+    cors_origins: tuple[str, ...] = ()
+
+
+NEEDS_POLICY = (
+    "Serve mode needs a Policy that says who is asking. Subclass pandion_api.Policy and override "
+    "user_id, roles and limit, or pass Policy.anonymous() on purpose."
+)
+
+
+def check_policy(policy: Policy | None, pipeline: Pipeline) -> Policy:
+    """`policy` if serve may start with it, else a one-sentence ValueError."""
+    if policy is None:
+        raise ValueError(NEEDS_POLICY)
+    missing = [name for name in ("user_id", "roles", "limit") if getattr(type(policy), name) is getattr(Policy, name)]
+    if missing:
+        raise ValueError(f"{NEEDS_POLICY} This policy does not override: {', '.join(missing)}.")
+    if isinstance(policy, AnonymousPolicy) and pipeline.config.access is not None:
+        raise ValueError(
+            "The pipeline has an access block, but Policy.anonymous() gives every caller the same identity. "
+            "Use a Policy that says who is asking, or remove the access block."
+        )
+    return policy
+
+
+def check_public_endpoints(pipeline: Pipeline) -> None:
+    """Stop startup when any step of the pipeline file names a custom endpoint that is not public."""
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key == "custom_base_url" and isinstance(item, str) and item.strip():
+                    try:
+                        guard_endpoint(item.strip(), public_only=True)
+                    except EndpointRefused as exc:
+                        raise ValueError(str(exc)) from None
+                else:
+                    walk(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                walk(item)
+
+    walk(pipeline.to_dict())
 
 
 def load_pipeline(path: str | Path, settings: ApiSettings) -> Pipeline:
     """The pipeline file at `path`, with the server's folder and models in place
-    of its own `path` and `models`, as lab mode does for a request. A file that
-    cannot be read or is refused stops startup with a one-sentence ValueError."""
+    of its own `path` and `models`, as lab mode does for a request, and with
+    `public_endpoints_only` on. A file that cannot be read or is refused stops
+    startup with a one-sentence ValueError."""
     try:
         data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError):
         raise ValueError(f"The pipeline file {path} could not be read as YAML.") from None
     if not isinstance(data, dict):
         raise ValueError(f"The pipeline file {path} must be a mapping of settings.")
-    models = settings.models.model_dump(mode="json")
+    models = {**settings.models.model_dump(mode="json"), "public_endpoints_only": True}
     return Pipeline.from_dict({**data, "path": str(settings.data_dir), "models": models}, base=settings.data_dir)
 
 
@@ -88,8 +142,12 @@ def create_serve_app(
     is a store, else `default_store`."""
     if pipeline is None:
         raise ValueError('Serve mode needs a pipeline file: pass pipeline="pipeline.yaml" to create_app.')
-    policy = policy or Policy()
     loaded = load_pipeline(pipeline, settings)
+    policy = check_policy(policy, loaded)
+    check_public_endpoints(loaded)
+    serve = serve or ServeSettings()
+    if "*" in serve.cors_origins:
+        raise ValueError("cors_origins must list the sites by name. A wildcard is not allowed in serve mode.")
     manager = RunManager(limit=policy.max_active_runs)
 
     @asynccontextmanager
@@ -105,13 +163,23 @@ def create_serve_app(
             await manager.shutdown()
             await policy.on_shutdown(app)
 
-    app = FastAPI(title=settings.title, lifespan=lifespan)
+    app = FastAPI(title=settings.title, lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     state: Any = app.state
     state.settings, state.policy, state.runs = settings, policy, manager
-    state.serve = serve or ServeSettings()
+    state.serve = serve
+    state.limiter = TurnLimiter(serve.turns_per_minute, serve.active_turns_per_user)
     state.background = set()
     state.pipeline = loaded
     state.conversations = conversations if conversations is not None else default_store(settings)
     for router in SERVE_ROUTERS:
         app.include_router(router, prefix=settings.prefix, dependencies=policy.dependencies())
+
+    @app.exception_handler(Exception)
+    async def unhandled(request: Request, exc: Exception) -> JSONResponse:
+        detail = "".join(traceback.format_exception(exc))
+        return JSONResponse(status_code=500, content={"detail": hide(detail)})
+
+    if serve.cors_origins:
+        app.add_middleware(CORSMiddleware, allow_origins=list(serve.cors_origins), allow_methods=["GET", "POST"], allow_headers=["*"])
+    app.add_middleware(BodyLimit, max_bytes=serve.max_body_bytes)
     return app

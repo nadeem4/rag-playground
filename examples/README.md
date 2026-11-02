@@ -9,4 +9,5 @@ them, so they stay in step with the code.
   of your own, each with its test.
 - [`pandion-api/`](pandion-api): Pandion served over HTTP by pandion-api, with a Python
   client and the same steps as curl commands. Start here if the code that needs Pandion
-  is not Python, is a web app, or is one of several clients sharing a server.
+  is not Python, is a web app, or is one of several clients sharing a server. It also
+  has `serve_policy.py`, a serve-mode Policy that checks a signed gateway token.

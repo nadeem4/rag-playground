@@ -146,3 +146,19 @@ def test_a_real_pipeline_accepts_the_arguments(store, tmp_path, rewrites):
     p.index.run(folder)
     result = chat_turn(p, store, user_id="u", question="How do bees show the hive the flowers?", roles=None, trace_id="t")
     assert result.answer.ok and result.text and result.source_ids
+
+
+def test_cancel_is_passed_to_the_pipeline(store, rewrites):
+    import threading
+
+    p = StubPipeline()
+    cancel = threading.Event()
+    chat_turn(p, store, user_id="u", question="Q?", cancel=cancel)
+    assert p.asked[0]["cancel"] is cancel
+
+
+def test_a_cancelled_answer_stores_no_turn(store, rewrites):
+    p = StubPipeline(ok=False)
+    result = chat_turn(p, store, user_id="u", question="Q?")
+    assert result.text == "" and result.conversation_id == ""
+    assert store.list("u") == []

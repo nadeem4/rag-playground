@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import uuid
 from dataclasses import dataclass
 from collections.abc import Sequence
@@ -157,12 +158,14 @@ def chat_turn(
     credentials: dict | None = None,
     on_event: Any = None,
     trace_id: str | None = None,
+    cancel: threading.Event | None = None,
 ) -> TurnResult:
     """Load the conversation, make the question stand alone, ask, and store the turn.
 
     The answer step is asked only the standalone question. A conversation id that
     belongs to another user raises `ConversationNotFound` before anything is asked.
-    A failed answer stores no turn; the caller reads why from `result.answer`.
+    A failed or cancelled answer stores no turn; the caller reads why from `result.answer`.
+    `cancel` is handed to the pipeline as it is.
     """
     settings = settings or ChatSettings()
     conversation = None
@@ -177,7 +180,8 @@ def chat_turn(
         extra = {"trace_id": trace_id} if trace_id is not None else {}
         on_event(event("chat_rewrite", standalone=standalone, reason=reason, **extra))
     answer = p.ask(
-        standalone, roles=roles, credentials=credentials, on_event=on_event, trace_id=trace_id
+        standalone, roles=roles, credentials=credentials, on_event=on_event, cancel=cancel,
+        trace_id=trace_id,
     )
     if not answer.ok:
         # Nothing was stored, so a new conversation has no id yet.

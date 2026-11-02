@@ -9,7 +9,7 @@ import pytest
 from fastapi import HTTPException
 
 from apihelpers import make_serve_client
-from pandion.chat_turn import ChatSettings
+from pandion.extend import ChatSettings
 from pandion.llm import Completion
 from pandion_api import Policy, ServeSettings
 

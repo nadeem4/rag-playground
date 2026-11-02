@@ -19,7 +19,7 @@ import anyio
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from pandion.chat_turn import chat_turn, fold_summary, remember
+from pandion.extend import chat_turn, fold_summary, remember
 from pandion_api.jobs import start
 from pandion_api.runs import event, events_response
 

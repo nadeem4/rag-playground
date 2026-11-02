@@ -20,9 +20,9 @@ import yaml
 from fastapi import FastAPI
 
 from pandion import Pipeline
-from pandion.access import ALL_ROLES
-from pandion.chat_turn import ChatSettings
-from pandion.conversation_store import ConversationStore, get_conversation_store
+from pandion.extend import ALL_ROLES
+from pandion.extend import ChatSettings
+from pandion.extend import ConversationStore, get_conversation_store
 from pandion_api.policy import Policy
 from pandion_api.routes import chat, serve_health
 from pandion_api.runs import RunManager

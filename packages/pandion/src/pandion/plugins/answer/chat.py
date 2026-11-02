@@ -744,9 +744,12 @@ def _citation(n, c, chunk, doc, doc_md, spans, elements) -> dict[str, Any]:
         "element_id": None,
         "bbox": None,
         "verified": False,
+        "source": {},
     }
     if chunk is None:
         return entry
+    # The document's id and labels, when the index kept them (see `make_hit`).
+    entry["source"] = dict(getattr(chunk, "metadata", None) or {}).get("source", {})
     start = chunk.start_char + c.start_char_index
     end = chunk.start_char + c.end_char_index
     if own != doc.source_id:

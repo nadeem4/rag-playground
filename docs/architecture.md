@@ -294,6 +294,11 @@ document (`pandion/access.py`): the file's own `roles` label, then a folder rule
 `@access_rule` functions, then the default. They are recorded in the manifest beside the
 category and handed to the index step, which writes them on each row. Roles are never sticky:
 a role change rebuilds the index step from the cached chunks and embeddings, with no parsing.
+The index step also writes each document's id and labels on its rows as `source_id` and
+`source_<label>` metadata (`roles` excluded; never a source's settings), and a retriever
+reads them back into `Hit.chunk.metadata["source"]`, which a chat citation repeats. The
+pipeline works them out in `IndexPipeline._sources_by_sha`, from the labels of the run, else
+the manifest's, so index time and search time make the same graph.
 A search filters on the caller's roles inside the store, before ranking, and a rule that fails
 leaves its document with no roles.
 

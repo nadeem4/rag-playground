@@ -58,3 +58,8 @@ def test_a_run_that_fails_before_indexing_names_none():
     failed = StageResult(stage="index", transform="lancedb", status="failed", output=None)
     assert reports.collection_of(failed) is None
     assert reports.collection_of(None) is None
+
+
+def test_a_comparison_stopped_before_the_index_names_none(client):
+    result = compare(client, upload(client)["sha"], through="chunk")
+    assert all(c["index_collection"] is None for c in result["comparisons"])

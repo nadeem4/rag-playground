@@ -584,7 +584,7 @@ scores every question; the page shows its numbers: the hit rate, mean reciprocal
 recall when a question has several passages, and the ranks, overall and by tag. Each
 question's row fills in as it finishes.
 
-Under the result, a small **Index** tag names the index the run searched; hover it for
+Under the run summary, a small **Index** tag names the index the run searched; hover it for
 the full name. Compare shows the same tag on each finished recipe.
 
 Pick the pipeline first. The **Pipeline** picker lists **Ready to use** (the Starter

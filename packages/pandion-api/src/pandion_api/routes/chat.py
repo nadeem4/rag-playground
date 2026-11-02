@@ -19,7 +19,7 @@ import anyio
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from pandion.extend import chat_turn, fold_summary, remember
+from pandion.extend import ConversationNotFound, chat_turn, fold_summary, remember
 from pandion_api.jobs import start
 from pandion_api.runs import event, events_response
 
@@ -60,12 +60,12 @@ def _sources(answer: Any) -> list[dict[str, Any]]:
 
 @router.post("/chat")
 async def chat(body: ChatIn, request: Request):
-    last = body.messages[-1]
-    if last.role != "user":
-        raise HTTPException(status_code=422, detail="The last message must be from the user.")
     app = request.app.state
     policy, store, settings = app.policy, app.conversations, app.serve.chat
     policy.limit(request)
+    last = body.messages[-1]
+    if last.role != "user":
+        raise HTTPException(status_code=422, detail="The last message must be from the user.")
     user_id, roles = policy.user_id(request), policy.roles(request)
     if body.conversation_id is not None:
         if await anyio.to_thread.run_sync(store.load, body.conversation_id, user_id) is None:
@@ -91,6 +91,9 @@ async def chat(body: ChatIn, request: Request):
                 settings=settings, roles=roles, credentials=credentials, on_event=forward, trace_id=trace_id,
                 cancel=cancel,
             )
+        except ConversationNotFound:  # it vanished after the check above
+            fail()
+            return False, False, {"not_found": True}
         except Exception:  # noqa: BLE001  (the caller sees one sentence; the log has the rest)
             logger.exception("Chat turn failed (trace %s).", trace_id)
             return fail()
@@ -114,15 +117,23 @@ async def chat(body: ChatIn, request: Request):
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Summary skipped (%s).", type(exc).__name__)
             if settings.memory:
-                remember(store, user_id=user_id, question=last.content, settings=settings, credentials=credentials)
+                try:
+                    remember(store, user_id=user_id, question=last.content, settings=settings, credentials=credentials)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Memory skipped (%s).", type(exc).__name__)
 
-        threading.Thread(target=after_reply, daemon=True).start()
+        # Tracked, so serve's shutdown waits for it instead of cutting a write.
+        thread = threading.Thread(target=lambda: (after_reply(), app.background.discard(thread)), daemon=True)
+        app.background.add(thread)
+        thread.start()
         reply = {"conversation_id": result.conversation_id, "trace_id": trace_id, "text": result.text, "sources": sources, "ok": True}
         return True, False, reply
 
     state = app.runs.get(start(request, "chat", work)["run_id"])
     if not body.stream:
         await state.task
+        if isinstance(state.result, dict) and state.result.get("not_found"):
+            raise HTTPException(status_code=404, detail=NO_CONVERSATION)
         return state.result
     response = events_response(state, 0)
     inner = response.body_iterator

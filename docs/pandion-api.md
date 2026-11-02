@@ -448,11 +448,13 @@ With `stream`, each event is one `data:` line of JSON, in this order:
 | `token` | `text`: the whole answer. The answer step does not stream yet, so there is one `token` event. A client written now keeps working when streaming arrives. |
 | `done` | `conversation_id`, `trace_id`, `ok`, `cost` and `timings` |
 | `error` | `error` (one generic sentence) and `trace_id`, sent before `done` when the turn failed |
+| `queued`, `unqueued` | the turn waits for a free slot when the Policy's `max_active_runs` is reached (`queued` says how many are ahead), then starts |
+| `run_error` | the turn crashed in a way the route did not catch; its text goes through `Policy.scrub` |
 | `stream_end` | closes the stream |
 
 If the client disconnects, the turn is cancelled and no half turn is stored. After the reply,
 the server folds old turns into the running summary and, when `ServeSettings.chat.memory`
-is on, keeps facts the user shared. The user never waits for either. A stream cannot be
+is on, keeps facts the user shared. The user never waits for either. Cancel on disconnect applies to streams only: a JSON request runs to its end. A stream cannot be
 resumed on another server copy: there is no events route in serve.
 
 ### GET /health and GET /ready

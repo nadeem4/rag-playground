@@ -158,7 +158,15 @@ def test_cancel_is_passed_to_the_pipeline(store, rewrites):
 
 
 def test_a_cancelled_answer_stores_no_turn(store, rewrites):
-    p = StubPipeline(ok=False)
-    result = chat_turn(p, store, user_id="u", question="Q?")
+    import threading
+
+    class Cancellable(StubPipeline):
+        def ask(self, question, **kwargs):
+            self.ok = not kwargs["cancel"].is_set()
+            return super().ask(question, **kwargs)
+
+    cancel = threading.Event()
+    cancel.set()
+    result = chat_turn(Cancellable(), store, user_id="u", question="Q?", cancel=cancel)
     assert result.text == "" and result.conversation_id == ""
     assert store.list("u") == []

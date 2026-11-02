@@ -100,6 +100,8 @@ def create_serve_app(
             yield
         finally:
             await warming
+            for thread in list(app.state.background):  # replies still saving a summary or a memory
+                await anyio.to_thread.run_sync(thread.join)
             await manager.shutdown()
             await policy.on_shutdown(app)
 
@@ -107,6 +109,7 @@ def create_serve_app(
     state: Any = app.state
     state.settings, state.policy, state.runs = settings, policy, manager
     state.serve = serve or ServeSettings()
+    state.background = set()
     state.pipeline = loaded
     state.conversations = conversations if conversations is not None else default_store(settings)
     for router in SERVE_ROUTERS:

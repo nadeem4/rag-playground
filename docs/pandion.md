@@ -2489,7 +2489,7 @@ Every conversation and memory belongs to a `user_id`. A conversation belongs to 
 The `sql` store works with any database SQLAlchemy reaches: SQLite (the default), Postgres, MySQL or SQL Server. Install it with `pip install "pandion[sql]"`.
 
 ```python
-from pandion.conversation_store import get_conversation_store
+from pandion.extend import get_conversation_store
 
 store = get_conversation_store("sql", {"url": "sqlite:///conversations.db"})
 ```
@@ -2517,8 +2517,7 @@ conversation_store_conformance(lambda: MyStore(MySettings()))
 `pandion.chat_turn` runs one turn of a conversation. It is **Provisional** until the server uses it. The rule is simple: history gives a question its meaning, and only the sources give facts. A follow-up such as "and the notice period?" means nothing alone, so the turn first rewrites it into a question that stands alone, using the running summary and the last few turns. The answer step is then asked that one question and nothing else. A past answer never reaches it, so an answer you gave earlier can never come back as a fact.
 
 ```python
-from pandion.chat_turn import ChatSettings, chat_turn, fold_summary
-from pandion.conversation_store import get_conversation_store
+from pandion.extend import ChatSettings, chat_turn, fold_summary, get_conversation_store
 
 store = get_conversation_store("sql", {"url": "sqlite:///conversations.db"})
 first = chat_turn(p, store, user_id="ana", question="What does the lease say about rent?")

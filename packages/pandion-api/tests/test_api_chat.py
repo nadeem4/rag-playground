@@ -10,6 +10,7 @@ from fastapi import HTTPException
 
 from apihelpers import make_serve_client
 from pandion.extend import ChatSettings
+from pandion.extend import ConversationNotFound
 from pandion.llm import Completion
 from pandion_api import Policy, ServeSettings
 
@@ -250,3 +251,55 @@ def test_memory_off_calls_no_memory_code_and_on_calls_it(tmp_path, monkeypatch):
     with serve(tmp_path / "on", StubPipeline(), memory=True) as c:
         say(c)
         assert remembered.wait(5)
+
+
+def test_a_memory_failure_after_the_reply_is_ignored(tmp_path, monkeypatch):
+    tried = threading.Event()
+
+    def boom(store, **kw):
+        tried.set()
+        raise RuntimeError("memory model down")
+
+    monkeypatch.setattr("pandion_api.routes.chat.fold_summary", lambda store, **kw: True)
+    monkeypatch.setattr("pandion_api.routes.chat.remember", boom)
+    (tmp_path / "on").mkdir()
+    with serve(tmp_path / "on", StubPipeline(), memory=True) as c:
+        assert say(c).status_code == 200
+        assert tried.wait(5)
+
+
+def test_shutdown_waits_for_the_summary_to_finish(tmp_path, monkeypatch):
+    import time
+
+    done = []
+
+    def slow(store, **kw):
+        time.sleep(0.5)
+        done.append(True)
+        return True
+
+    monkeypatch.setattr("pandion_api.routes.chat.fold_summary", slow)
+    with serve(tmp_path, StubPipeline()) as c:
+        say(c)
+    assert done == [True]
+
+
+def test_a_refused_limit_counts_even_for_a_bad_request(tmp_path):
+    class Full(Policy):
+        def limit(self, request):
+            raise HTTPException(status_code=429, detail="Too many questions.")
+
+    with serve(tmp_path, StubPipeline(), Full()) as c:
+        r = c.post("/chat", json={"messages": [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"}]})
+    assert r.status_code == 429
+
+
+def test_a_conversation_that_vanishes_mid_turn_is_a_404(tmp_path, monkeypatch):
+    def gone(*a, **k):
+        raise ConversationNotFound("gone")
+
+    with serve(tmp_path, StubPipeline()) as c:
+        first = say(c).json()
+        monkeypatch.setattr("pandion_api.routes.chat.chat_turn", gone)
+        r = say(c, conversation_id=first["conversation_id"])
+    assert r.status_code == 404

@@ -3,11 +3,11 @@
 import pytest
 
 from apihelpers import make_serve_client
-from pandion_api import Policy
+from pandion_api.policy import AnonymousPolicy
 from test_api_chat import StubPipeline, serve
 
 
-class Counting(Policy):
+class Counting(AnonymousPolicy):
     def __init__(self):
         self.limited = 0
 

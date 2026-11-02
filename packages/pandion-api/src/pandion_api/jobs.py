@@ -8,7 +8,8 @@ from typing import Annotated, Any, Callable
 from fastapi import HTTPException, Request
 from pydantic import BaseModel, Field
 
-from pandion_api.credentials import guarded, redact
+from pandion_api.credentials import PROVIDERS, guarded, redact
+from pandion_api.errors import hide
 from pandion_api.documents import NO_SUCH_DOCUMENT, SHA, safe_name
 from pandion_api.pipelines import problems
 
@@ -112,7 +113,13 @@ def start(request: Request, kind: str, work: Work) -> dict[str, str]:
         going = sum(1 for s in request.app.state.runs.active() if s.owner == owner)
         if going >= most:
             raise HTTPException(status_code=429, detail=too_many_runs(most))
-    credentials = policy.credentials(request)
+    serving = hasattr(request.app.state, "serve")  # serve mode: env keys only, generic errors
+    if serving:
+        credentials = {
+            spec.extra: key for p, spec in PROVIDERS.items() if (key := policy.server_key(p)[0])
+        }
+    else:
+        credentials = policy.credentials(request)
     keys = list(credentials.values())
 
     def clean(value: Any) -> Any:
@@ -129,7 +136,6 @@ def start(request: Request, kind: str, work: Work) -> dict[str, str]:
         ok, cancelled, result = guarded(keys, lambda: work(on_event, cancel, credentials or None))
         return ok, cancelled or bool(seen), clean(result)
 
-    state = request.app.state.runs.start(
-        kind, job, owner=owner, scrub=lambda text: policy.scrub(redact(text, keys))
-    )
+    scrub = (lambda text: hide(redact(text, keys), getattr(request.state, "trace_id", None))) if serving else (lambda text: policy.scrub(redact(text, keys)))
+    state = request.app.state.runs.start(kind, job, owner=owner, scrub=scrub)
     return {"run_id": state.run_id}

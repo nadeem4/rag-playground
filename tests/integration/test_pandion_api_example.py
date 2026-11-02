@@ -78,3 +78,23 @@ def test_policy_example_accepts_a_small_document(tmp_path):
     app = _load("policy_example").make_app(tmp_path / "data", max_bytes=50 * 1024 * 1024)
 
     assert _upload(app, tmp_path).status_code == 200
+
+
+def test_serve_policy_example_accepts_a_good_token_and_refuses_a_bad_one():
+    from types import SimpleNamespace
+
+    import pytest
+    from fastapi import HTTPException
+
+    module = _load("serve_policy")
+    policy = module.GatewayPolicy(b"secret")
+
+    def request(token):
+        return SimpleNamespace(headers={"authorization": f"Bearer {token}"})
+
+    good = request(module.sign(b"secret", {"sub": "ann", "roles": ["hr"]}))
+    assert (policy.user_id(good), policy.roles(good)) == ("ann", ["hr"])
+    for bad in (request(module.sign(b"other", {"sub": "ann"})), request("junk"), SimpleNamespace(headers={})):
+        with pytest.raises(HTTPException) as caught:
+            policy.limit(bad)
+        assert caught.value.status_code == 401

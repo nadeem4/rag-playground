@@ -877,7 +877,17 @@ at home.
 3.13. If the pipeline cannot be packed, such as one that loads plugins, the sheet says
 why in plain words.
 
-The same project can also be made for a server: pandion-api's `POST /projects/serve` (at `/api/v2/projects/serve` here) writes the serve project, with the questions of each category in one `evals/questions.json`. The hosted demo applies its question cap to that route too. A page for it comes later.
+The same project can also be made for a server: pandion-api's `POST /projects/serve` (at `/api/v2/projects/serve` here) writes the serve project, with the questions of each category in one `evals/questions.json`. The hosted demo applies its question cap to that route too.
+
+### The Take it home page
+
+The page at `/take-home` does the same job as the sheet, for a whole pipeline, in three steps:
+
+1. **Check your questions.** One row per category, with its documents, how many of your own questions name those documents, and a status in words. **Ready** is 10 or more of your own questions. **Weak check** is fewer, and offers **Write questions**, which opens Evaluate on that category's first document. **Sample questions only** means the questions are a sample's own, so they stay out of the download, and offers a link to Build to add a document of your own. **Not tested** means no document is in the category yet. A muted **Last score** shows the last Evaluate result for those documents, when there is one. Questions that name no document are counted apart and never go in the project.
+2. **Where it will run.** Choose **Try it on my laptop** (the project above) or **Serve it for a team** (the serve project). For a team you set the documents folder and the index store: LanceDB in `./index` next to the server, or Qdrant at a URL. A remote LanceDB index is not offered, because the project cannot use one. For the laptop project these settings are not used.
+3. **Download.** The files in the zip, each with its text; what is left out (categories without questions, your documents, and `uv.lock` for a team project, which you make once with `uv lock` and commit); the environment variables to set, by name only; and one button. If the server refuses an export, the page shows its sentence.
+
+On the hosted demo the page also says that your questions and scores live only in this browser tab, and how many of the 50 questions the download holds. The old sheet on Build stays for now.
 
 ## Read
 

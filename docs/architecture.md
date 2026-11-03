@@ -60,7 +60,7 @@ Pandion; it only talks HTTP to the backend.
 | Pandion | The pipeline and its stages, the plugin registry, the executor and its events, the artifact store and embedding cache, index stores, conversations, traces, evaluation, the `pandion` command | `packages/pandion/src/pandion/` |
 | pandion-api | The REST routes, runs and their event stream, document storage, serve mode, and one `Policy` object for a site's rules | `packages/pandion-api/src/pandion_api/` |
 | Playground backend | The playground's `Policy`, demo mode and its limits, the teaching routes (samples, learn, templates, settings), serving the web build | `playground/backend/` |
-| Playground frontend | The pages (Home, Build, Compare, Evaluate, Library, Read), the working pipeline in the browser, the inspectors | `playground/frontend/src/` |
+| Playground frontend | The pages (Home, Build, Compare, Evaluate, Library, Read, Take it home), the working pipeline in the browser, the inspectors | `playground/frontend/src/` |
 | Support | Bundled sample PDFs, the sample set and tools, tests | `samples/`, `scripts/`, `tests/`, each package's own `tests/` |
 
 The backend has no pipeline steps of its own. Pandion loads its plugins itself, and the backend

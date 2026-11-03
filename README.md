@@ -11,7 +11,7 @@ RAG Playground is three parts:
 - **The web app** runs a retrieval-augmented generation (RAG) pipeline on a PDF and shows
   you every step: what the parser read, what the cleaners removed, where each chunk was
   cut, what the search found and how the reranker moved it. Change one setting and see
-  what it does. It has Build, Ask, Compare, Evaluate and a Library.
+  what it does. It has Build, Ask, Compare, Evaluate, a Library and a Take it home page.
 - **Pandion** is the Python package that runs every one of those steps. You can use it in
   your own code to build, search and question an index.
 - **pandion-api** is Pandion over HTTP, with one `Policy` object for a site's rules. The

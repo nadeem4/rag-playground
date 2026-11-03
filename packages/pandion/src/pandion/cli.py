@@ -35,7 +35,7 @@ import pandion
 from pandion import ConfigError, Pipeline
 from pandion.extend import PluginError, get_conversation_store, load_plugins as load_modules, plugin_listing
 from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K
-from pandion.questions import QuestionSetError, load_questions
+from pandion.evaluation import QuestionSetError, load_questions
 
 #: Pandion's name for each key, and the environment variable it is read from.
 ENV_KEYS = {

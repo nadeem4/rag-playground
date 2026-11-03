@@ -112,3 +112,13 @@ def test_review_evaluate_says_when_it_read_only_the_newest_traces(store, monkeyp
     online_evaluator("len", version="1", outputs={"n": "float"})(lambda t: {"n": float(len(t.answer))})
     assert cli.main(["review", "--evaluate", "--url-env", VAR]) == 0
     assert "Only the newest" in capsys.readouterr().err
+
+
+def test_review_refuses_promote_with_evaluate(store, capsys):
+    assert cli.main(["review", "--url-env", VAR, "--evaluate", "--promote", "bad"]) == 1
+    assert "two different jobs" in capsys.readouterr().err
+
+
+def test_review_refuses_judge_without_evaluate(store, capsys):
+    assert cli.main(["review", "--url-env", VAR, "--judge"]) == 1
+    assert "go with --evaluate" in capsys.readouterr().err

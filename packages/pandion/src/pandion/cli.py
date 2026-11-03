@@ -269,12 +269,6 @@ def cmd_review(args: argparse.Namespace) -> int:
     if (args.judge or args.judge_model) and not args.evaluate:
         print("--judge and --judge-model go with --evaluate, which scores the stored traces.", file=sys.stderr)
         return 1
-    if args.evaluate and args.promote:
-        print("--promote and --evaluate are two different jobs: run them one at a time.", file=sys.stderr)
-        return 1
-    if (args.judge or args.judge_model) and not args.evaluate:
-        print("--judge and --judge-model go with --evaluate, which scores the stored traces.", file=sys.stderr)
-        return 1
     if args.promote:
         if not args.questions:
             print("--promote adds a case to a question set: give the file with --questions FILE.", file=sys.stderr)

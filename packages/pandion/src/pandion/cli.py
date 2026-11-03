@@ -36,7 +36,7 @@ import yaml
 
 import pandion
 from pandion import ConfigError, Pipeline
-from pandion.extend import PluginError, TRACE_LIMIT, format_review_list, format_review_result, parse_sample, run_evaluators, TraceStore, format_trace, format_trace_report, parse_since, summarise_traces, get_conversation_store, load_plugins as load_modules, plugin_listing
+from pandion.extend import PluginError, TRACE_LIMIT, format_review_list, format_review_result, parse_sample, run_evaluators, EVALUATORS, TraceStore, format_trace, format_trace_report, parse_since, summarise_traces, get_conversation_store, load_plugins as load_modules, plugin_listing
 from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K, JudgeSettings, QuestionSetError, load_questions
 
 #: Pandion's name for each key, and the environment variable it is read from.
@@ -258,16 +258,20 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 def cmd_review(args: argparse.Namespace) -> int:
     """List the traces that need a look; with --evaluate, score the stored traces with the online evaluators."""
+    load_plugins(args.plugins)
     store = _trace_store(args)
     if store is None:
         return 1
     since = parse_since(args.since) if args.since else None
     if not args.evaluate:
-        print(format_review_list(store.traces(since=since, limit=TRACE_LIMIT)))
+        traces = store.traces(since=since, limit=TRACE_LIMIT)
+        if len(traces) >= TRACE_LIMIT:
+            print(f"Only the newest {TRACE_LIMIT:,} traces were read; narrow with --since.", file=sys.stderr)
+        print(format_review_list(traces))
         return 0
     try:
         sample = parse_sample(args.sample)
-        if not args.only and not plugin_listing_has_evaluators():
+        if not args.only and not EVALUATORS:
             print("No online evaluators are registered. Write one with @online_evaluator and load it with --plugins.", file=sys.stderr)
             return 1
         result = run_evaluators(store, since=since, names=args.only, sample=sample, limit=TRACE_LIMIT, rerun=args.rerun)
@@ -279,10 +283,6 @@ def cmd_review(args: argparse.Namespace) -> int:
     if err:
         print(err, file=sys.stderr)
     return 0
-
-
-def plugin_listing_has_evaluators() -> bool:
-    return any(row["kind"] == "online evaluator" for row in plugin_listing())
 
 
 def _documents(args: argparse.Namespace) -> list[str] | None:

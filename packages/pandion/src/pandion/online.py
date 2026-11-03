@@ -15,6 +15,7 @@ stops the batch.
 from __future__ import annotations
 
 import hashlib
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -100,6 +101,8 @@ def _checked(ev: OnlineEvaluator, result: Any) -> dict[str, Any]:
         # A bool is an int in Python but not a float score, and a number is not a bool.
         if type(value) is not want and not (want is float and type(value) is int):
             raise ValueError(f"The output '{out}' of the evaluator '{ev.name}' must be a {kind}.")
+        if want is float and not math.isfinite(value):
+            raise ValueError(f"The output '{out}' of the evaluator '{ev.name}' must be a finite number.")
     return {ev.key(out): float(v) if ev.outputs[out] == "float" else v for out, v in result.items()}
 
 

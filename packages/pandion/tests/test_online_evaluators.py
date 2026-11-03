@@ -150,3 +150,12 @@ def test_the_evaluator_gets_a_copy_so_it_cannot_change_the_stored_trace(store):
     put(store, 1)
     run(store)
     assert store.trace("t0").answer == "a"
+
+
+def test_a_nan_or_infinite_float_is_a_failure_and_saves_nothing(store):
+    online_evaluator("nan", version="1", outputs={"x": "float"})(lambda t: {"x": float("nan")})
+    online_evaluator("inf", version="1", outputs={"x": "float"})(lambda t: {"x": float("inf")})
+    put(store, 1)
+    result = run(store)
+    assert result.failures == {"nan@1": {"ValueError": 1}, "inf@1": {"ValueError": 1}}
+    assert store.trace("t0").scores == {}

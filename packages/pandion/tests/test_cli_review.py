@@ -87,3 +87,20 @@ def test_review_evaluate_with_none_registered_says_so(store, capsys):
 def test_a_bad_sample_is_a_sentence(store, capsys):
     assert cli.main(["review", "--evaluate", "--sample", "lots", "--url-env", VAR]) == 1
     assert "--sample" in capsys.readouterr().err
+
+
+def test_review_evaluate_loads_the_plugins_flag(store, monkeypatch):
+    from pathlib import Path
+    import sys
+    monkeypatch.chdir(Path(__file__).resolve().parents[3] / "examples" / "pandion" / "extensions")
+    try:
+        assert cli.main(["review", "--evaluate", "--plugins", "answer_length_evaluator", "--url-env", VAR]) == 0
+    finally:
+        sys.modules.pop("answer_length_evaluator", None)
+    assert store.trace("ok").scores["answer_length@1.words"] == 1.0
+
+
+def test_review_says_when_it_read_only_the_newest_traces(store, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "TRACE_LIMIT", 2)
+    cli.main(["review", "--url-env", VAR])
+    assert "Only the newest" in capsys.readouterr().err

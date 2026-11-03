@@ -2737,7 +2737,7 @@ def answer_length(trace: TraceRecord) -> dict[str, float | bool]:
 - `outputs` names every value the function returns and its type: `"float"`, `"str"` or `"bool"`. The function must return exactly those keys with those types, or the run counts as a failure.
 - The evaluator sees only the stored trace (question, standalone question, answer, label, source ids, flags, feedback). It gets a copy, and it never searches again.
 - Scores are saved on the trace as `<name>@<version>.<output>`, for example `answer_length@1.words`. A new `version` scores every trace again beside the old scores. A trace that already holds every score of the current version is skipped, unless you pass `--rerun`.
-- `pandion report` averages the `float` scores and counts the `bool` and `str` values.
+- `pandion report` averages the `float` scores and counts the `bool` and `str` values. A `str` output should be a label from a small fixed set, never free text, because `pandion report` counts each distinct value. A `float` must be finite: NaN and infinity count as a failure.
 - A name can be registered once; a second one is refused with a sentence. The evaluator is listed by `pandion plugins` as `online evaluator`. It is **Provisional**. Load your module with `--plugins` or with `load_plugins`. The tested example is [`answer_length_evaluator.py`](../examples/pandion/extensions/answer_length_evaluator.py).
 
 ```
@@ -2747,7 +2747,7 @@ pandion review --evaluate [--only NAME ...] [--sample 1.0] [--rerun] [--since 7d
 
 - Without `--evaluate`, `pandion review` lists the traces that have a flag or a thumbs-down, newest first, one line each. Read one with `pandion trace`.
 - With `--evaluate`, `--only` picks evaluators by name (all by default), and `--sample` is the share of traces to score, such as `0.02` or `2%`. The sample is a fixed hash of the trace id and the evaluator name, so every run checks the same traces. It reads at most the newest 10,000 traces; narrow with `--since`.
-- An evaluator that raises never stops the review or the other evaluators. Standard error says how many runs failed and with which exception type, for example `answer_length@1: 3 failed (KeyError: 3)`. The message and the trace text are never printed or stored. A failed run saves nothing, so the next review tries it again.
+- An evaluator that raises never stops the review or the other evaluators. Standard error says how many runs failed and with which exception type, for example `answer_length@1: 3 failed (KeyError: 3)`. The message and the trace text are never printed or stored. A failed run saves nothing, so the next review tries it again. Pandion sets no per-evaluator timeout; an evaluator that calls a network sets its own.
 - It exits 0 after a review, even when some runs failed, and 1 for an unknown evaluator name, a bad `--sample`, a store without traces, or no evaluator registered.
 - Only the stored numbers leave the evaluator. No metric carries text.
 

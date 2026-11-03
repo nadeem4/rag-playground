@@ -1,9 +1,16 @@
 """`pandion review`: what the batch evaluators and the flags leave for a person to read.
 
-Provisional. It only reads traces and prints; the scoring is `run_evaluators`.
+Provisional. It reads traces and prints; the scoring is `run_evaluators`. `promote`
+is the one writer: it adds a trace to a question set so the miss can be tested again.
 """
 
 from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from pydantic import BaseModel
 
 from pandion.online import ReviewResult
 from pandion.trace_record import TraceRecord
@@ -51,4 +58,99 @@ def format_review_result(r: ReviewResult) -> tuple[str, str]:
         f"{label}: {sum(kinds.values())} failed ({', '.join(f'{kind}: {n}' for kind, n in sorted(kinds.items()))})"
         for label, kinds in r.failures.items()
     ]
+    if r.judge_dollars:
+        out.append(f"Judge cost: about ${r.judge_dollars:.4f} (estimate).")
     return "\n".join(out), "\n".join(err)
+
+
+class Promoted(BaseModel):
+    trace_id: str
+    #: False when the file already held a case for this trace.
+    added: bool
+    question: str
+    #: How many earlier turns the case carries (0 unless the trace was a follow-up).
+    history_turns: int = 0
+    #: With a pipeline: one sentence saying whether the miss is in retrieval or in the answer. Else "".
+    diagnosis: str = ""
+
+    def __str__(self) -> str:
+        head = (f"Added trace {self.trace_id} to the question set" if self.added
+                else f"Trace {self.trace_id} is already in the question set")
+        if self.history_turns:
+            head += f" with {self.history_turns} earlier turn(s) of history"
+        hint = " Each expected passage is a whole cited passage: trim it to the sentence that answers." if self.added else ""
+        return head + "." + hint + (f"\n{self.diagnosis}" if self.diagnosis else "")
+
+
+def _history(store: Any, trace: TraceRecord) -> list[dict[str, str]]:
+    """The turns before this trace's turn in its conversation, as `{question, answer}` pairs."""
+    conversation = store.load(trace.conversation_id, trace.user_id)
+    pairs: list[dict[str, str]] = []
+    for turn in conversation.turns if conversation is not None else []:
+        if turn.trace_id == trace.trace_id:
+            return pairs
+        pairs.append({"question": turn.question, "answer": turn.answer})
+    return []  # the turn is not in the conversation (expired or deleted): no history to carry
+
+
+def _read_cases(path: Path) -> tuple[Any, list]:
+    if not path.exists():
+        return [], []
+    try:
+        body = json.loads(path.read_text(encoding="utf-8-sig"))
+    except ValueError:
+        raise ValueError(f"{path} is not a JSON question set, so a case cannot be added to it. Promote into a .json file.") from None
+    cases = body.get("questions") if isinstance(body, dict) else body
+    if not isinstance(cases, list):
+        raise ValueError(f"{path} has no list of questions to add to.")
+    return body, cases
+
+
+def _diagnose(p: Any, case: dict, credentials: dict | None) -> str:
+    from pandion import evaluation
+
+    stale = evaluation.stale_check(p, [case], credentials=credentials)
+    if not stale.ok:
+        return "The cited passage is no longer in the document as the pipeline reads it, so fix the question set first."
+    question = evaluation.evaluate(p, [case], credentials=credentials).questions[0]
+    if question.error:
+        return "Could not tell where the miss is: the search failed."
+    if not question.found:
+        return "This is a retrieval miss: the search does not return the passage the answer cited."
+    return "Retrieval finds the cited passage, so the miss is in the answer step."
+
+
+def promote(store: Any, trace_id: str, questions_path: str | Path, *, p: Any = None, credentials: dict | None = None) -> Promoted:
+    """Add the trace as a case to a JSON question set: its standalone question, the earlier
+    turns when it was a follow-up, and the passages it cited as the expected ones.
+
+    A trace already in the file (same id) is not added twice. With a pipeline `p`, also
+    says whether the miss is in retrieval or in the answer. Raises ValueError (a sentence)
+    for a missing trace, a trace with no stored passages, or a file that is not a JSON set.
+    """
+    trace = store.trace(trace_id)
+    if trace is None:
+        raise ValueError(f"There is no trace '{trace_id}' in the store.")
+    if not trace.sources:
+        raise ValueError(
+            f"Trace '{trace_id}' has no stored passages (it was saved before traces kept them, or it cited none), so there is nothing to expect."
+        )
+    path = Path(questions_path)
+    body, cases = _read_cases(path)
+    case: dict[str, Any] = {
+        "id": trace.trace_id, "question": trace.question,
+        "gold_answers": [s.text for s in trace.sources], "tags": ["promoted"],
+    }
+    history = _history(store, trace)
+    if history:
+        case["history"] = history  # with history the case keeps the question as asked, so evaluate replays the rewrite
+    else:
+        case["question"] = trace.standalone or trace.question
+    added = all(c.get("id") != trace.trace_id for c in cases if isinstance(c, dict))
+    if added:
+        cases.append(case)
+        out = cases if isinstance(body, list) else {**body, "questions": cases}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(out, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    diagnosis = _diagnose(p, case, credentials) if p is not None else ""
+    return Promoted(trace_id=trace.trace_id, added=added, question=case["question"], history_turns=len(history), diagnosis=diagnosis)

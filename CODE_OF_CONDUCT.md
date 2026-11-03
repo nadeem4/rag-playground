@@ -10,7 +10,7 @@ In short:
 - Do not harass, insult or discriminate against anyone.
 - Do not share other people's private information.
 
-This applies to issues, pull requests, discussions and any other space for this project.
+This applies to issues, pull requests and any other space for this project.
 
 ## Report a problem
 

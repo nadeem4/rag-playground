@@ -103,7 +103,9 @@ left out): the same pipeline, from the command line. `pandion eval pipeline.yaml
 --record-baseline base.json` saves a baseline with the platform and models it was made with, and
 `--baseline base.json` then fails when any category newly misses a question (asked once more
 first when a step can differ between runs). Before it searches, `pandion eval` exits 1 on a
-question whose expected passage is no longer in the parsed documents. See
+question whose expected passage is no longer in the parsed documents. `--judge` (off by default,
+costs model calls) also grades each answer against the question's expected `answer`, and
+`--judge-gate` fails a baseline comparison when the mean correctness fell more than 0.05. See
 [the pandion command](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#the-pandion-command).
 
 ## Chat turns

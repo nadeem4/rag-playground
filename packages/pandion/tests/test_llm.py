@@ -342,6 +342,43 @@ def test_anthropic_haiku_gets_no_adaptive_thinking(fake_anthropic):
     assert "thinking" not in req and "fallbacks" not in req
 
 
+def test_request_without_temperature_is_unchanged(fake_anthropic):
+    complete(CHAT_MODELS["claude-haiku-4-5"], system="s", user="u", api_key=KEY)
+    [req] = fake_anthropic.client.requests
+    assert "temperature" not in req
+
+
+def test_temperature_zero_is_sent_to_claude_without_thinking(fake_anthropic):
+    complete(CHAT_MODELS["claude-haiku-4-5"], system="s", user="u", api_key=KEY, temperature=0)
+    [req] = fake_anthropic.client.requests
+    assert req["temperature"] == 0
+
+
+def test_temperature_is_left_out_where_thinking_is_on(fake_anthropic):
+    # Adaptive thinking runs at the provider's own temperature.
+    complete(CHAT_MODELS["claude-opus-5"], system="s", user="u", api_key=KEY, temperature=0)
+    [req] = fake_anthropic.client.requests
+    assert "temperature" not in req
+
+
+def test_temperature_zero_is_sent_to_a_custom_endpoint(fake_openai):
+    complete(
+        CHAT_MODELS["custom"], system="s", user="u", api_key=None,
+        base_url="https://llm.example.com/v1", model_name="m", temperature=0,
+    )
+    assert fake_openai.client.requests[0]["temperature"] == 0
+
+
+def test_temperature_is_left_out_for_openai_models(fake_openai):
+    complete(CHAT_MODELS["gpt-5.6-luna"], system="s", user="u", api_key=KEY, temperature=0)
+    assert "temperature" not in fake_openai.client.requests[0]
+
+
+def test_temperature_is_sent_to_openrouter(fake_openai):
+    complete(CHAT_MODELS["openrouter"], system="s", user="u", api_key=KEY, model_name="m/x", temperature=0)
+    assert fake_openai.client.requests[0]["temperature"] == 0
+
+
 def test_anthropic_requires_a_key(fake_anthropic):
     with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
         complete(CHAT_MODELS["claude-opus-5"], system="s", user="u", api_key="")

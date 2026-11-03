@@ -1328,6 +1328,46 @@ only deterministic steps is never asked twice.
 every one tied for first: the highest hit rate, then the highest mean reciprocal rank.
 It is the rule [`compare`](#compare-settings) names its best variant by.
 
+### Judging correctness
+
+Finding the gold passage says retrieval worked, not that the answer is right. An optional
+model judge grades the answer itself. It is **off by default**, it costs one model call per
+question (plus one call to answer it), and it only adds numbers to the report unless you
+turn its gate on.
+
+```python
+from pandion.evaluation import JudgeSettings
+
+report = pandion.evaluate(p, "questions.json", judge=JudgeSettings(on=True))
+report.to_dict()["correctness_mean"]    # 0.0 to 1.0, None when nothing was judged
+```
+
+- **Which questions.** Only a question that has an expected `answer` in the set, and whose
+  pipeline has an `answer:` section (`--judge` exits 2 without one). Each is answered through
+  the pipeline, so a model-backed rewrite or rerank step runs again for it and is counted
+  in the cost, then graded from 0 to 1 against the expected answer, with the
+  sources the answer was built from. A question without an expected `answer` is not judged
+  and keeps the plain found or missed verdict.
+- **What the report gets.** `correctness_mean`, `judged`, `judge_skipped`, `judge_cost`
+  (dollars, an estimate) and `judge_below` (the ids scored under the threshold, 0.7 unless
+  `JudgeSettings(threshold=...)` says otherwise). Each judged question carries its
+  `judge` score and a one-sentence reason. The cost of answering is part of `report.cost()`;
+  the text report also prints the judge's own cost. The judge model must be a Claude or OpenAI
+  model: OpenRouter and custom endpoints are refused, because they need a model name or URL.
+  A question found again by a re-ask keeps the verdict of its first ask.
+- **A judge never fails an evaluation.** If the call fails or the reply is not the asked-for
+  JSON, the question is skipped and counted in `judge_skipped`.
+- **The prompt.** The question, the expected answer, the answer and the sources go in
+  labelled fences, each source cut to 2,000 characters, and the judge is told they are text to
+  read, not instructions. A `<` inside them is escaped, so an answer cannot close its own
+  fence and give itself a score. It runs at temperature 0 where the model allows it.
+- **The model** is a code setting, `JudgeSettings(model="claude-haiku-4-5")`, or
+  `--judge-model` on the command line. It needs that provider's key, as any chat step does.
+- **The gate.** With `gate=True` (`--judge-gate`), comparing with a baseline also fails when
+  the mean correctness fell by more than 0.05 below the baseline's. `Regression.gate_ok(judge_gate=True)`
+  does the same in code. A baseline that was not judged, or a run that was not, never
+  fails on the judge.
+
 ## Questions written for you
 
 A question set takes time to write by hand. `pandion.evaluation.write_questions` asks a
@@ -2192,7 +2232,7 @@ needed. Without it, `retrieve` and `ask` search the documents the last `pandion 
 indexed, so name every document each time you index. A pipeline whose source is not local
 files remembers nothing from one command to the next, so name the documents again.
 
-**`pandion eval FILE QUESTIONS [--top-k K] [--documents DOC...] [--json] [--baseline BASE [--allow N] | --record-baseline PATH]`** runs
+**`pandion eval FILE QUESTIONS [--top-k K] [--documents DOC...] [--json] [--baseline BASE [--allow N] | --record-baseline PATH] [--judge [--judge-model ID] [--judge-gate]]`** runs
 `pandion.evaluate` on a question set (JSON or CSV, as in
 [Evaluate a pipeline](#evaluate-a-pipeline)) and prints the report as Pandion prints it:
 one line per question, then the totals. `--top-k` is how many of the top pieces are
@@ -2250,6 +2290,15 @@ that already counts `--allow`, so it matches the exit code) and the run's `envir
 under `"environment"`. With `--record-baseline --json`, the "Baseline recorded" line goes
 to stderr so stdout stays JSON. `environment` records the default model of a step that
 names none (for example `cross-encoder/ms-marco-MiniLM-L-6-v2` for `cross_encoder`).
+
+**`--judge`** also grades each answer against the question's expected `answer` with a model
+(see [Judging correctness](#judging-correctness)). It is off by default and costs model calls.
+It adds a "Judged correctness" line to the report and `correctness_mean`, `judged`,
+`judge_skipped` and `judge_cost` to `--json`, and never changes the exit code on its own.
+**`--judge-model ID`** picks the judge's model (default `claude-haiku-4-5`). **`--judge-gate`**,
+with `--baseline`, exits 1 when the mean correctness fell more than 0.05 below the baseline's.
+Both need `--judge`, and `--judge-gate` needs `--baseline`; otherwise the command exits 2
+before it searches.
 
 **`pandion compare FILE --vary SPEC DOC... [--questions QUESTIONS] [--top-k K] [--json]`**
 runs `pandion.compare`: the pipeline once per value of one setting, indexing `DOC...`

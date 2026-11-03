@@ -96,7 +96,10 @@ and `pandion eval --baseline` exits 1 on any category over `--allow`. A baseline
 `check_environment` refuses a comparison made on another platform or with other models
 before any search runs. Before it scores, `stale_check` looks for every expected passage in the
 current parse and fails a missing one as a stale question, not a regression; and a newly
-missed question is asked once more (`reask_missed`) when a step is nondeterministic. The `mmr` reranker and the `chat` step embed with the
+missed question is asked once more (`reask_missed`) when a step is nondeterministic. An optional
+model judge (`pandion/judge.py`, off by default) grades each answer against the expected one and
+adds `correctness_mean` to the report; `--judge-gate` makes a fall of more than 0.05 fail the
+comparison. The `mmr` reranker and the `chat` step embed with the
 index's own model through two public names of `pandion.plugins.retrieve`,
 `read_descriptor` and `embedder_for`.
 

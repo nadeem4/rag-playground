@@ -177,7 +177,7 @@ To extend Pandion without changing it (a source, an access rule, an index store,
    including that the artifact id is deterministic, that the config round-trips through
    JSON, that the explanation changes with each setting, and, for a chunk strategy, that
    `learn` covers every setting in full sentences with no dashes.
-4. Describe it in [docs/strategies.md](docs/app/strategies.md) and add it to the table in the
+4. Describe it in [docs/app/strategies.md](docs/app/strategies.md) and add it to the table in the
    README.
 
 `packages/pandion/src/pandion/plugins/clean/drop_matching.py` is a small, complete example.
@@ -206,7 +206,7 @@ An endpoint any site would want goes in pandion-api
 `playground/backend/policy.py`, tested on `/api/v2` in `tests/api/`. An endpoint only the playground wants
 (a lesson, a sample) goes in `playground/backend/routes/`, and in the `TEACHING` list of
 `tests/api/test_routes.py`, which fails on a route under `/api` it does not list. Describe
-a new endpoint or Policy method in [docs/pandion-api.md](docs/pandion-api/index.md).
+a new endpoint or Policy method in [docs/pandion-api/index.md](docs/pandion-api/index.md).
 
 A new test of a site rule goes in `tests/api/` (`test_demo.py`, `test_delete_source.py`,
 `test_source_file.py` and the rest) and calls the `/api/v2` route the web calls.

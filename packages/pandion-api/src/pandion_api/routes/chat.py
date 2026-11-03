@@ -107,7 +107,7 @@ async def chat(body: ChatIn, request: Request):
             logger.exception("Chat turn failed.", extra={"trace_id": trace_id})
             return fail()
         if app.metrics:  # spend counts even when the turn gave no answer
-            app.metrics.turn_done(result.answer)
+            app.metrics.turn_done(result.answer, result.flags)
         if not result.answer.ok:
             logger.warning("Chat turn gave no answer.", extra={"trace_id": trace_id})
             return fail()

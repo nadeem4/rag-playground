@@ -20,9 +20,8 @@ def finished(stage, usage=None):
     return {"event": "node_finished", "stage": stage, "duration_ms": 250.0, "usage": usage}
 
 
-def answer(dollars=0.002, stats=None):
-    payload = {"stats": stats or {}}
-    return SimpleNamespace(cost=lambda: {"dollars": dollars}, output=SimpleNamespace(payload=payload))
+def answer(dollars=0.002):
+    return SimpleNamespace(cost=lambda: {"dollars": dollars})
 
 
 def test_a_turn_updates_requests_steps_tokens_and_cost():
@@ -56,19 +55,21 @@ def test_no_label_carries_a_user_conversation_or_chunk_id():
     m.request("/chat", 200)
     m.on_event(finished("answer", USAGE))
     m.on_event({"event": "node_failed", "stage": "rerank", "conversation_id": "conv-secret", "chunk_id": "c-secret"})
-    m.turn_done(answer(stats={"weak": 1}))
+    m.turn_done(answer(), ["low_grounding"])
+    m.feedback("up", "")
     samples = [s for metric in m.registry.collect() for s in metric.samples]
     seen = {v for s in samples for k, v in s.labels.items() if k != "le"}
-    assert seen == {"/chat", "200", "answer", "input", "output", "rerank", "weak"}
+    assert seen == {"/chat", "200", "answer", "input", "output", "rerank", "low_grounding", "up", ""}
 
 
-def test_a_weak_answer_counts_a_flag_with_its_category():
+def test_flagged_metric_uses_the_flag_names():
     m = Metrics()
-    m.turn_done(answer(stats={"cited": 3, "weak": 2, "none": 1, "not_found": 0}))
-    assert value(m, "turns_flagged_total", category="weak") == 1
-    assert value(m, "turns_flagged_total", category="none") == 1
-    assert value(m, "turns_flagged_total", category="not_found") is None
-    assert value(m, "turns_flagged_total", category="cited") is None
+    m.turn_done(answer(), ["low_grounding", "not_in_documents"])
+    m.turn_done(answer(), [])
+    assert value(m, "turns_flagged_total", category="low_grounding") == 1
+    assert value(m, "turns_flagged_total", category="not_in_documents") == 1
+    assert value(m, "turns_flagged_total", category="declined") is None
+    assert value(m, "turns_flagged_total", category="weak") is None
 
 
 def test_a_turn_with_no_priced_model_adds_no_cost():
@@ -86,3 +87,15 @@ def test_two_metrics_objects_do_not_share_series():
 def test_prometheus_client_is_imported_only_when_metrics_are_on():
     code = "import sys\nimport pandion_api.serve\nassert 'prometheus_client' not in sys.modules, 'imported'\n"
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def test_a_rate_limiter_refuses_then_allows_after_a_minute_and_forgets_quiet_users():
+    from pandion_api.limits import RateLimiter
+
+    now = [0.0]
+    limiter = RateLimiter(2, clock=lambda: now[0])
+    assert [limiter.allow("ann") for _ in range(3)] == [True, True, False]
+    assert limiter.allow("bob") is True
+    now[0] = 61.0
+    assert limiter.allow("ann") is True
+    assert list(limiter._times) == ["ann"]

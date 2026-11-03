@@ -120,7 +120,8 @@ help the rewrite only, never the answer. All are
 Provisional. See [A chat turn](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#a-chat-turn)
 and [`chat_turn.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/chat_turn.py).
 When the store is also a `TraceStore` (the `sql` store is), each answered turn leaves one
-trace record: question, answer, grounding label, sources, stage times and cost. It follows
+trace record: question, answer, grounding label, flags, sources, stage times and cost, plus any
+feedback from the user (`give_feedback`). It follows
 the conversation's retention. See [Traces](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#traces).
 
 Answers are made safer by default: sources are fenced in the prompt as untrusted data, and

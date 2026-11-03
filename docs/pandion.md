@@ -2640,7 +2640,7 @@ A `TraceRecord` holds `trace_id`, `user_id`, `conversation_id`, `question` (as t
 - `trace_id` is the id you pass to `chat_turn(..., trace_id=)`. When you pass none, `chat_turn` makes one (a uuid4 in hex) and puts it on the `Turn` too. The server passes the request's trace id.
 - `label` is the worst grounding label in the answer, from worst to best `none`, `weak`, `similarity`, `cited`. An answer that only declined has `not_found`; one with no grounding counts (a `search` answer) has an empty label.
 - `stages` lists each stage once, in order, as `{"name", "ms", "dollars"}`. `dollars` is the estimated price of that stage, or `None` when it called no priced model. `cost` is the total, as `Answer.cost()` gives it, and `latency_ms` is the whole turn.
-- `flags` and `scores` are empty for now. Online flags and evaluator scores fill them in later.
+- `flags` is filled by `chat_turn` (see "Flags and feedback" below); `scores` is empty for now, evaluator scores fill it in later.
 - `feedback` is a list of `Feedback(value="up" or "down", category, comment, created_at)`; `category` is at most 40 characters and `comment` at most 500.
 - A record never holds a credential or an API key.
 
@@ -2660,6 +2660,29 @@ A trace holds the user's question and answer, so it follows the conversation. `d
 from pandion.testing import trace_store_conformance
 
 trace_store_conformance(lambda: MyStore(MySettings()))
+```
+
+#### Flags and feedback
+
+Both are **Provisional** and live in `pandion.flags`, exported from `pandion.extend`.
+
+`chat_turn` marks a turn that a person should look at. It reads facts the answer already holds, so a flag costs no model call. `TurnResult.flags` and the trace's `flags` list them, in this order:
+
+| Flag | Means |
+| --- | --- |
+| `low_grounding` | some claim in the answer is labelled `weak` or `none` |
+| `declined` | the answer only said the documents do not answer the question |
+| `not_in_documents` | the search found no piece of any document |
+
+A turn can carry more than one, and a well-cited answer carries none. `pandion report --flagged` and `traces(flagged_only=True)` keep only the turns that have a flag. A failed or cancelled answer has no flags, because it has no trace. `flags_for(answer)` gives the same list for an answer you hold.
+
+`give_feedback(store, trace_id, user_id, value, *, category="", comment="")` records what a user thought of their own answer. `value` is `"up"` or `"down"`, `category` is at most 40 characters and `comment` at most 500. It returns `False` when the trace is missing or belongs to another user, so a user cannot tell a guessed id from a missing one. It raises `ValueError` with one sentence, which never repeats the category or the comment, when a value is out of bounds or the store keeps no traces. The feedback appears in `pandion trace` and in the feedback counts of `pandion report`. A comment is user text: keep it out of logs and metric labels.
+
+```python
+from pandion.extend import give_feedback
+
+result = chat_turn(p, store, user_id="alice", question="What is the notice period?")
+give_feedback(store, result.trace_id, "alice", "down", category="wrong", comment="It is 60 days.")
 ```
 
 #### Read traces from the command line

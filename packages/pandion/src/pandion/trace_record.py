@@ -71,5 +71,5 @@ def record_from_turn(
         trace_id=trace_id, user_id=user_id, conversation_id=conversation_id, question=question,
         standalone=result.standalone, answer=result.text, label=_label(answer), source_ids=list(result.source_ids),
         stages=_stages(answer), cost=answer.cost().get("dollars"),
-        latency_ms=round((time.monotonic() - started) * 1000),
+        latency_ms=round((time.monotonic() - started) * 1000), flags=list(getattr(result, "flags", [])),
     )

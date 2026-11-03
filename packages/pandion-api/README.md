@@ -10,6 +10,7 @@ the default allows everything. It is a workspace package in this repository and 
 on PyPI yet.
 
 [docs/pandion-api.md](../../docs/pandion-api.md) is the full reference.
+[Changelog](https://github.com/nadeem4/rag-playground/blob/main/packages/pandion-api/CHANGELOG.md).
 
 ## Run it
 

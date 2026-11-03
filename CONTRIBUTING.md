@@ -328,6 +328,24 @@ published tag.
    gh workflow run Release -f go_to_1_0_0=true
    ```
 
+### Changelogs
+
+Three changelogs are generated, not written by hand: `CHANGELOG.md` (the app, `v*` tags),
+`packages/pandion/CHANGELOG.md` (`pandion-v*` tags, commits that touch the package) and
+`packages/pandion-api/CHANGELOG.md` (no tags yet, so one Unreleased section). They use
+their own config copies (`cliff-app.toml`, `cliff-pandion.toml`, `cliff-pandion-api.toml`);
+`cliff.toml` is not used for them because it calculates the release version. Install
+`git-cliff` 2.14.2 (the version the Release workflow uses), then regenerate from the repo
+root:
+
+```bash
+git-cliff --config cliff-app.toml --output CHANGELOG.md
+git-cliff --config cliff-pandion.toml --include-path "packages/pandion/**" --output packages/pandion/CHANGELOG.md
+git-cliff --config cliff-pandion-api.toml --include-path "packages/pandion-api/**" --output packages/pandion-api/CHANGELOG.md
+```
+
+Commit the result with a `docs:` title, which makes no release.
+
 ### Rolling back
 
 Publish an older release tag. Start the workflow from that tag, because the `production`

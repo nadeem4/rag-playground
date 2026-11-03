@@ -53,6 +53,18 @@ describe("categoryRows", () => {
     expect(rows.find((r) => r.id === "reports")).toMatchObject({ status: "sample-only", sample: true })
     expect(rows.find((r) => r.id === "notes")).toMatchObject({ status: "ready", sample: false })
   })
+  it("a category with a sample and an uploaded document counts and exports only the own questions", () => {
+    const docs = [doc("a", "reports"), doc("b", "reports")]
+    const qs = [...many(12, "a"), ...many(10, "b")].map((x, i) => ({ ...x, id: `q${i}` }))
+    const rows = categoryRows(config, docs, none, qs, { sampleShas: ["a"] })
+    expect(rows[0]).toMatchObject({ status: "ready", sample: false, count: 10 })
+    expect(rows[0].questions.every((x) => x.document === "b")).toBe(true)
+    expect(summary(rows)).toEqual({ ready: 1, questions: 10 })
+    const exported = exportBody(config, "p", rows, defaultWhere()).categories.reports.questions
+    expect(exported).toHaveLength(10)
+    expect((exported as { document: string }[]).every((x) => x.document === "b.pdf")).toBe(true)
+    expect(laptopQuestions(rows)?.questions).toHaveLength(10)
+  })
   it("tags each document as a sample or the team's upload", () => {
     const [r] = categoryRows(config, [doc("a", "reports"), doc("b", "reports")], none, [], { sampleShas: ["a"] })
     expect(r.docs).toEqual([

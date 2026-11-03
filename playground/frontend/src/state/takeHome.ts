@@ -101,20 +101,24 @@ export function categoryRows(
     // A config with one plain category has nothing to sort: every document is in it.
     const own = config.categories ? usedBy(docs, sorted, id) : [...docs]
     const shas = own.map((d) => d.sha)
-    const mine = questions.filter((q) => q.document && shas.includes(q.document))
-    // Sample only when every question comes from a bundled sample document.
-    const sample = own.length > 0 && mine.length > 0 && mine.every((q) => samples.has(q.document ?? ""))
+    const named = questions.filter((q) => q.document && shas.includes(q.document))
+    // Questions on a bundled sample document are never the team's own: they are not counted or exported.
+    const sampleQs = named.filter((q) => samples.has(q.document ?? ""))
+    const mine = named.filter((q) => !samples.has(q.document ?? ""))
+    // Sample only when there are no own questions but there are sample ones.
+    const sample = own.length > 0 && mine.length === 0 && sampleQs.length > 0
     const status: RowStatus = own.length === 0 ? "not-tested" : sample ? "sample-only" : mine.length >= READY_AT ? "ready" : "weak"
+    const shown = sample ? sampleQs.length : mine.length
     const name = def.name ?? id
     return {
       id,
       name,
       documents: own.map((d) => d.filename),
       docs: own.map((d) => ({ filename: d.filename, tag: samples.has(d.sha) ? "Sample" : "Your upload" })),
-      count: mine.length,
+      count: shown,
       status,
       mark: MARK[status],
-      ...describe(status, id, name, mine.length),
+      ...describe(status, id, name, shown),
       sample,
       questions: mine,
       shas,

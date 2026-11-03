@@ -180,3 +180,9 @@ def test_demo_413_becomes_a_take_home_sentence(tmp_path):
 def test_question_set_without_a_questions_key_is_a_400_sentence(client):
     r = preview(client, categories={"contracts": {"questions": {"id": "x"}}})
     assert r.status_code == 400 and "contracts" in r.json()["detail"] and "questions" in r.json()["detail"]
+
+
+def test_categories_come_from_the_parsed_pipeline(client):
+    broken = {**PIPELINE, "categories": ["default"]}
+    r = preview(client, config=broken, categories={"default": {"questions": QUESTIONS}})
+    assert r.status_code == 400

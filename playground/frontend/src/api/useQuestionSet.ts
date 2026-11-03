@@ -43,10 +43,15 @@ export function useQuestionSet(sourceSha: string): QuestionSetState {
 
   useEffect(() => {
     let live = true
-    setLoading(true)
     setSet(null)
     setRep(null)
     setTabOnly(false)
+    if (!sourceSha) {
+      // No document to ask about: there is no set.
+      setLoading(false)
+      return
+    }
+    setLoading(true)
     // No set on the server (null), or the document cannot be read: this tab may still hold one.
     const fromTab = () => {
       if (!live) return

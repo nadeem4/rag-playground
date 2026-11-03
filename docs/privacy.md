@@ -109,6 +109,10 @@ conversation store under the user's id. Serve takes model keys from the server's
 only, shows a caller a generic error with a trace id (the detail stays in the server's log), and
 limits each user's turns. See [pandion-api](pandion-api/serve-mode.md#serve-mode-hardened-defaults). Text in your documents is fenced in the prompt as untrusted data, and a link or image in a reply is removed unless a source holds the same address, so a document cannot make an answer carry your question to another site. See [Answer safety](pandion/conversations.md#answer-safety).
 
+## Taking a project home
+
+The Take it home page (`/take-home`) sends your pipeline, and the questions of the categories you choose, to the server in one request. The server writes the project into a temporary folder, zips it in memory and deletes the folder. Nothing is stored. Your documents, your index and your keys are never in the zip: a key is only named as an environment variable. On the hosted demo, your questions and scores live only in your browser tab.
+
 ## Clean up now
 
 The privacy page in the app has three buttons:

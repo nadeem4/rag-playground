@@ -146,6 +146,7 @@ def test_demo_settings_report_the_limits(client, monkeypatch):
             "max_files": 3,
             "max_total_bytes": 200 * 1024 * 1024,
             "ttl_hours": 24,
+            "max_evaluation_questions": 50,
         },
     }
     monkeypatch.delenv("RAG_PLAYGROUND_DEMO")

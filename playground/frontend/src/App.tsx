@@ -11,6 +11,7 @@ import { Privacy } from "@/routes/Privacy"
 import { Read } from "@/routes/Read"
 import { Shell } from "@/routes/Shell"
 import { Specimen } from "@/routes/Specimen"
+import { TakeHomePage } from "@/routes/TakeHome"
 import { LESSONS_ENABLED } from "@/state/lessons"
 
 // A handful of routes does not justify a router. FastAPI's SPA fallback serves
@@ -42,6 +43,7 @@ const ROUTES: Record<string, () => React.JSX.Element> = {
   "/read": Read,
   "/library": Library,
   "/privacy": Privacy,
+  "/take-home": TakeHomePage,
   "/design": Specimen,
   "/specimen": Specimen,
   "/inspect": Inspect,

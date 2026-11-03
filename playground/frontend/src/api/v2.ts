@@ -7,7 +7,7 @@
 
 import type { PipelineConfig } from "@/state/config"
 
-import { jsonInit, keyHeaders, requestFrom, type KeyOpts } from "./client"
+import { ApiError, jsonInit, keyHeaders, requestFrom, type KeyOpts } from "./client"
 import type {
   Against,
   CancelResponse,
@@ -28,6 +28,8 @@ import type {
   RunCreated,
   RunSnapshot,
   ScoredRun,
+  ServeExportRequest,
+  ServePreview,
   SortResult,
   Source,
   StoredQuestionSet,
@@ -89,6 +91,23 @@ export const v2 = {
       ...jsonInit({ config, documents, ...(Object.keys(pins).length ? { categories: pins } : {}) }),
       signal,
     }),
+
+  /** Take it home, for a team: the serve project's files as text, and what was left out. */
+  serveProjectPreview: (body: ServeExportRequest) => request<ServePreview>("/projects/serve?preview=1", jsonInit(body)),
+  /** Take it home, for a team: the serve project as a zip. A refusal throws an `ApiError` with the server's sentence. */
+  serveProjectZip: async (body: ServeExportRequest): Promise<Blob> => {
+    const res = await fetch(`${V2_BASE}/projects/serve`, jsonInit(body))
+    if (res.ok) return res.blob()
+    const text = await res.text()
+    let detail: unknown = text
+    try {
+      const parsed = JSON.parse(text) as unknown
+      detail = parsed !== null && typeof parsed === "object" && "detail" in parsed ? (parsed as { detail: unknown }).detail : parsed
+    } catch {
+      // Not JSON (a proxy error page, say). Keep the text as the detail.
+    }
+    throw new ApiError(res.status, detail, "/projects/serve")
+  },
 
   createRun: (body: V2RunRequest, opts: KeyOpts = {}) => request<RunCreated>("/runs", jsonInit(body, keyHeaders(opts.keys))),
   ask: (body: V2AskRequest, opts: KeyOpts = {}) => request<RunCreated>("/ask", jsonInit(body, keyHeaders(opts.keys))),

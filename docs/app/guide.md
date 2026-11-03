@@ -877,7 +877,17 @@ at home.
 3.13. If the pipeline cannot be packed, such as one that loads plugins, the sheet says
 why in plain words.
 
-The same project can also be made for a server: pandion-api's `POST /projects/serve` (at `/api/v2/projects/serve` here) writes the serve project, with the questions of each category in one `evals/questions.json`. The hosted demo applies its question cap to that route too. A page for it comes later.
+The same project can also be made for a server: pandion-api's `POST /projects/serve` (at `/api/v2/projects/serve` here) writes the serve project, with the questions of each category in one `evals/questions.json`. The hosted demo applies its question cap to that route too.
+
+### The Take it home page
+
+The page at `/take-home` does the same job as the sheet, for a whole pipeline, in three steps. A link at the top goes back to Build, and the first line names the pipeline.
+
+1. **Check your questions.** One row per category: its documents, each tagged **Your upload** or **Sample** (a category with no document shows **Empty**), how many of your own questions name those documents, a status word with a mark, and a sentence saying what it means. **Ready** (a tick) is 10 or more of your own questions. **Weak check** (an exclamation mark) is fewer, and the button says how many more to write, for example **Write 6 more questions**; it opens Evaluate on the category's first document. **Sample questions only** means every question is about a bundled sample, so they stay out of the download; the link says **Add a policy document** (named after the category) and goes to Build. **Not tested** (a hyphen) means the category has no document yet, and the link goes to Build. Questions that name no document are counted on their own line and stay out. Below the rows, the last Evaluate run on the whole pipeline is shown once, only for reference: the real starting score is recorded later, on your server.
+2. **Where it will run.** Where your documents live (a folder, or a bucket such as `gs://`, `s3://` or Azure), and where the index lives: LanceDB in `./index` next to the server, or Qdrant at an address you type. A remote LanceDB index is not offered, because the project cannot use one. The page lists the secrets you set on your server, by variable name with a note on each, and says access control is off in the download, with an example in `pipeline.yaml` to turn it on. It never asks for a key. For the laptop project these settings are not used, and the secrets are not listed.
+3. **Download.** Choose **Try it on my laptop** (one script that runs your pipeline and your questions) or **Serve it for a team** (a chat API with streaming, sync, a quality check and logs). The page lists the files in the zip, each with a line on what it is for, and previews the one you pick; it opens on `pipeline.yaml`. For the team project it also lists what is left out (categories without questions, your documents, and `uv.lock`, which you make once with `uv lock` and commit). The laptop zip carries your own questions, flattened into one set. One button downloads it. If the server refuses the export, the page shows its sentence.
+
+On the hosted demo a note at the top says your questions and scores live only in this browser tab, and how many of the demo's 50 questions you have used. The old sheet on Build stays for now.
 
 ## Read
 

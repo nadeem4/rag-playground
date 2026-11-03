@@ -112,6 +112,7 @@ Each path is under `prefix`.
 | `POST /golds/find` | Says which piece first holds a gold passage, by the eval step's rule. |
 | `POST /evaluations/against` | Compares a run with a baseline: questions newly missed and newly found, and which run is better. |
 | `POST /pipelines/sort` | Shows which category each document would go to and why. Nothing runs. |
+| `POST /projects/serve` | Writes the deployable serve project for a pipeline, its questions per category and where it will run, as a zip or (`?preview=1`) JSON. Sample questions are left out. |
 | `POST /runs` | Starts a run that indexes documents, or stops after one step. |
 | `GET /runs/{run_id}` | Returns a run's status, its events and its result. |
 | `GET /runs/{run_id}/events` | Streams a run's events as server-sent events. |

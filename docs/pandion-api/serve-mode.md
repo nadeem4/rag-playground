@@ -81,6 +81,10 @@ The limits count in memory, per user id, for one server copy. Under `Policy.anon
 limit in `Policy.limit` (a gateway, or Redis). `/health` returns only `{"status": "ok"}` and
 `/ready` never says why it is not ready.
 
+### The export route
+
+A lab-mode app can write the project you deploy in serve mode. `POST /projects/serve` takes the pipeline, its question sets per category and where the project will run, calls `pandion.new_project(kind="serve")` into a temporary folder and answers with the zip, or with `?preview=1` the files as JSON. The project holds no document, no key and no server path. Questions marked `sample` are dropped, and the answer lists what was left out. The request and answer are in the [endpoint table](index.md#endpoints).
+
 ### POST /chat
 
 ```bash

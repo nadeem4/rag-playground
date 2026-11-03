@@ -1,6 +1,6 @@
 # pandion-api serve mode
 
-This page is part of the [pandion-api reference](../index.md). It covers serve mode: what it serves, who is asking, the hardened defaults, logs, traces, users' data and metrics.
+This page is part of the [pandion-api reference](index.md). It covers serve mode: what it serves, who is asking, the hardened defaults, logs, traces, users' data and metrics.
 
 ## Serve mode
 

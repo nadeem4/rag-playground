@@ -7,8 +7,9 @@ Everything a particular site wants to limit (who may read a document, how big an
 may be, how many runs may work at once) is one `Policy` object. The default allows
 everything.
 
-It lives in this repository as a workspace package (`packages/pandion-api/`) and is not
-on PyPI yet. RAG Playground's server is pandion-api with the playground's own `Policy`,
+Install it with `pip install pandion-api`; it works with the Pandion versions its
+`pyproject.toml` declares (`>=0.8.0,<0.9` today). It lives in this repository as a
+workspace package (`packages/pandion-api/`). RAG Playground's server is pandion-api with the playground's own `Policy`,
 plus the playground's teaching routes.
 
 ## Contents

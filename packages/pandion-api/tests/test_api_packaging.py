@@ -86,3 +86,12 @@ def test_workflow_builds_both_wheels_and_runs_the_check():
 def test_publish_uploads_only_pandion_api_files():
     steps = " ".join(s.get("run", "") for s in workflow()["jobs"]["publish"]["steps"])
     assert "rm" in steps and "dist/pandion-[0-9]*" in steps
+
+
+def test_runbook_names_the_api_tag_and_workflow():
+    release = (ROOT / "docs" / "operations" / "release.md").read_text(encoding="utf-8")
+    assert "pandion-api-v" in release
+    assert "publish-pandion-api.yml" in release
+    assert "owner's explicit yes" in release
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    assert "not published" not in contributing

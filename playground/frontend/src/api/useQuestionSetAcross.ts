@@ -60,7 +60,13 @@ export function useQuestionSetAcross(shas: readonly string[], samples: SampleCar
   const [reads, setReads] = useState(0)
 
   useEffect(() => {
-    if (!key) return
+    if (!key) {
+      // No documents, nothing to ask: the set is read, and empty.
+      setKept(null)
+      setTabOnly(false)
+      setLoading(false)
+      return
+    }
     let live = true
     setLoading(true)
     const list = key.split(",")

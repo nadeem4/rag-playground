@@ -4,7 +4,7 @@ import type { PipelineConfig } from "./config"
 import type { Question } from "./goldSet"
 import type { Sorted } from "./sorting"
 import type { DocRef } from "./sourceDocs"
-import { categoryRows, defaultWhere, exportBody, summary, unnamedCount } from "./takeHome"
+import { categoryRows, defaultWhere, exportBody, forDocument, laptopQuestions, summary, unnamedCount } from "./takeHome"
 
 const step = { use: "x" }
 const def = (name: string) => ({ name, parse: step, chunk: step })
@@ -27,7 +27,7 @@ describe("categoryRows", () => {
     expect(categoryRows(config, [doc("a", "reports")], none, many(9, "a"))[0].status).toBe("weak")
   })
   it("questions on a sample only are counted but marked sample-only", () => {
-    const [r] = categoryRows(config, [doc("a", "reports")], none, many(12, "a"), { fromSamples: true })
+    const [r] = categoryRows(config, [doc("a", "reports")], none, many(12, "a"), { sampleShas: ["a"] })
     expect(r).toMatchObject({ count: 12, status: "sample-only", sample: true })
   })
   it("a category with no document is not tested", () => {
@@ -46,11 +46,38 @@ describe("categoryRows", () => {
     expect(unnamedCount(qs)).toBe(1)
     expect(JSON.stringify(exportBody(config, "p", rows, defaultWhere()))).not.toContain("free")
   })
-  it("the last score is shown only for a category that has a previous evaluation", () => {
-    const scoreFor = (key: string) => (key === "a" ? "8 of 10 found" : null)
-    const rows = categoryRows(config, [doc("a", "reports"), doc("b", "notes")], none, [...many(10, "a"), ...many(10, "b")], { scoreFor })
-    expect(rows.find((r) => r.id === "reports")?.lastScore).toBe("8 of 10 found")
-    expect(rows.find((r) => r.id === "notes")?.lastScore).toBeNull()
+  it("a category is sample-only only when its questions come only from sample documents", () => {
+    const docs = [doc("a", "reports"), doc("b", "notes")]
+    const rows = categoryRows(config, docs, none, [...many(12, "a"), ...many(10, "b")], { sampleShas: ["a"] })
+    expect(rows.find((r) => r.id === "reports")).toMatchObject({ status: "sample-only", sample: true })
+    expect(rows.find((r) => r.id === "notes")).toMatchObject({ status: "ready", sample: false })
+  })
+  it("tags each document as a sample or the team's upload", () => {
+    const [r] = categoryRows(config, [doc("a", "reports"), doc("b", "reports")], none, [], { sampleShas: ["a"] })
+    expect(r.docs).toEqual([
+      { filename: "a.pdf", tag: "Sample" },
+      { filename: "b.pdf", tag: "Your upload" },
+    ])
+  })
+  it("says in a sentence what each status means, with a mark", () => {
+    const docs = [doc("a", "reports"), doc("b", "notes")]
+    const [ready, weak] = categoryRows(config, docs, none, [...many(10, "a"), ...many(4, "b")])
+    expect(ready).toMatchObject({ mark: "✓", text: "Enough of your own questions for the quality check to catch a problem." })
+    expect(weak).toMatchObject({ mark: "!", text: "Only 4 questions. With so few, one bad change can slip through. Aim for 10 or more." })
+  })
+  it("names the action with a count and the category's own word", () => {
+    const wide = { index: { store: step }, categories: { policies: def("Policies"), forms: def("Scanned forms"), reports: def("Reports") } } as unknown as PipelineConfig
+    const docs = [doc("a", "reports"), doc("b", "policies")]
+    const rows = categoryRows(wide, docs, none, [...many(4, "a"), ...many(12, "b")], { sampleShas: ["b"] })
+    const by = (id: string) => rows.find((r) => r.id === id)!
+    expect(by("reports").action).toEqual({ kind: "write", label: "Write 6 more questions" })
+    expect(by("policies").action).toEqual({ kind: "add", label: "Add a policy document" })
+    expect(by("forms").action).toEqual({ kind: "test", label: "Test a scanned form on Build" })
+    expect(by("policies").text).toContain("These 12 questions are about our sample")
+    expect(by("forms")).toMatchObject({ mark: "-", docs: [] })
+  })
+  it("a ready category has no action", () => {
+    expect(categoryRows(config, [doc("a", "reports")], none, many(10, "a"))[0].action).toBeNull()
   })
 })
 
@@ -63,16 +90,11 @@ describe("a pipeline with one plain category", () => {
 })
 
 describe("exportBody with one plain category", () => {
-  it("sends the config with a default category, so the server finds the category the questions are filed under", () => {
+  it("sends the config as it is and files the questions under default, which the server reads a plain pipeline as", () => {
     const plain = { index: { parse: step, chunk: step, store: step }, retrieve: { search: step } } as unknown as PipelineConfig
     const rows = categoryRows(plain, [doc("a")], none, many(2, "a"))
     const body = exportBody(plain, "p", rows, defaultWhere())
-    expect(body.config).toMatchObject({
-      index: { store: step },
-      categories: { default: { name: "Default", parse: step, chunk: step } },
-      route: [{ category: "default" }],
-      retrieve: { search: step },
-    })
+    expect(body.config).toEqual(plain)
     expect(Object.keys(body.categories)).toEqual(["default"])
   })
 })
@@ -82,7 +104,7 @@ describe("summary", () => {
     const docs = [doc("a", "reports"), doc("b", "notes")]
     const qs = [...many(10, "a"), ...many(4, "b")]
     expect(summary(categoryRows(config, docs, none, qs))).toEqual({ ready: 1, questions: 14 })
-    expect(summary(categoryRows(config, docs, none, qs, { fromSamples: true }))).toEqual({ ready: 0, questions: 0 })
+    expect(summary(categoryRows(config, docs, none, qs, { sampleShas: ["a", "b"] }))).toEqual({ ready: 0, questions: 0 })
   })
 })
 
@@ -96,11 +118,31 @@ describe("exportBody", () => {
     expect(body.categories.reports.questions[0]).toMatchObject({ id: "a-0", document: "a.pdf", gold_answers: ["g"] })
   })
   it("omits sample categories' questions and sets sample true", () => {
-    const rows = categoryRows(config, [doc("a", "reports")], none, many(2, "a"), { fromSamples: true })
+    const rows = categoryRows(config, [doc("a", "reports")], none, many(2, "a"), { sampleShas: ["a"] })
     expect(exportBody(config, "p", rows, defaultWhere()).categories.reports).toEqual({ questions: [], sample: true })
   })
   it("does not send a category with no document", () => {
     const rows = categoryRows(config, [doc("a", "reports")], none, many(2, "a"))
     expect(Object.keys(exportBody(config, "p", rows, defaultWhere()).categories)).toEqual(["reports"])
+  })
+})
+
+describe("forDocument", () => {
+  it("tags every question of a one-document set with that document", () => {
+    const set = [q("1", ""), { ...q("2", "old.pdf") }]
+    expect(forDocument(set, "a").map((x) => x.document)).toEqual(["a", "a"])
+    expect(set[0].document).toBe("")
+  })
+})
+
+describe("laptopQuestions", () => {
+  it("flattens the non-sample categories into one set, naming documents by filename", () => {
+    const docs = [doc("a", "reports"), doc("b", "notes")]
+    const rows = categoryRows(config, docs, none, [...many(2, "a"), ...many(2, "b")], { sampleShas: ["b"] })
+    const set = laptopQuestions(rows) as { questions: { id: string; document: string }[] }
+    expect(set.questions.map((x) => [x.id, x.document])).toEqual([["a-0", "a.pdf"], ["a-1", "a.pdf"]])
+  })
+  it("is undefined when there is nothing to send", () => {
+    expect(laptopQuestions(categoryRows(config, [doc("a", "reports")], none, []))).toBeUndefined()
   })
 })

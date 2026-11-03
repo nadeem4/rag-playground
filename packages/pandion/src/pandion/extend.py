@@ -32,6 +32,10 @@ A team that keeps its chats somewhere else writes a conversation store: `Turn`,
 contract, and `register_conversation_store` adds it. A store that also keeps a `TraceRecord` for each turn, and its `Feedback`, is a `TraceStore`. A server runs a turn with `chat_turn`
 (`ChatSettings`, `fold_summary` and `remember` go with it; `flags_for` and `give_feedback` mark and judge its traces) on a store from `get_conversation_store`. See docs/pandion.md, "Conversations".
 
+A team that wants its stored chats checked in a batch writes an `@online_evaluator`: a function of one
+`TraceRecord` that returns the outputs it declared. `pandion review --evaluate` runs them (`run_evaluators`) and
+saves the scores on each trace. See docs/pandion.md, "Online evaluation".
+
 A team that keeps its documents somewhere else writes a `Source`: `SourceEntry`
 is what it lists, `register_source` adds it, and `index.sync(source)` reads
 only the entries that are new or changed. See docs/pandion.md, "Sync from a source".
@@ -65,6 +69,8 @@ from pandion.ports import PortSpec, RunContext, Stage, set_note, set_usage
 from pandion.registry import register as _register_transform
 from pandion.routing import route_check
 from pandion.sources import raw_file
+from pandion.online import OnlineEvaluator, ReviewResult, online_evaluator, run_evaluators
+from pandion.review import format_review_list, format_review_result, parse_sample
 from pandion.flags import TracesNotKept, flags_for, give_feedback
 from pandion.trace_record import Feedback, TraceRecord
 from pandion.trace_report import TRACE_LIMIT, TraceReport, format_trace, format_trace_report, parse_since, summarise_traces
@@ -72,7 +78,7 @@ from pandion.transform import Explanation, Transform
 
 __all__ = [
     "ALL_ROLES", "AccessDenied", "ChatSettings", "TurnResult", "chat_turn", "fold_summary", "remember", "get_conversation_store", "access_rule", "FORMATS", "And", "AnyOf", "ArtifactType", "Capabilities", "Chunk", "ChunkSet", "Conversation", "ConversationInfo", "ConversationNotFound", "ConversationStore", "DocumentInfo", "Element", "Embedder",
-    "EndpointRefused", "Eq", "Explanation", "FetchRefused", "Feedback", "TraceRecord", "TraceStore", "flags_for", "give_feedback", "TracesNotKept", "TRACE_LIMIT", "TraceReport", "format_trace_report", "format_trace", "parse_since", "summarise_traces", "Hit", "In", "IndexMeta", "IndexRow", "Memory", "MissingExtra", "Output", "ParsedDoc",
+    "EndpointRefused", "Eq", "Explanation", "FetchRefused", "Feedback", "TraceRecord", "TraceStore", "flags_for", "give_feedback", "TracesNotKept", "TRACE_LIMIT", "TraceReport", "format_trace_report", "format_trace", "parse_since", "summarise_traces", "OnlineEvaluator", "ReviewResult", "online_evaluator", "run_evaluators", "format_review_list", "format_review_result", "parse_sample", "Hit", "In", "IndexMeta", "IndexRow", "Memory", "MissingExtra", "Output", "ParsedDoc",
     "PluginError", "PortSpec", "Query", "RetrievalResult", "RunContext", "Source", "SourceEntry", "Stage", "StoreHit", "Transform", "Turn", "UnreadableFormat",
     "check_contents", "document_info", "fetch_url", "format_of", "get_embedder", "guard_endpoint", "load_plugins",
     "openai_client_kwargs", "plugin_listing", "raw_file", "register", "register_conversation_store", "register_source", "register_store", "route_check", "set_note", "set_usage",

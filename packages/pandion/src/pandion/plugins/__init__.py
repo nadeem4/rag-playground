@@ -170,4 +170,8 @@ def plugin_listing() -> list[dict[str, str]]:
 
     for name in source_names():
         rows.append({"kind": "source", "name": name, "module": source_class(name).__module__, "level": "stable"})
+    from pandion.online import EVALUATORS
+
+    for name, ev in sorted(EVALUATORS.items()):
+        rows.append({"kind": "online evaluator", "name": name, "module": ev.fn.__module__, "level": "provisional"})
     return rows

@@ -2197,7 +2197,7 @@ pandion questions report.pdf --model claude-haiku-4-5 --count 15 --out questions
 
 **`pandion forget-user USER_ID [--store sql] [--url-env VAR] [--yes]`** deletes one user's conversations and memories from a conversation store and prints how many. See [Forget one user](#forget-one-user).
 
-**`pandion trace TRACE_ID [--store sql] [--url-env VAR] [--json]`** prints one stored chat trace, and **`pandion report [--since 7d] [--flagged] [--store sql] [--url-env VAR] [--json]`** summarises the stored traces. See [Read traces from the command line](#read-traces-from-the-command-line).
+**`pandion trace TRACE_ID [--store sql] [--url-env VAR] [--json]`** prints one stored chat trace, and **`pandion report [--since 7d] [--flagged] [--store sql] [--url-env VAR] [--json]`** summarises the stored traces. See [Read traces from the command line](#read-traces-from-the-command-line). **`pandion review [--evaluate [--only NAME ...] [--sample 1.0] [--rerun]] [--since 7d] [--store sql] [--url-env VAR]`** lists the flagged and thumbs-down traces, and with `--evaluate` scores the stored traces with your online evaluators. See [Online evaluation](#online-evaluation).
 
 **`pandion strategies [--stage STAGE] [--json]`** lists every strategy by stage, each with
 its summary, and a `route` group for the route checks. `--stage chunk` shows one stage.
@@ -2721,6 +2721,38 @@ Labels:
 
 `--json` prints the `Report` (or the `TraceRecord`) as JSON. The same functions are public in `pandion.extend` as `summarise_traces`, `parse_since`, `format_trace`, `format_trace_report` and `TraceReport`, **Provisional**.
 
+### Online evaluation
+
+An online evaluator checks the chats you already stored. It is a function of one `TraceRecord`, registered with `@online_evaluator`, and it runs only when you run `pandion review --evaluate` (from your own scheduler, such as cron). Pandion runs no job of its own, and no server runs an evaluator.
+
+```python
+from pandion.extend import TraceRecord, online_evaluator
+
+@online_evaluator("answer_length", version="1", outputs={"words": "float", "one_word": "bool"})
+def answer_length(trace: TraceRecord) -> dict[str, float | bool]:
+    words = len(trace.answer.split())
+    return {"words": float(words), "one_word": words == 1}
+```
+
+- `outputs` names every value the function returns and its type: `"float"`, `"str"` or `"bool"`. The function must return exactly those keys with those types, or the run counts as a failure.
+- The evaluator sees only the stored trace (question, standalone question, answer, label, source ids, flags, feedback). It gets a copy, and it never searches again.
+- Scores are saved on the trace as `<name>@<version>.<output>`, for example `answer_length@1.words`. A new `version` scores every trace again beside the old scores. A trace that already holds every score of the current version is skipped, unless you pass `--rerun`.
+- `pandion report` averages the `float` scores and counts the `bool` and `str` values.
+- A name can be registered once; a second one is refused with a sentence. The evaluator is listed by `pandion plugins` as `online evaluator`. It is **Provisional**. Load your module with `--plugins` or with `load_plugins`. The tested example is [`answer_length_evaluator.py`](../examples/pandion/extensions/answer_length_evaluator.py).
+
+```
+pandion review [--since 7d] [--store sql] --url-env VAR
+pandion review --evaluate [--only NAME ...] [--sample 1.0] [--rerun] [--since 7d] [--store sql] --url-env VAR --plugins my_evaluators
+```
+
+- Without `--evaluate`, `pandion review` lists the traces that have a flag or a thumbs-down, newest first, one line each. Read one with `pandion trace`.
+- With `--evaluate`, `--only` picks evaluators by name (all by default), and `--sample` is the share of traces to score, such as `0.02` or `2%`. The sample is a fixed hash of the trace id and the evaluator name, so every run checks the same traces. It reads at most the newest 10,000 traces; narrow with `--since`.
+- An evaluator that raises never stops the review or the other evaluators. Standard error says how many runs failed and with which exception type, for example `answer_length@1: 3 failed (KeyError: 3)`. The message and the trace text are never printed or stored. A failed run saves nothing, so the next review tries it again.
+- It exits 0 after a review, even when some runs failed, and 1 for an unknown evaluator name, a bad `--sample`, a store without traces, or no evaluator registered.
+- Only the stored numbers leave the evaluator. No metric carries text.
+
+The functions are public in `pandion.extend`: `online_evaluator`, `OnlineEvaluator`, `run_evaluators`, `ReviewResult`, `format_review_list`, `format_review_result` and `parse_sample`.
+
 ### Memory across conversations
 
 Memory is **off by default**. With `ChatSettings(memory=True)`, Pandion can remember short facts a user shared about themselves ("I work in the Berlin office"), so a later question such as "my office address?" means something even in a new conversation.
@@ -3061,7 +3093,7 @@ a route check ([`route.py`](../examples/pandion/own_strategies/my_strategies/rou
 ([`owner_access.py`](../examples/pandion/extensions/owner_access.py)), an index store
 ([`json_file_store.py`](../examples/pandion/extensions/json_file_store.py)) and a Policy
 ([`policy_example.py`](../examples/pandion-api/policy_example.py)). a conversation store
-([`dict_conversation_store.py`](../examples/pandion/extensions/dict_conversation_store.py)).
+([`dict_conversation_store.py`](../examples/pandion/extensions/dict_conversation_store.py)). An online evaluator ([`answer_length_evaluator.py`](../examples/pandion/extensions/answer_length_evaluator.py)) is Provisional.
 
 A strategy only works by name once the module that registers it has been imported. There are
 three ways to make that happen.

@@ -11,6 +11,7 @@
     pandion init my-project [--index text --query balanced] [--questions questions.json] [--overwrite]
     pandion trace TRACE_ID --url-env VAR [--json]
     pandion report [--since 7d] [--flagged] --url-env VAR [--json]
+    pandion review [--evaluate [--only NAME ...] [--sample 1.0] [--rerun]] [--since 7d] --url-env VAR
     pandion questions report.pdf --model claude-haiku-4-5 [--count 15] [--out questions.json] [--parser pdfium] [--overwrite]
 
 Every command takes --plugins a,b: modules imported before the file is read,
@@ -35,7 +36,7 @@ import yaml
 
 import pandion
 from pandion import ConfigError, Pipeline
-from pandion.extend import PluginError, TRACE_LIMIT, TraceStore, format_trace, format_trace_report, parse_since, summarise_traces, get_conversation_store, load_plugins as load_modules, plugin_listing
+from pandion.extend import PluginError, TRACE_LIMIT, format_review_list, format_review_result, parse_sample, run_evaluators, TraceStore, format_trace, format_trace_report, parse_since, summarise_traces, get_conversation_store, load_plugins as load_modules, plugin_listing
 from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K, JudgeSettings, QuestionSetError, load_questions
 
 #: Pandion's name for each key, and the environment variable it is read from.
@@ -253,6 +254,35 @@ def cmd_report(args: argparse.Namespace) -> int:
         print("Only the newest 10,000 traces are counted; narrow with --since.", file=sys.stderr)
     print(json.dumps(summary.model_dump(), indent=2) if args.json else format_trace_report(summary))
     return 0
+
+
+def cmd_review(args: argparse.Namespace) -> int:
+    """List the traces that need a look; with --evaluate, score the stored traces with the online evaluators."""
+    store = _trace_store(args)
+    if store is None:
+        return 1
+    since = parse_since(args.since) if args.since else None
+    if not args.evaluate:
+        print(format_review_list(store.traces(since=since, limit=TRACE_LIMIT)))
+        return 0
+    try:
+        sample = parse_sample(args.sample)
+        if not args.only and not plugin_listing_has_evaluators():
+            print("No online evaluators are registered. Write one with @online_evaluator and load it with --plugins.", file=sys.stderr)
+            return 1
+        result = run_evaluators(store, since=since, names=args.only, sample=sample, limit=TRACE_LIMIT, rerun=args.rerun)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    out, err = format_review_result(result)
+    print(out)
+    if err:
+        print(err, file=sys.stderr)
+    return 0
+
+
+def plugin_listing_has_evaluators() -> bool:
+    return any(row["kind"] == "online evaluator" for row in plugin_listing())
 
 
 def _documents(args: argparse.Namespace) -> list[str] | None:
@@ -641,6 +671,15 @@ def parser() -> argparse.ArgumentParser:
         sub.add_argument("--store", default="sql", help="the conversation store, sql by default")
         sub.add_argument("--url-env", help="the environment variable that holds the store's database url")
         sub.add_argument("--json", action="store_true", help="print JSON")
+
+    sub = command("review", "list the traces that need a look, or score them with the online evaluators", cmd_review)
+    sub.add_argument("--evaluate", action="store_true", help="run the online evaluators over the stored traces (never run by the server)")
+    sub.add_argument("--only", nargs="+", metavar="NAME", help="only these evaluators; the default is all of them")
+    sub.add_argument("--sample", default="1.0", help="the share of traces to score, such as 0.02 or 2%%; the same traces each run")
+    sub.add_argument("--rerun", action="store_true", help="score again traces this version of an evaluator already scored")
+    sub.add_argument("--since", help="only traces since a duration like 24h or 7d, or an ISO 8601 date")
+    sub.add_argument("--store", default="sql", help="the conversation store, sql by default")
+    sub.add_argument("--url-env", help="the environment variable that holds the store's database url")
 
     for name, help, fn in (("retrieve", "search the index for a question", cmd_retrieve), ("ask", "answer a question", cmd_ask)):
         sub = command(name, help, fn)

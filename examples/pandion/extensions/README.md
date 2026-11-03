@@ -8,6 +8,7 @@ One small, tested example for each way to extend Pandion. `tests/integration/tes
 | [`owner_access.py`](owner_access.py) | `team_from_path` | `@access_rule`: the top folder is the role |
 | [`json_file_store.py`](json_file_store.py) | `json_file` | `IndexStore`: rows in one JSON file per collection |
 | [`dict_conversation_store.py`](dict_conversation_store.py) | `dict` | `ConversationStore`: chats and memories in dicts |
+| [`answer_length_evaluator.py`](answer_length_evaluator.py) | `answer_length` | `@online_evaluator`: scores stored traces in `pandion review --evaluate` |
 | [`../own_strategies/my_strategies/route.py`](../own_strategies/my_strategies/route.py) | `is_invoice` | `@route_check` |
 
 Import a module before you build the pipeline, so its name is registered. A source is used with `pipeline.index.sync(get_source("zip", location="docs.zip"))`, or from `pipeline.yaml` with `source: {use: zip, location: docs.zip}`. An access rule is used with `access: {rules: [team_from_path]}`.

@@ -33,4 +33,4 @@ def test_demo_caps_the_questions_in_a_serve_export(client, monkeypatch):
     assert ok.status_code == 200, ok.text
     r = export(client, demo.MAX_EVALUATION_QUESTIONS + 1)
     assert r.status_code == 413
-    assert f"at most {demo.MAX_EVALUATION_QUESTIONS} questions" in r.json()["detail"]
+    assert f"than the {demo.MAX_EVALUATION_QUESTIONS + 1} you sent" in r.json()["detail"]

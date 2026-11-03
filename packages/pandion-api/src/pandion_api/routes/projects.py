@@ -24,8 +24,6 @@ from pydantic import BaseModel, ValidationError
 
 import pandion
 from pandion.evaluation import QuestionSetError, parse_question_set
-from pandion_api.checks import steps
-from pandion_api.credentials import PROVIDERS
 from pandion_api.pipelines import NOT_A_MAPPING, YAML_PATH
 from pandion_api.routes.questions import MAX_GOLDS, MAX_QUESTIONS, MAX_SET_BYTES
 
@@ -36,8 +34,6 @@ MAX_BODY_BYTES = 2 * MAX_SET_BYTES
 TOO_BIG = "The request is larger than 2 MB. Export fewer questions."
 MALFORMED = "The pipeline is not in the pipeline file's shape, so it cannot be packed."
 DEFAULT_SLUG = "rag-pipeline"
-#: A model's provider, as the catalog's `x-providers` names it, and the key slot it reads.
-_SLOTS = {"anthropic": "anthropic", "openai": "openai", "openrouter": "openrouter", "openai_compatible": "custom"}
 
 
 class CategoryIn(BaseModel):
@@ -65,25 +61,40 @@ def slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", ascii_name.lower()).strip("-")[:60].rstrip("-") or DEFAULT_SLUG
 
 
-def _keys(config: dict[str, Any]) -> list[dict[str, Any]]:
-    """The environment variable of each key the pipeline's model steps read.
-    `optional` is true for a custom endpoint, which needs one only if its server asks."""
-    catalog = pandion.catalog()
+def _scrubbed(value: Any, scrub: Any) -> Any:
+    """`value` with the Policy's `scrub` run over every string in it, keys and values."""
+    if isinstance(value, str):
+        return scrub(value)
+    if isinstance(value, dict):
+        return {_scrubbed(k, scrub): _scrubbed(v, scrub) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrubbed(v, scrub) for v in value]
+    return value
+
+
+def _keys(env_example: str) -> list[dict[str, Any]]:
+    """Each `VAR=` line of the generated .env.example as `{variable, optional, note}`, the
+    comment line above it being the note. A variable is optional when its note says an
+    empty value works, or that only a custom server may need it."""
     found: list[dict[str, Any]] = []
-    for _, stage, use, settings in steps(config):
-        field = catalog.get(stage, {}).get(use, {}).get("config_schema", {}).get("properties", {}).get("model")
-        if not field or not field.get("x-providers"):
-            continue
-        slot = _SLOTS.get(field["x-providers"].get(settings.get("model", field.get("default")), ""))
-        if slot is None:
-            continue
-        key = {"variable": PROVIDERS[slot].env_var, "optional": slot == "custom"}
-        if key not in found:
-            found.append(key)
+    note = ""
+    for line in env_example.splitlines():
+        if line.startswith("# ") and not line.startswith("# Names only") and not line.startswith("# Optional"):
+            note = line[2:]
+        elif re.match(r"^[A-Z][A-Z0-9_]*=", line):
+            optional = "empty" in note.lower() or "openai compatible" in note.lower()
+            found.append({"variable": line.split("=", 1)[0], "optional": optional, "note": note})
+            note = ""
+        else:
+            note = ""
     return found
 
 
 def _question_set(category: str, questions: Any) -> dict[str, Any]:
+    if isinstance(questions, dict) and not isinstance(questions.get("questions"), list):
+        raise HTTPException(
+            status_code=400, detail=f"The questions of category '{category}' must be a list, or an object with a 'questions' list."
+        )
     try:
         parsed = parse_question_set(
             json.dumps(questions).encode("utf-8"), one_document=False, max_questions=MAX_QUESTIONS, max_golds=MAX_GOLDS
@@ -109,7 +120,7 @@ def _exportable(body: ServeProjectIn, config: dict[str, Any]) -> tuple[dict[str,
         if sent.sample:
             left.append({"id": category, "reason": "sample questions only"})
             continue
-        listed = sent.questions if isinstance(sent.questions, list) else sent.questions.get("questions")
+        listed = sent.questions if isinstance(sent.questions, list) else sent.questions.get("questions", [""])
         if not listed:  # an empty set is not a valid question set, and not an error here
             left.append({"id": category, "reason": "no questions"})
             continue
@@ -159,28 +170,39 @@ async def serve_project(request: Request, preview: bool = False) -> Response:
     """The serve project as a zip named after the pipeline, or with `?preview=1` its files as JSON.
 
     Any key the request carries is ignored: the project only names the
-    environment variable a key is read from."""
+    environment variable a key is read from. `left_out.lock` says uv.lock is not
+    shipped: the team runs `uv lock` once and commits it."""
     policy = request.app.state.policy
     body = await _body(request)
     if not isinstance(body.config, dict):
         raise HTTPException(status_code=400, detail=NOT_A_MAPPING)
     # The server decides the paths: the request's own path and models never reach the project.
-    pipeline = {k: v for k, v in body.config.items() if k not in ("path", "models")}
+    pipeline = _scrubbed({k: v for k, v in body.config.items() if k not in ("path", "models")}, policy.scrub)
     pipeline["path"] = YAML_PATH
     try:
         kept, left = _exportable(body, pipeline)
         total = sum(len(s["questions"]) for s in kept.values())
-        policy.check_question_count("evaluation", total, request)
+        try:
+            policy.check_question_count("evaluation", total, request)
+        except HTTPException as exc:
+            if exc.status_code != 413:
+                raise
+            found = re.search(r"\d+", str(exc.detail).split(" has ")[-1])
+            count = found.group() if found else total
+            raise HTTPException(
+                status_code=413,
+                detail=f"This server packs fewer questions into a download than the {count} you sent. Leave some out, or run it yourself to take them all.",
+            ) from None
         name = slug(body.name)
         files = await run_in_threadpool(_build, name, pipeline, kept, body.where)
-        keys = _keys(pipeline) if preview else []
+        keys = _keys(files[".env.example"]) if preview else []
     except ValueError as exc:  # ConfigError is a ValueError, and so is new_project's own refusal
         raise HTTPException(status_code=400, detail=policy.scrub(str(exc))) from None
     except (TypeError, AttributeError):  # a part of the pipeline that is not in the file's shape
         raise HTTPException(status_code=400, detail=MALFORMED) from None
     if preview:
         out = {
-            "filename": f"{name}.zip", "files": files, "keys": keys, "max_questions": None,
+            "filename": f"{name}.zip", "files": files, "keys": keys,
             "left_out": {"categories": left, "documents": True, "lock": True},
         }
         return Response(json.dumps(out), media_type="application/json")

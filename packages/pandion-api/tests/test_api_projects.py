@@ -40,7 +40,7 @@ def test_serve_export_preview_lists_the_serve_files(client):
     assert data["filename"] == "contracts-bot.zip"
     assert {"pipeline.yaml", "serve.py", "policy.py", "Dockerfile", "pyproject.toml", ".env.example",
             "README.md", "evals/questions.json"} <= set(data["files"])
-    assert data["max_questions"] is None and data["keys"] == []
+    assert "max_questions" not in data
 
 
 def test_zip_contains_the_same_files_as_the_preview(client):
@@ -134,5 +134,40 @@ def test_question_count_goes_through_the_policy(tmp_path):
 
     with TestClient(create_app(settings(tmp_path), Capped())) as client:
         r = preview(client)
-    assert r.status_code == 413 and r.json()["detail"] == "Too many questions."
+    assert r.status_code == 413
     assert seen == [("evaluation", 1)]
+
+
+def test_nested_server_paths_are_scrubbed_by_the_policy(tmp_path):
+    class Scrubbing(Policy):
+        def scrub(self, text):
+            return text.replace("/srv/secret", "[server]")
+
+    config = {**CONFIG, "categories": {**CONFIG["categories"], "contracts": {**CONFIG["categories"]["contracts"], "name": "From /srv/secret/docs"}}}
+    with TestClient(create_app(settings(tmp_path), Scrubbing())) as client:
+        files = preview(client, config=config).json()["files"]
+    assert "/srv/secret" not in json.dumps(files) and "[server]/docs" in files["pipeline.yaml"]
+
+
+def test_keys_come_from_env_example_with_notes(client):
+    where = {"index_store": "qdrant", "index_url": "https://qdrant.example.com:6333"}
+    keys = {k["variable"]: k for k in preview(client, where=where).json()["keys"]}
+    assert set(keys) == {"DATABASE_URL", "QDRANT_API_KEY"}
+    assert keys["DATABASE_URL"]["optional"] is True and "SQLAlchemy" in keys["DATABASE_URL"]["note"]
+    assert keys["QDRANT_API_KEY"]["optional"] is False and "Qdrant" in keys["QDRANT_API_KEY"]["note"]
+
+
+def test_demo_413_becomes_a_take_home_sentence(tmp_path):
+    class Capped(Policy):
+        def check_question_count(self, kind, count, request):
+            raise HTTPException(status_code=413, detail=f"The demo scores at most 0 questions, and this set has {count}.")
+
+    with TestClient(create_app(settings(tmp_path), Capped())) as client:
+        r = preview(client)
+    assert r.status_code == 413
+    assert "1 you sent" in r.json()["detail"] and "download" in r.json()["detail"]
+
+
+def test_question_set_without_a_questions_key_is_a_400_sentence(client):
+    r = preview(client, categories={"contracts": {"questions": {"id": "x"}}})
+    assert r.status_code == 400 and "contracts" in r.json()["detail"] and "questions" in r.json()["detail"]

@@ -83,7 +83,7 @@ limit in `Policy.limit` (a gateway, or Redis). `/health` returns only `{"status"
 
 ### The export route
 
-A lab-mode app can write the project you deploy in serve mode. `POST /projects/serve` takes the pipeline, its question sets per category and where the project will run, calls `pandion.new_project(kind="serve")` into a temporary folder and answers with the zip, or with `?preview=1` the files as JSON. The project holds no document, no key and no server path. Questions marked `sample` are dropped, and the answer lists what was left out. The request and answer are in the [endpoint table](index.md#endpoints).
+A lab-mode app can write the project you deploy in serve mode. `POST /projects/serve` takes the pipeline, its question sets per category and where the project will run, calls `pandion.new_project(kind="serve")` into a temporary folder and answers with the zip, or with `?preview=1` the files as JSON. The project holds no document, no key and no server path. Questions marked `sample` are dropped, and the answer lists what was left out: the documents, and the lock file (`uv.lock` is not shipped; run `uv lock` once and commit it). The request and answer are in the [endpoint table](index.md#endpoints).
 
 ### POST /chat
 

@@ -44,7 +44,7 @@ class TraceRecord(BaseModel):
     created_at: str = ""
 
 
-def _label(answer: Any) -> str:
+def label_of(answer: Any) -> str:
     payload = getattr(getattr(answer, "output", None), "payload", None) or {}
     stats = payload.get("stats") or {}
     for name in _WORST_FIRST:
@@ -69,7 +69,7 @@ def record_from_turn(
     answer = result.answer
     return TraceRecord(
         trace_id=trace_id, user_id=user_id, conversation_id=conversation_id, question=question,
-        standalone=result.standalone, answer=result.text, label=_label(answer), source_ids=list(result.source_ids),
+        standalone=result.standalone, answer=result.text, label=label_of(answer), source_ids=list(result.source_ids),
         stages=_stages(answer), cost=answer.cost().get("dollars"),
         latency_ms=round((time.monotonic() - started) * 1000), flags=list(getattr(result, "flags", [])),
     )

@@ -38,7 +38,9 @@ Serve refuses to start without a Policy that says who is asking. `create_app` ra
 `ValueError` when the Policy is missing, or when its class does not override all of `user_id`,
 `roles` and `limit`; the message names the ones it does not. If one shared identity is what you
 want, say so with `Policy.anonymous()`. It is refused when the pipeline file has an `access:`
-block, because every caller would be the same person. Lab mode keeps the default Policy.
+block, because every caller would be the same person. Lab mode keeps the default Policy and runs every
+search, answer and evaluation as an admin (all roles), because it has no end users, so a pipeline with an
+`access:` block still works there. Serve mode uses the roles the Policy gives each caller.
 
 The index is built beforehand with `pandion sync`, using the same pipeline file and the same
 `data_dir`. Serve does not index. At startup it runs one throwaway search so the first user

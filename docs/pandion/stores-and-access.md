@@ -67,8 +67,10 @@ Without an `access:` block, `roles` is ignored. Pandion does not read roles from
 app passes the roles of the signed-in user. This does not protect the files on disk, only what
 a search returns.
 
-While access is on, evaluation, `pandion retrieve` and `pandion eval` raise `AccessDenied`
-because they pass no roles. Admin runs for them come later. A `roles` label is read again on
+`pandion.evaluate` (and so `pandion eval`, `compare` and review) runs as an admin by default,
+so a pipeline with an `access:` block can still be measured. Pass `roles=[...]` to `evaluate` to
+measure what one person would see. `pandion retrieve` passes no roles and raises `AccessDenied`
+while access is on. A `roles` label is read again on
 every sync, so a changed label from a source or from `sync(metadata=...)` applies at the next
 sync.
 

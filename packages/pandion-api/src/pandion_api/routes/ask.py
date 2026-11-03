@@ -6,6 +6,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Request
 from pandion import check_where
+from pandion.extend import ALL_ROLES
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, model_validator
 
 from pandion_api import reports
@@ -85,6 +86,7 @@ async def ask(body: AskIn, request: Request) -> dict[str, str]:
             "on_event": on_event,
             "cancel": cancel,
             "force": body.force,
+            "roles": ALL_ROLES,  # lab mode has no end users
         }
         if body.answer:
             answered = p.ask(body.question, body.k, **options)

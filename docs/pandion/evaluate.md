@@ -236,6 +236,8 @@ before you trust the change. A pipeline without a model step gives the same resu
 every run. `pandion eval --baseline` does that for you: see
 [Ask again before failing](#ask-again-before-failing).
 
+With an `access:` block, `evaluate` searches as an admin (every role) unless you pass `roles=[...]`.
+
 ### Check the question set first
 
 A passage that is gone from the documents fails its question however good the retrieval

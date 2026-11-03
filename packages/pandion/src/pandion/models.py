@@ -75,6 +75,76 @@ def check_downloaded(model_id: str, revision: str, settings: ModelSettings) -> N
         ) from None
 
 
+def download(model_id: str, revision: str, settings: ModelSettings) -> None:
+    """Fetch the model at its pinned revision into the settings' folder (the
+    Hugging Face default when it names none)."""
+    hub = require("huggingface_hub", extra="local", step=f"The {model_id} model")
+    folder = settings.cache_dir or Path(hub.constants.HF_HUB_CACHE)
+    hub.snapshot_download(model_id, revision=revision, cache_dir=folder)
+
+
+def models_for(config: dict) -> list[tuple[str, str]]:
+    """The local models a pipeline (in `Pipeline.to_dict()` shape) uses, as
+    (model id, pinned revision), each once. The docling parser is listed as
+    ("docling", ""): it fetches its own layout and table models."""
+    from pandion import embeddings
+    from pandion.plugins.rerank import cross_encoder
+
+    found: list[tuple[str, str]] = []
+
+    def add(pair: tuple[str, str]) -> None:
+        if pair not in found:
+            found.append(pair)
+
+    def walk(node: object) -> None:
+        if isinstance(node, list):
+            for item in node:
+                walk(item)
+        elif isinstance(node, dict):
+            embed = node.get("embed")
+            if isinstance(embed, dict) and embed.get("use") in embeddings.embedder_names():
+                provider = embeddings.get_embedder(embed["use"])
+                if isinstance(provider, embeddings.SentenceTransformerEmbedder):
+                    add((provider.model_id, provider.revision))
+            if node.get("use") == "cross_encoder":
+                settings = cross_encoder.CrossEncoderConfig(**{k: v for k, v in node.items() if k != "use"})
+                add((settings.model, settings.revision or cross_encoder.PINNED[settings.model]))
+            if node.get("use") == "docling":
+                add(("docling", ""))
+            for value in node.values():
+                walk(value)
+
+    walk(config)
+    return found
+
+
+def pull_models(pipeline, cache_dir: Path | str | None = None, each=None) -> list[tuple[str, str]]:
+    """Download the public models `pipeline` uses, ahead of its first run.
+
+    Each goes to `cache_dir`, else the file's `models.cache_dir`, else the
+    Hugging Face default. `each(model_id, revision)` is called after every
+    model. Returns the models fetched (none for a pipeline with no local
+    model). A failed download raises RuntimeError with one sentence and no
+    token in it."""
+    settings = pipeline.config.models
+    if cache_dir:
+        settings = settings.model_copy(update={"cache_dir": Path(cache_dir)})
+    wanted = models_for(pipeline.to_dict())
+    for model_id, revision in wanted:
+        try:
+            if model_id == "docling":
+                preload_parser("docling")
+            else:
+                download(model_id, revision, settings)
+        except Exception as exc:
+            raise RuntimeError(
+                f"could not download {model_id}: {type(exc).__name__}. Check the network and try again."
+            ) from None
+        if each:
+            each(model_id, revision)
+    return wanted
+
+
 def preload_embedder(name: str, settings: ModelSettings | None = None) -> None:
     """Load the embedder called `name` now, so its first use does not wait.
 

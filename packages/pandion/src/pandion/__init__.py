@@ -15,7 +15,7 @@ stage when called, and hold that stage's step classes. `pandion.retrieve`,
 ready-to-run project folder for a pipeline.
 """
 
-from pandion.models import ModelSettings, preload_embedder, preload_parser, preload_reranker
+from pandion.models import ModelSettings, preload_embedder, preload_parser, preload_reranker, pull_models
 from pandion.config import ConfigError
 from pandion.pipeline import (
     Answer,
@@ -81,6 +81,7 @@ __all__ = [
     "preload_embedder",
     "preload_parser",
     "preload_reranker",
+    "pull_models",
     "rerank",
     "retrieve",
     "rewrite",

@@ -148,7 +148,7 @@ are in `plugins/answer/`.
 | `use_case` | What you finally get | `search`, `chat` (and `eval`, which scores a run and is not an answer step) |
 
 A stage whose input and output have the same type can be stacked, for example two cleaners in a
-row. [strategies.md](strategies.md) describes each strategy.
+row. [strategies.md](app/strategies.md) describes each strategy.
 
 A pipeline is written one way everywhere: as a config, the shape of the pipeline file. It can be
 a YAML file, a dict per stage, or step classes such as `pandion.parse.Docling`. Every way goes
@@ -369,8 +369,8 @@ come from the environment only, and each user has a rate limit and an active-tur
 gives each request a trace id (`X-Trace-Id`) and the app logs one JSON line per request and per
 step. When `OTEL_EXPORTER_OTLP_ENDPOINT` is set, a turn becomes one OpenTelemetry span tree, and
 Prometheus counters are served when `ServeSettings.metrics_port` is set. See
-[Serve mode](pandion-api.md#serve-mode), [hardened defaults](pandion-api.md#serve-mode-hardened-defaults),
-[Logs and traces](pandion-api.md#logs-and-traces) and [Metrics](pandion-api.md#metrics).
+[Serve mode](pandion-api/serve-mode.md#serve-mode), [hardened defaults](pandion-api/serve-mode.md#serve-mode-hardened-defaults),
+[Logs and traces](pandion-api/serve-mode.md#logs-and-traces) and [Metrics](pandion-api/serve-mode.md#metrics).
 
 ## How the web app talks to the API
 
@@ -448,9 +448,9 @@ as the browser holds it, and two tests pin that converting the app's Starter giv
 ## Where to read more
 
 - [pandion/index.md](pandion/index.md): the engine's manual, from install to writing your own strategy.
-- [pandion-api.md](pandion-api.md): every route, the `Policy`, serve mode and its defaults.
-- [guide.md](guide.md): using the playground.
-- [strategies.md](strategies.md): what each strategy does and when to pick it.
-- [deploy.md](deploy.md): running the app, Docker and your own Hugging Face Space.
+- [pandion-api.md](pandion-api/index.md): every route, the `Policy`, serve mode and its defaults.
+- [guide.md](app/guide.md): using the playground.
+- [strategies.md](app/strategies.md): what each strategy does and when to pick it.
+- [deploy.md](operations/deploy.md): running the app, Docker and your own Hugging Face Space.
 - [privacy.md](privacy.md): what is kept, where and for how long.
 - [CONTRIBUTING.md](../CONTRIBUTING.md): setup, tests, adding a strategy or an endpoint.

@@ -15,7 +15,7 @@ how it fits with the frontend.
   decides who may read a document, checks each upload and each page fetched from a link
   (with a per-browser limit on links an hour), refuses a custom model endpoint on
   the demo, refuses a changed prompt or model revision, and caps the work one run can ask
-  for. [docs/pandion-api.md](../../docs/pandion-api.md#the-playground-on-pandion-api) lists
+  for. [docs/pandion-api.md](../../docs/pandion-api/index.md#the-playground-on-pandion-api) lists
   every rule.
 - `demo.py` is demo mode, switched on by `RAG_PLAYGROUND_DEMO=1`. It holds the demo's
   limits: the upload size, pages and count, the lower caps for files that are not PDFs

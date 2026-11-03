@@ -45,7 +45,7 @@ Open the [live demo](https://rag.codewithnk.com). There is no sign in.
   10 MB and 20 pages, a browser can keep 3 uploads at a time, and each upload is deleted
   24 hours after it was made. Your uploads are private to your browser. The server also
   takes Word, PowerPoint, HTML, Markdown, text and image files, and pages from a link;
-  [deploy.md](docs/deploy.md) lists the demo's limits for them.
+  [deploy.md](docs/operations/deploy.md) lists the demo's limits for them.
 - The demo is shared, so one browser can have two runs going at once, an evaluation
   scores at most 50 questions, and a comparison at most 120 recipe-questions (recipes
   times questions). Run the playground locally for more.
@@ -74,7 +74,7 @@ is kept, where and for how long. [docs/privacy.md](docs/privacy.md) says the sam
 
 The free CPU Space works; Docling parsing is slow on it. With demo mode off the copy has
 no sign in, so anyone with its address can use your keys: make the Space private if you
-add them. See [docs/deploy.md](docs/deploy.md) for hardware, storage and updates.
+add them. See [docs/deploy.md](docs/operations/deploy.md) for hardware, storage and updates.
 
 ## Run it on your machine
 
@@ -101,7 +101,7 @@ Then open http://localhost:8000. The volume keeps your uploads, cached results a
 
 Nothing expires locally; your files stay on your machine. You can upload larger PDFs,
 use server keys from your environment or a `.env` file, and point chat at a local model
-server such as Ollama. See [docs/deploy.md](docs/deploy.md) for the details.
+server such as Ollama. See [docs/deploy.md](docs/operations/deploy.md) for the details.
 
 ## Use Pandion in your own code
 
@@ -181,11 +181,11 @@ the strategy's id in the API and in exported files.
 | Rerank | None, Cross-encoder (`cross_encoder`), MMR (`mmr`), LLM (`llm_rerank`) |
 | Answer | Search (`search`), Chat with a model (`chat`), and Evaluate's check (`eval`) |
 
-[docs/strategies.md](docs/strategies.md) explains each one and its settings.
+[docs/strategies.md](docs/app/strategies.md) explains each one and its settings.
 
 Every pipeline you build can be copied as a Pandion YAML file and run outside the playground.
 
-The server is [pandion-api](docs/pandion-api.md), Pandion's REST layer, with the playground's own rules for the hosted demo.
+The server is [pandion-api](docs/pandion-api/index.md), Pandion's REST layer, with the playground's own rules for the hosted demo.
 Its code is in `playground/backend/`; [playground/README.md](playground/README.md) explains how the app is put together.
 The browser keeps your pipeline as a Pandion config: one working copy on Build, and named
 copies in the Library. [Architecture](docs/architecture.md#how-the-web-app-holds-a-pipeline)
@@ -193,16 +193,16 @@ explains how.
 
 ## Learn more
 
-- [Guide](docs/guide.md): every page of the app in detail.
-- [Strategies](docs/strategies.md): every step and setting, and when to use each.
-- [Models and keys](docs/models-and-keys.md): the models the app downloads, the chat
+- [Guide](docs/app/guide.md): every page of the app in detail.
+- [Strategies](docs/app/strategies.md): every step and setting, and when to use each.
+- [Models and keys](docs/app/models-and-keys.md): the models the app downloads, the chat
   providers, and what happens to a key.
 - [Privacy](docs/privacy.md): what is kept in your browser and on the demo server, and
   for how long.
-- [Deploy](docs/deploy.md): Docker, demo mode, variables, and running your own Space.
+- [Deploy](docs/operations/deploy.md): Docker, demo mode, variables, and running your own Space.
 - [Pandion](docs/pandion/index.md): the package. Run a step on its own, or build a pipeline in a
   file or in code, then index, search and ask.
-- [pandion-api](docs/pandion-api.md): Pandion over HTTP, with one Policy object for a site's rules. The playground's server is built on it.
+- [pandion-api](docs/pandion-api/index.md): Pandion over HTTP, with one Policy object for a site's rules. The playground's server is built on it.
 - [The playground app](playground/README.md): how its server and its web app fit together.
 - [Architecture](docs/architecture.md): the three layers, the pipeline and its stages,
   plugins, the cache, the run stream and how the browser holds a pipeline.

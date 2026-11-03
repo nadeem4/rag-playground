@@ -4,7 +4,7 @@ import type { PipelineConfig } from "./config"
 
 /**
  * Time, Tokens and Cost on Compare, read from pandion-api's cost dicts
- * ("Speed and cost" in docs/pandion-api.md). The server does the arithmetic;
+ * ("Speed and cost" in docs/pandion-api/index.md). The server does the arithmetic;
  * this only words it. Nothing unknown ever reads as 0 or $0.
  */
 

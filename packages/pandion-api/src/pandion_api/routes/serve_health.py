@@ -37,7 +37,7 @@ def ready(request: Request):
 @router.get("/metrics")
 def metrics(request: Request) -> Response:
     """The Prometheus text, only when `ServeSettings.metrics_on_app` is true.
-    It must not face the internet (docs/pandion-api.md, "Metrics")."""
+    It must not face the internet (docs/pandion-api/serve-mode.md, "Metrics")."""
     state = request.app.state
     if not state.serve.metrics_on_app:
         raise HTTPException(status_code=404, detail="Not Found")

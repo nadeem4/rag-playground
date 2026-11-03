@@ -24,7 +24,7 @@ the API and exported files use it.
 - [What each step passes to its library](#what-each-step-passes-to-its-library)
 
 To write a strategy of your own for any step, see "Write your own strategy" in
-[pandion/index.md](pandion/extend.md#write-your-own-strategy).
+[pandion/index.md](../pandion/extend.md#write-your-own-strategy).
 
 ## The steps
 
@@ -46,7 +46,7 @@ a single copy on disk.
 Parsing turns the document into text elements (headings, paragraphs, lists and tables)
 with their pages and positions. `pdfium` reads PDF files only. `docling` also reads Word,
 PowerPoint, HTML, Markdown, plain text and PNG or JPG images; see
-[Documents other than PDFs](pandion/stages.md#documents-other-than-pdfs).
+[Documents other than PDFs](../pandion/stages.md#documents-other-than-pdfs).
 
 ### Fast text (`pdfium`)
 
@@ -280,7 +280,7 @@ search combine them fairly.
 
 The same step as `lancedb`, with the rows in Qdrant, in a folder or on a server. It needs
 the `qdrant` extra. The same retrievers read it. See "The Qdrant store" in
-[pandion/index.md](pandion/stores-and-access.md#the-qdrant-store).
+[pandion/index.md](../pandion/stores-and-access.md#the-qdrant-store).
 
 - `embedder`, `truncate_dim`, `build_fts`: as for `lancedb`. With `build_fts` off no keyword
   index is kept, so `bm25` and `hybrid_rrf` are refused.
@@ -483,7 +483,7 @@ It needs a key for the chosen provider. A custom endpoint's key is optional.
 Checks whether the retrieved pieces contain the sentence that answers the question, and
 reports where it was found: hit or miss, the rank, and which piece. No language model, no
 API key and no cost: it compares text with text. The Evaluate page runs it over every
-question in a set, and so does `pandion.evaluate` (see [the pandion guide](pandion/evaluate.md#evaluate-a-pipeline)). It is not an answer step: `answer: {use: eval}` is refused.
+question in a set, and so does `pandion.evaluate` (see [the pandion guide](../pandion/evaluate.md#evaluate-a-pipeline)). It is not an answer step: `answer: {use: eval}` is refused.
 
 - `top_k` (5): how many pieces are checked.
   `pandion.evaluate(p, questions, top_k=5)` sets it.
@@ -492,7 +492,7 @@ question in a set, and so does `pandion.evaluate` (see [the pandion guide](pandi
 
 A route chooses a document's category from the cheap facts about the file, before any
 parsing. These checks go in a rule's `when`. See "Route documents to categories" in
-[pandion/index.md](pandion/pipeline-file.md#route-documents-to-categories).
+[pandion/index.md](../pandion/pipeline-file.md#route-documents-to-categories).
 
 | Check | True when |
 | --- | --- |

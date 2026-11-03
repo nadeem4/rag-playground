@@ -2,7 +2,7 @@
 
 Lab mode lets a client send a pipeline with each request. Serve mode loads one
 pipeline file once at startup and mounts only the routes in `SERVE_ROUTERS`,
-so a lab route can never be mounted by mistake. See docs/pandion-api.md, "Serve mode".
+so a lab route can never be mounted by mistake. See docs/pandion-api/serve-mode.md, "Serve mode".
 """
 
 from __future__ import annotations

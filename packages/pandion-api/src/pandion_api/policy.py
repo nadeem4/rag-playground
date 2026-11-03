@@ -3,7 +3,7 @@
 A site subclasses `Policy` and overrides only what it needs. Every method that
 judges a request is given it, so a rule can depend on who asks (a cookie, a
 header). A method refuses by raising `fastapi.HTTPException` with the status
-and the sentence the caller should see. See docs/pandion-api.md, "Site rules".
+and the sentence the caller should see. See docs/pandion-api/index.md, "Site rules".
 """
 
 from __future__ import annotations

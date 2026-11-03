@@ -1,6 +1,6 @@
 # git-cliff: the next release version and its notes, calculated from
-# Conventional Commits (pull request titles, squash-merged). See CONTRIBUTING,
-# "Releasing". The version is never chosen by hand.
+# Conventional Commits (pull request titles, squash-merged). See the release
+# runbook, docs/operations/release.md, "Releasing". The version is never chosen by hand.
 #
 # Before 1.0: a breaking change or a feat bumps the minor number; only fix and
 # perf bump the patch. From 1.0: a breaking change bumps the major number.

@@ -5,7 +5,8 @@ A strategy is a class: its stage, what it reads (`inputs`), what it makes
 default, one plain sentence (`summary`), and `apply()`. Decorate it with
 `@register` and its `name` works in YAML and in `Pipeline(...)` like a
 built-in. `@register` also takes an `Embedder` subclass, which adds an
-embedder that `embed: {use: <its name>}` can pick. See docs/pandion/extend.md, "Write your own strategy", and examples/pandion/own_strategies/ for one
+embedder that `embed: {use: <its name>}` can pick. See docs/pandion/extend.md,
+"Write your own strategy", and examples/pandion/own_strategies/ for one
 strategy per stage.
 
 A strategy, or a server, that calls a model endpoint the user named checks it

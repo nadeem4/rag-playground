@@ -2664,7 +2664,7 @@ trace_store_conformance(lambda: MyStore(MySettings()))
 
 #### Read traces from the command line
 
-`pandion trace` and `pandion report` read the store you point at and change nothing. They print no more than the record or the summary shows. A trace holds the user's question and answer, so treat the output as you would the conversation.
+`pandion trace` and `pandion report` only read traces from the store you point at (the store may create its tables on first open). They print no more than the record or the summary shows. A trace holds the user's question and answer, so treat the output as you would the conversation.
 
 ```
 pandion trace TRACE_ID [--store sql] --url-env VAR [--json]
@@ -2686,7 +2686,7 @@ Stages:
   answer        800 ms    $0.0012
 ```
 
-`pandion report` summarises the stored traces (the newest 10,000): the number of turns, the median and 95th percentile time (linear interpolation between ranks), the cost in all and per turn, how many turns had each label, each flag and each feedback value, and the mean of every numeric evaluator score. Boolean and text scores are counted as `name: value`. `--flagged` keeps only turns with a flag. `--since` takes a duration (`24h` or `7d`) or an ISO 8601 date such as `2026-10-01` (UTC when it has no zone); anything else is refused with exit 2. With no traces it prints `0 turns.`
+`pandion report` summarises the stored traces (the newest 10,000): the number of turns, the median and 95th percentile time (linear interpolation between ranks), the cost in all and per turn, how many turns had each label, each flag and each feedback value, and the mean of every numeric evaluator score. Boolean and text scores are counted as `name: value`. When the store holds more than 10,000 traces, the report covers the newest 10,000, says so on stderr, and sets `capped` in `--json`; narrow it with `--since`. `--flagged` keeps only turns with a flag. `--since` takes a duration (`24h` or `7d`) or an ISO 8601 date such as `2026-10-01` (UTC when it has no zone); anything else is refused with exit 2. With no traces it prints `0 turns.`
 
 ```
 $ pandion report --since 7d --url-env PANDION_CONVERSATIONS_URL

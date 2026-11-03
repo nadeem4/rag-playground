@@ -35,7 +35,7 @@ import yaml
 
 import pandion
 from pandion import ConfigError, Pipeline
-from pandion.extend import PluginError, TraceStore, format_trace, format_trace_report, parse_since, summarise_traces, get_conversation_store, load_plugins as load_modules, plugin_listing
+from pandion.extend import PluginError, TRACE_LIMIT, TraceStore, format_trace, format_trace_report, parse_since, summarise_traces, get_conversation_store, load_plugins as load_modules, plugin_listing
 from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K, JudgeSettings, QuestionSetError, load_questions
 
 #: Pandion's name for each key, and the environment variable it is read from.
@@ -248,7 +248,9 @@ def cmd_report(args: argparse.Namespace) -> int:
     if store is None:
         return 1
     since = parse_since(args.since) if args.since else None
-    summary = summarise_traces(store.traces(since=since, flagged_only=args.flagged, limit=10_000))
+    summary = summarise_traces(store.traces(since=since, flagged_only=args.flagged, limit=TRACE_LIMIT))
+    if summary.capped:
+        print("Only the newest 10,000 traces are counted; narrow with --since.", file=sys.stderr)
     print(json.dumps(summary.model_dump(), indent=2) if args.json else format_trace_report(summary))
     return 0
 

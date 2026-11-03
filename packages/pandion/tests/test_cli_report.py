@@ -8,7 +8,7 @@ import pytest
 from pandion import cli
 from pandion.conversation_sql import SqlSettings, SqlStore
 from pandion.trace_record import Feedback, TraceRecord
-from pandion.trace_report import parse_since, report
+from pandion.trace_report import parse_since, summarise_traces as report
 
 VAR = "PANDION_TEST_REPORT_URL"
 
@@ -88,3 +88,29 @@ def test_since_accepts_24h_7d_and_iso_dates_and_refuses_the_rest():
     for bad in ("", "yesterday", "5m", "-1d", "0h"):
         with pytest.raises(ValueError, match="--since"):
             parse_since(bad, now=now)
+
+
+def test_report_says_when_the_cap_is_hit(monkeypatch, capsys):
+    class Fake:
+        def traces(self, **kw):
+            return [rec(1)] * 10_000
+    monkeypatch.setattr(cli, "get_conversation_store", lambda name, settings=None: Fake())
+    monkeypatch.setattr(cli, "TraceStore", object)
+    assert cli.main(["report", "--url-env", VAR, "--json"]) == 0
+    cap = capsys.readouterr()
+    assert "Only the newest 10,000 traces are counted; narrow with --since." in cap.err
+    assert json.loads(cap.out)["capped"] is True
+
+
+def test_report_is_not_capped_below_the_limit():
+    assert report([rec(1)]).capped is False
+
+
+def test_since_refuses_a_huge_duration():
+    with pytest.raises(ValueError, match="--since"):
+        parse_since("99999999999d")
+
+
+def test_since_refuses_non_ascii_digits():
+    with pytest.raises(ValueError, match="--since"):
+        parse_since("٣d")

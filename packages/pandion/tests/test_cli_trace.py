@@ -50,3 +50,12 @@ def test_trace_on_a_store_without_traces_says_so(monkeypatch, capsys):
     monkeypatch.setattr(cli, "get_conversation_store", lambda name, settings=None: object())
     code = cli.main(["trace", "t1", "--url-env", VAR])
     assert code == 1 and "does not keep traces" in capsys.readouterr().err
+
+
+def test_trace_strips_control_characters(db, capsys):
+    db.save_trace(TraceRecord(trace_id="t2", user_id="alice", conversation_id="c", question="hi\x1b[31m red",
+                              answer="a\x07b\nsecond line", label="cited"))
+    db.add_feedback("t2", "alice", Feedback(value="up", comment="c\x1b[0mx"))
+    cli.main(["trace", "t2", "--url-env", VAR])
+    out = capsys.readouterr().out
+    assert "\x1b" not in out and "\x07" not in out and "second line" in out

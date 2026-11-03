@@ -16,7 +16,11 @@ from pydantic import BaseModel
 from pandion.trace_record import TraceRecord
 
 
-class Report(BaseModel):
+#: `pandion report` reads at most this many traces, newest first.
+TRACE_LIMIT = 10_000
+
+
+class TraceReport(BaseModel):
     turns: int = 0
     by_label: dict[str, int] = {}
     flagged: dict[str, int] = {}
@@ -30,6 +34,8 @@ class Report(BaseModel):
     score_means: dict[str, float] = {}
     #: How often each boolean or text score value came up, as "name: value".
     score_counts: dict[str, int] = {}
+    #: True when the store held more traces than were read, so the numbers cover only the newest.
+    capped: bool = False
 
 
 def _percentile(sorted_values: list[float], q: float) -> float:
@@ -41,7 +47,7 @@ def _percentile(sorted_values: list[float], q: float) -> float:
     return sorted_values[low] + (sorted_values[high] - sorted_values[low]) * (at - low)
 
 
-def report(traces: list[TraceRecord]) -> Report:
+def summarise_traces(traces: list[TraceRecord]) -> TraceReport:
     latencies = sorted(t.latency_ms for t in traces)
     costs = [t.cost for t in traces if t.cost is not None]
     sums: dict[str, list[float]] = {}
@@ -52,7 +58,7 @@ def report(traces: list[TraceRecord]) -> Report:
                 counts[f"{name}: {value}"] += 1
             else:
                 sums.setdefault(name, []).append(float(value))
-    return Report(
+    return TraceReport(
         turns=len(traces),
         by_label=dict(Counter(t.label for t in traces if t.label)),
         flagged=dict(Counter(f for t in traces for f in t.flags)),
@@ -60,11 +66,15 @@ def report(traces: list[TraceRecord]) -> Report:
         cost_total=sum(costs), cost_mean=sum(costs) / len(costs) if costs else None,
         feedback=dict(Counter(f.value for t in traces for f in t.feedback)),
         score_means={name: sum(v) / len(v) for name, v in sums.items()},
-        score_counts=dict(counts),
+        score_counts=dict(counts), capped=len(traces) >= TRACE_LIMIT,
     )
 
 
-_DURATION = re.compile(r"(\d+)([hd])")
+_DURATION = re.compile(r"([0-9]+)([hd])")
+
+
+def _bad_since(text: str) -> str:
+    return f"--since '{text}' is not a duration like 24h or 7d, nor an ISO 8601 date like 2026-10-01."
 
 
 def parse_since(text: str, *, now: datetime | None = None) -> str:
@@ -73,14 +83,26 @@ def parse_since(text: str, *, now: datetime | None = None) -> str:
     match = _DURATION.fullmatch(text.strip())
     if match and int(match[1]) > 0:
         unit = "hours" if match[2] == "h" else "days"
-        return (now - timedelta(**{unit: int(match[1])})).astimezone(UTC).isoformat(timespec="seconds")
+        try:
+            return (now - timedelta(**{unit: int(match[1])})).astimezone(UTC).isoformat(timespec="seconds")
+        except OverflowError:
+            pass
+        raise ValueError(_bad_since(text))
     try:
         when = datetime.fromisoformat(text.strip())
     except ValueError:
-        raise ValueError(f"--since '{text}' is not a duration like 24h or 7d, nor an ISO 8601 date like 2026-10-01.") from None
+        raise ValueError(_bad_since(text)) from None
     if when.tzinfo is None:
         when = when.replace(tzinfo=UTC)
     return when.astimezone(UTC).isoformat(timespec="seconds")
+
+
+_CONTROL = re.compile(r"[\x00-\x09\x0b-\x1f\x7f-\x9f]")
+
+
+def _clean(text: str) -> str:
+    """User text with control characters (such as terminal escapes) removed; newlines stay."""
+    return _CONTROL.sub("", text)
 
 
 def _money(value: float | None) -> str:
@@ -90,12 +112,12 @@ def _money(value: float | None) -> str:
 def format_trace(t: TraceRecord) -> str:
     lines = [
         f"Trace {t.trace_id} ({t.created_at}), user {t.user_id}, conversation {t.conversation_id}",
-        f"Question: {t.question}",
+        f"Question: {_clean(t.question)}",
     ]
     if t.standalone and t.standalone != t.question:
-        lines.append(f"Searched as: {t.standalone}")
+        lines.append(f"Searched as: {_clean(t.standalone)}")
     lines += [
-        f"Answer: {t.answer}",
+        f"Answer: {_clean(t.answer)}",
         f"Label: {t.label or 'none'}. Sources: {', '.join(t.source_ids) or 'none'}.",
         f"Flags: {', '.join(t.flags) or 'none'}.",
         f"Took {t.latency_ms} ms and cost {_money(t.cost)}.",
@@ -107,11 +129,11 @@ def format_trace(t: TraceRecord) -> str:
     if t.scores:
         lines.append("Scores: " + ", ".join(f"{k} {v}" for k, v in t.scores.items()))
     for f in t.feedback:
-        lines.append(f"Feedback: {f.value}" + (f" ({f.category})" if f.category else "") + (f": {f.comment}" if f.comment else ""))
+        lines.append(f"Feedback: {f.value}" + (f" ({f.category})" if f.category else "") + (f": {_clean(f.comment)}" if f.comment else ""))
     return "\n".join(lines)
 
 
-def format_report(r: Report) -> str:
+def format_trace_report(r: TraceReport) -> str:
     if not r.turns:
         return "0 turns."
     lines = [f"{r.turns} turns. Median {r.p50_ms:.0f} ms, 95th percentile {r.p95_ms:.0f} ms."]

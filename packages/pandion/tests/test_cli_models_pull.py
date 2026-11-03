@@ -74,11 +74,39 @@ def test_pull_uses_the_files_cache_dir_without_the_flag(tmp_path, calls):
     assert [c[2] for c in calls] == [(tmp_path / "other")]
 
 
-def test_pull_fetches_the_docling_models(tmp_path, monkeypatch, calls):
+def write_docling(tmp_path, block):
+    data = {**BASE, "path": str(tmp_path / "index")}
+    data["index"] = {**BASE["index"], "parse": {"use": "docling", **block}}
+    file = tmp_path / "pipeline.yaml"
+    file.write_text(yaml.safe_dump(data))
+    return str(file)
+
+
+def test_pull_fetches_the_docling_models_with_the_blocks_options(tmp_path, monkeypatch, calls):
     loaded = []
-    monkeypatch.setattr(models, "preload_parser", lambda use="docling": loaded.append(use))
-    code = cli.main(["models", "pull", write(tmp_path, parse="docling")])
-    assert code == 0 and loaded == ["docling"] and calls == []
+    monkeypatch.setattr(models, "preload_parser", lambda use="docling", config=None, images=False: loaded.append((use, config, images)))
+    code = cli.main(["models", "pull", write_docling(tmp_path, {"do_ocr": False})])
+    assert code == 0 and calls == []
+    assert len(loaded) == 1 and loaded[0][0] == "docling" and loaded[0][1] == {"do_ocr": False} and loaded[0][2] is True
+
+
+def test_preload_parser_hands_the_block_to_docling(monkeypatch):
+    from pandion.plugins.parse import docling
+
+    seen = []
+    monkeypatch.setattr(docling, "preload", lambda config=None, images=False: seen.append((config, images)))
+    models.preload_parser("docling", {"do_ocr": False}, images=True)
+    assert seen[0][0].do_ocr is False and seen[0][1] is True
+
+
+def test_a_missing_extra_is_not_turned_into_network_advice(tmp_path, monkeypatch, capsys):
+    def missing(model_id, revision, settings):
+        raise ImportError("needs huggingface_hub, install pandion[local]")
+
+    monkeypatch.setattr(models, "download", missing)
+    code = cli.main(["models", "pull", write(tmp_path, embed="bge-small-en-v1.5")])
+    err = capsys.readouterr().err
+    assert code == 1 and "pandion[local]" in err and "network" not in err
 
 
 def test_pull_failure_exits_1_with_one_sentence(tmp_path, monkeypatch, capsys):

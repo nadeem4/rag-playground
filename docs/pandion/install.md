@@ -56,7 +56,11 @@ network. It also guards a URL given as a document (see
 To download every model a pipeline file needs ahead of time, for example in a Dockerfile, run
 `pandion models pull pipeline.yaml` (add `--cache-dir DIR` to choose the folder). Then set
 `models.download: never` and point `models.cache_dir` at the same folder, so the server
-never needs the network for a model.
+never needs the network for a model. A pull fetches the whole model repository.
+
+Docling is the exception: it does not use `models.cache_dir` or `download: never`. It keeps
+its models under `HF_HOME` and fetches them again if they are missing. Set the same `HF_HOME`
+(for example `/models/hf`) when you run `pandion models pull` and when you run the server.
 From Python, `pandion.pull_models(pipeline, cache_dir=None)` does the same and returns the models it fetched.
 
 To load the default embedder before the first run, so that run does not wait, call

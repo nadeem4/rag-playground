@@ -409,8 +409,8 @@ def _converter(config: DoclingConfig) -> Any:
     return _CONVERTERS[key]
 
 
-def preload(config: DoclingConfig | None = None) -> None:
-    """Build the converter for `config` and load its PDF models now.
+def preload(config: DoclingConfig | None = None, images: bool = False) -> None:
+    """Build the converter for `config` and load its PDF models now (and the image models with `images`).
 
     The first run otherwise waits for the layout and table models to download
     and load; a caller that knows a run is coming (the app's warm-up) can pay
@@ -419,7 +419,10 @@ def preload(config: DoclingConfig | None = None) -> None:
     _require_docling()
     from docling.datamodel.base_models import InputFormat
 
-    _converter(config or DoclingConfig()).initialize_pipeline(InputFormat.PDF)
+    converter = _converter(config or DoclingConfig())
+    converter.initialize_pipeline(InputFormat.PDF)
+    if images:
+        converter.initialize_pipeline(InputFormat.IMAGE)
 
 
 @register

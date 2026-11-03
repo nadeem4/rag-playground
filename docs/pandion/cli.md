@@ -192,8 +192,10 @@ needs, ahead of time: the local embedder, each `cross_encoder` reranker at its p
 revision, and the Docling layout models when the file parses with `docling`. It prints one
 line per model, or `This pipeline uses no local model.`, and exits 0. When a download fails
 it prints one sentence naming the model and exits 1. It never prints a token. Models go into
-`--cache-dir`, else the file's `models.cache_dir`, else the Hugging Face default (Docling
-keeps its own models in the Hugging Face default). Run it at Docker build time so the
+`--cache-dir`, else the file's `models.cache_dir`, else the Hugging Face default. Docling
+ignores `cache_dir` and `download: never`: it keeps its models, including the OCR models for
+images, under `HF_HOME`, so set the same `HF_HOME` at pull time and at run time. A pull
+fetches the whole model repository. Run it at Docker build time so the
 container starts with `models.download: never`. See [Models](install.md#models).
 
 **`pandion init FOLDER [--index NAME] [--query NAME] [--questions FILE] [--overwrite]`**

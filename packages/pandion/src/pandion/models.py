@@ -108,7 +108,7 @@ def models_for(config: dict) -> list[tuple[str, str]]:
                     add((provider.model_id, provider.revision))
             if node.get("use") == "cross_encoder":
                 settings = cross_encoder.CrossEncoderConfig(**{k: v for k, v in node.items() if k != "use"})
-                add((settings.model, settings.revision or cross_encoder.PINNED[settings.model]))
+                add((settings.model, settings.revision or cross_encoder.PINNED.get(settings.model, "main")))
             if node.get("use") == "docling":
                 add(("docling", ""))
             for value in node.values():
@@ -118,11 +118,22 @@ def models_for(config: dict) -> list[tuple[str, str]]:
     return found
 
 
+def _docling_blocks(node: object) -> list[dict]:
+    """Every `use: docling` block in a pipeline dict, without its `use`."""
+    if isinstance(node, list):
+        return [b for item in node for b in _docling_blocks(item)]
+    if not isinstance(node, dict):
+        return []
+    own = [{k: v for k, v in node.items() if k != "use"}] if node.get("use") == "docling" else []
+    return own + [b for value in node.values() for b in _docling_blocks(value)]
+
+
 def pull_models(pipeline, cache_dir: Path | str | None = None, each=None) -> list[tuple[str, str]]:
     """Download the public models `pipeline` uses, ahead of its first run.
 
     Each goes to `cache_dir`, else the file's `models.cache_dir`, else the
-    Hugging Face default. `each(model_id, revision)` is called after every
+    Hugging Face default (Docling keeps its own models under HF_HOME and
+    ignores both). A pull fetches the whole model repository. `each(model_id, revision)` is called after every
     model. Returns the models fetched (none for a pipeline with no local
     model). A failed download raises RuntimeError with one sentence and no
     token in it."""
@@ -133,9 +144,12 @@ def pull_models(pipeline, cache_dir: Path | str | None = None, each=None) -> lis
     for model_id, revision in wanted:
         try:
             if model_id == "docling":
-                preload_parser("docling")
+                for block in _docling_blocks(pipeline.to_dict()):
+                    preload_parser("docling", block, images=True)
             else:
                 download(model_id, revision, settings)
+        except ImportError:
+            raise
         except Exception as exc:
             raise RuntimeError(
                 f"could not download {model_id}: {type(exc).__name__}. Check the network and try again."
@@ -173,9 +187,11 @@ def preload_reranker(
     cross_encoder._load(model or cross_encoder.CrossEncoderConfig().model, settings)
 
 
-def preload_parser(use: str = "docling") -> None:
+def preload_parser(use: str = "docling", config: dict | None = None, images: bool = False) -> None:
     """Load the `use` parser's models now, so its first run does not wait for them.
-    A parser with no models to load (pdfium) does nothing."""
+    A parser with no models to load (pdfium) does nothing. `config` is the
+    parser's block from the pipeline file (without `use`); `images` also loads
+    the models for image files (OCR)."""
     from pandion.plugins import discover
     from pandion.ports import Stage
     from pandion.registry import UnknownTransformError, registry
@@ -188,4 +204,4 @@ def preload_parser(use: str = "docling") -> None:
     if use == "docling":
         from pandion.plugins.parse import docling
 
-        docling.preload(docling.DoclingConfig())
+        docling.preload(docling.DoclingConfig(**(config or {})), images)

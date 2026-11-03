@@ -224,7 +224,7 @@ def cmd_models(args: argparse.Namespace) -> int:
     per model. 1 with one sentence when a download fails; no token is printed."""
     try:
         pulled = pandion.pull_models(_load(args), args.cache_dir, lambda model_id, revision: print(f"{model_id} {revision}".rstrip() + " ready"))
-    except RuntimeError as exc:
+    except (RuntimeError, ImportError) as exc:
         print(f"pandion: {exc}", file=sys.stderr)
         return 1
     if not pulled:

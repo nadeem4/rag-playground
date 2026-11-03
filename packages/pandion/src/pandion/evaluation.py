@@ -15,7 +15,7 @@ and per `category:<name>` tag (`gate_ok` fails when any category lost a question
 asks newly missed questions once more when a step is nondeterministic.
 `environment(p)` and `check_environment` record and check the platform and models a baseline was made with.
 `compare` runs a pipeline once per variant of one stage and evaluates each.
-See docs/pandion.md, "Evaluate a pipeline" and "Compare settings".
+See docs/pandion/evaluate.md, "Evaluate a pipeline" and "Compare settings".
 """
 
 from __future__ import annotations

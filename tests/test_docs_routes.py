@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 #: Public docs. docs/lessons-learned.md is left out: it is a record of what happened, in the words of the time.
 DOCS = sorted(
     {ROOT / "README.md", ROOT / "CONTRIBUTING.md"}
-    | {p for p in (ROOT / "docs").glob("*.md") if p.name != "lessons-learned.md"}
+    | {p for p in (ROOT / "docs").rglob("*.md") if p.name != "lessons-learned.md"}
     | set((ROOT / "examples").rglob("*.md"))
     | set((ROOT / "packages").glob("*/README.md"))
     | {ROOT / "playground" / "README.md"}
@@ -83,6 +83,6 @@ def test_the_old_frontend_path_pattern():
 
 
 def test_the_docs_name_the_cli_commands():
-    text = (ROOT / "docs" / "pandion.md").read_text(encoding="utf-8")
+    text = (ROOT / "docs" / "pandion" / "cli.md").read_text(encoding="utf-8")
     for command in ("validate", "strategies", "index", "retrieve", "ask", "eval", "compare", "install"):
-        assert f"pandion {command}" in text, f"docs/pandion.md does not show `pandion {command}`"
+        assert f"pandion {command}" in text, f"docs/pandion/cli.md does not show `pandion {command}`"

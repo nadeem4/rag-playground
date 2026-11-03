@@ -5,7 +5,7 @@ A strategy is a class: its stage, what it reads (`inputs`), what it makes
 default, one plain sentence (`summary`), and `apply()`. Decorate it with
 `@register` and its `name` works in YAML and in `Pipeline(...)` like a
 built-in. `@register` also takes an `Embedder` subclass, which adds an
-embedder that `embed: {use: <its name>}` can pick. See docs/pandion.md,
+embedder that `embed: {use: <its name>}` can pick. See docs/pandion/extend.md,
 "Write your own strategy", and examples/pandion/own_strategies/ for one
 strategy per stage.
 
@@ -25,24 +25,24 @@ the guard refuses it.
 
 A team that keeps its index somewhere else writes an index store: `IndexRow`,
 `IndexMeta`, `StoreHit`, `Capabilities` and the filters `Eq`, `In`, `AnyOf` and
-`And` are its words, and `register_store` adds it. See docs/pandion.md, "Index stores".
+`And` are its words, and `register_store` adds it. See docs/pandion/stores-and-access.md, "Index stores".
 
 A team that keeps its chats somewhere else writes a conversation store: `Turn`,
 `Conversation`, `ConversationInfo` and `Memory` are its words, `ConversationStore` is the
 contract, and `register_conversation_store` adds it. A store that also keeps a `TraceRecord` for each turn, and its `Feedback`, is a `TraceStore`. A server runs a turn with `chat_turn`
-(`ChatSettings`, `fold_summary` and `remember` go with it; `flags_for` and `give_feedback` mark and judge its traces) on a store from `get_conversation_store`. See docs/pandion.md, "Conversations".
+(`ChatSettings`, `fold_summary` and `remember` go with it; `flags_for` and `give_feedback` mark and judge its traces) on a store from `get_conversation_store`. See docs/pandion/conversations.md, "Conversations".
 
 A team that wants its stored chats checked in a batch writes an `@online_evaluator`: a function of one
 `TraceRecord` that returns the outputs it declared. `pandion review --evaluate` runs them (`run_evaluators`) and
-saves the scores on each trace. See docs/pandion.md, "Online evaluation".
+saves the scores on each trace. See docs/pandion/traces.md, "Online evaluation".
 
 A team that keeps its documents somewhere else writes a `Source`: `SourceEntry`
 is what it lists, `register_source` adds it, and `index.sync(source)` reads
-only the entries that are new or changed. See docs/pandion.md, "Sync from a source".
+only the entries that are new or changed. See docs/pandion/index-and-search.md, "Sync from a source".
 
 A team that decides who may read a document writes an `@access_rule`: it takes a
 `DocumentInfo` and returns role names, or None for no opinion. A rule that fails
-leaves the document visible to nobody. See docs/pandion.md, "Who may read a document".
+leaves the document visible to nobody. See docs/pandion/stores-and-access.md, "Who may read a document".
 """
 
 from typing import Any

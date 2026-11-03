@@ -1,5 +1,5 @@
 # An index for pandion: parse, clean, chunk, embed and store.
-# Run it with index_samples.py, or read docs/pandion.md for every field.
+# Run it with index_samples.py, or read docs/pandion/pipeline-file.md for every field.
 
 # Sources, artifacts and the embedding cache are kept here.
 # A relative path is read from the folder this file is in.

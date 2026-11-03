@@ -406,7 +406,7 @@ class Pipeline:
     For documents that need different steps, give `categories` and `route`
     (the file's blocks) in place of `parse`, `clean` and `chunk`.
     `source` is optional, as in the file: left out, the documents are the
-    files given to index.run (see "Your own source" in docs/pandion.md).
+    files given to index.run (see "Your own source" in docs/pandion/extend.md).
     `embed` is left out for a store that embeds by itself.
     `retrieval` is None without a search step and `query` is None without an
     answer step.

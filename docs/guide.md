@@ -859,7 +859,7 @@ in a zip. It opens a sheet that shows what the zip holds:
 - `docs/`: an empty folder for your documents.
 
 Click a file to see its text. The server writes every file with `pandion.new_project`
-(see [pandion.md](pandion.md)), so what you see is what you get.
+(see [pandion/index.md](pandion/index.md)), so what you see is what you get.
 
 The sheet also says what stays behind: your documents, your key and the saved index.
 Keys are never written to a file, so the zip only names the variable to set. run.py builds

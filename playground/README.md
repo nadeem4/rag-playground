@@ -14,7 +14,7 @@ The app has two halves:
 The backend also serves Pandion's pipeline templates at `GET /api/templates`: index
 templates that set how a kind of document is indexed, and query templates that set how
 a kind of question is searched and answered. See
-[Templates](../docs/pandion.md#templates). Build's **Start from a template** shows them as
+[Templates](../docs/pandion/templates-and-projects.md#templates). Build's **Start from a template** shows them as
 cards and puts the pipeline they make on Build, with Undo.
 
 ## How the two halves fit
@@ -28,7 +28,7 @@ The backend is [pandion-api](../packages/pandion-api/README.md) with the playgro
 rules. It calls `pandion_api.create_app` with `PlaygroundPolicy`, which holds the rules
 for the hosted demo, such as the upload limits and keeping each visitor's uploads private.
 It then adds the playground-only routes and serves the built frontend as a static site.
-pandion-api runs every pipeline with [Pandion](../docs/pandion.md), the engine.
+pandion-api runs every pipeline with [Pandion](../docs/pandion/index.md), the engine.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#000000','primaryBorderColor':'#000000','lineColor':'#000000'}}}%%

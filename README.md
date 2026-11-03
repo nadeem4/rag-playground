@@ -2,7 +2,7 @@
 
 See why a RAG pipeline finds the answer, or misses it.
 
-[Live demo](https://rag.codewithnk.com) | [Docs](https://github.com/nadeem4/rag-playground/tree/main/docs) | [Pandion](docs/pandion.md) | [GitHub](https://github.com/nadeem4/rag-playground) | [Changelog](CHANGELOG.md)
+[Live demo](https://rag.codewithnk.com) | [Docs](https://github.com/nadeem4/rag-playground/tree/main/docs) | [Pandion](docs/pandion/index.md) | [GitHub](https://github.com/nadeem4/rag-playground) | [Changelog](CHANGELOG.md)
 
 ![The Build page: every step of the pipeline shows its output, with the Ask panel docked on the right](playground/frontend/public/clips/build.jpg)
 
@@ -132,7 +132,7 @@ p.index.run("report.pdf")
 print(p.ask("What does the report recommend?").text)
 ```
 
-The [Pandion guide](docs/pandion.md) covers every step, setting and error, and
+The [Pandion guide](docs/pandion/index.md) covers every step, setting and error, and
 [examples/pandion/](examples/pandion) has scripts that index, sync, search and ask, and
 [examples/pandion-api/](examples/pandion-api) does the same over HTTP with pandion-api.
 [examples/](examples) says which folder to pick.
@@ -140,16 +140,16 @@ To write your own strategy for any step, start from
 [examples/pandion/own_strategies/](examples/pandion/own_strategies): it writes one for
 every stage (source, parse, clean, chunk, store, rewrite, search, rerank and
 answer), plus an embedder, and runs with no download. See
-[Write your own strategy](docs/pandion.md#write-your-own-strategy).
+[Write your own strategy](docs/pandion/extend.md#write-your-own-strategy).
 Evaluate a pipeline on your own questions, and compare settings at one stage: see
-[Evaluate a pipeline](docs/pandion.md#evaluate-a-pipeline) and
-[Compare settings](docs/pandion.md#compare-settings).
+[Evaluate a pipeline](docs/pandion/evaluate.md#evaluate-a-pipeline) and
+[Compare settings](docs/pandion/evaluate.md#compare-settings).
 
 ### Use Pandion from the command line
 
 `pandion validate pipeline.yaml`, `pandion index pipeline.yaml report.pdf`, `pandion ask pipeline.yaml "..."`:
 the same pipeline, from the command line. `--plugins my_strategies` loads your own
-strategies first. See [the pandion command](docs/pandion.md#the-pandion-command).
+strategies first. See [the pandion command](docs/pandion/cli.md#the-pandion-command).
 
 ### How the pieces fit
 
@@ -200,7 +200,7 @@ explains how.
 - [Privacy](docs/privacy.md): what is kept in your browser and on the demo server, and
   for how long.
 - [Deploy](docs/deploy.md): Docker, demo mode, variables, and running your own Space.
-- [Pandion](docs/pandion.md): the package. Run a step on its own, or build a pipeline in a
+- [Pandion](docs/pandion/index.md): the package. Run a step on its own, or build a pipeline in a
   file or in code, then index, search and ask.
 - [pandion-api](docs/pandion-api.md): Pandion over HTTP, with one Policy object for a site's rules. The playground's server is built on it.
 - [The playground app](playground/README.md): how its server and its web app fit together.

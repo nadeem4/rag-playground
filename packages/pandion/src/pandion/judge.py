@@ -11,7 +11,7 @@ that text is escaped, so it cannot close a fence and give itself a score. A repl
 that is not the asked-for JSON, or a call that fails, skips the question and is
 counted: a judge never fails an evaluation.
 
-See docs/pandion.md, "Judging correctness".
+See docs/pandion/evaluate.md, "Judging correctness".
 """
 
 from __future__ import annotations

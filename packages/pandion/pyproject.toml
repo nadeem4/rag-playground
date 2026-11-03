@@ -46,7 +46,7 @@ files = ["fsspec>=2025.3"]
 
 [project.urls]
 Homepage = "https://rag.codewithnk.com"
-Documentation = "https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md"
+Documentation = "https://github.com/nadeem4/rag-playground/blob/main/docs/pandion/index.md"
 Source = "https://github.com/nadeem4/rag-playground/tree/main/packages/pandion"
 Issues = "https://github.com/nadeem4/rag-playground/issues"
 

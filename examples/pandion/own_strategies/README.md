@@ -8,7 +8,7 @@ downloaded and nothing goes over the network.
 Every strategy has the same shape: a settings model where every field has a default, and
 a class with `name`, `stage`, `inputs`, `output`, `config_model`, `summary` and `apply()`,
 marked with `@register`. Everything you need comes from `pandion.extend`. The full guide is
-"Write your own strategy" in [docs/pandion.md](../../../docs/pandion.md#write-your-own-strategy).
+"Write your own strategy" in [docs/pandion/index.md](../../../docs/pandion/extend.md#write-your-own-strategy).
 
 ## The strategies, stage by stage
 
@@ -82,7 +82,7 @@ function of a `DocumentInfo` (the cheap facts about a file) and its settings tha
 `True` or `False`, marked with `@route_check("is_invoice", config=...)`. A route then uses it as
 `when: {use: is_invoice, prefix: tid}`, and the report says why a document went where it did.
 `pipeline.yaml` has no route, because it has one category. See "Route documents to categories"
-in [docs/pandion.md](../../../docs/pandion.md).
+in [docs/pandion/index.md](../../../docs/pandion/index.md).
 
 ## Use them
 

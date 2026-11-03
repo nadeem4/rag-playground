@@ -19,7 +19,8 @@ from typing import NamedTuple
 from urllib.parse import unquote
 
 REPO_URL = re.compile(r"^https://github\.com/nadeem4/rag-playground/(?:blob|tree)/main/?(.*)$")
-MD_LINK = re.compile(r"\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
+MD_LINK = re.compile(r"\[(?:[^\[\]]|\[[^\]]*\])*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
+REF_DEF = re.compile(r"^ {0,3}\[(?!\^)[^\]]+\]:[ \t]*<?(\S+?)>?(?:\s|$)", re.MULTILINE)
 HTML_LINK = re.compile(r"""(?:href|src)=["']([^"']+)["']""")
 INLINE_CODE = re.compile(r"`[^`]*`")
 HEADING = re.compile(r"^ {0,3}#{1,6}\s+(.*?)\s*#*\s*$")
@@ -76,16 +77,18 @@ def anchors(path: Path) -> set[str]:
 def markdown_files(root: Path) -> list[Path]:
     if (root / ".git").exists():
         out = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "*.md"], capture_output=True, text=True, check=True
-        ).stdout
-        return [root / name for name in out.splitlines() if (root / name).is_file()]
+            ["git", "-C", str(root), "ls-files", "-z", "*.md"], capture_output=True, check=True
+        ).stdout.decode("utf-8")
+        return [root / name for name in out.split("\0") if name and (root / name).is_file()]
     return sorted(root.rglob("*.md"))
 
 
-def _targets(line: str):
-    line = INLINE_CODE.sub("", line)
-    yield from MD_LINK.findall(line)
-    yield from HTML_LINK.findall(line)
+def _targets(text: str):
+    """Yield (line number, target) from text whose code fences are blanked out."""
+    text = INLINE_CODE.sub(lambda m: re.sub(r"[^\n]", " ", m.group()), text)
+    for pattern in (MD_LINK, REF_DEF, HTML_LINK):
+        for match in pattern.finditer(text):
+            yield text.count("\n", 0, match.start(1)) + 1, match.group(1)
 
 
 def check(root: Path) -> list[Problem]:
@@ -101,11 +104,12 @@ def check(root: Path) -> list[Problem]:
     for md in markdown_files(root):
         rel = md.relative_to(root).as_posix()
         text = md.read_text(encoding="utf-8")
-        for number, line in _content_lines(text):
-            for target in _targets(line):
-                reason = _problem(root, md, target, anchors_of)
-                if reason:
-                    problems.append(Problem(rel, number, target, reason))
+        kept = dict(_content_lines(text))
+        body = "\n".join(kept.get(n, "") for n in range(1, len(text.splitlines()) + 1))
+        for number, target in _targets(body):
+            reason = _problem(root, md, target, anchors_of)
+            if reason:
+                problems.append(Problem(rel, number, target, reason))
     return problems
 
 
@@ -126,7 +130,7 @@ def _problem(root: Path, md: Path, target: str, anchors_of) -> str | None:
     else:
         resolved = md
     if anchor and resolved.is_file() and resolved.suffix == ".md":
-        if unquote(anchor).lower() not in anchors_of(resolved):
+        if unquote(anchor) not in anchors_of(resolved):
             return "anchor not found"
     return None
 
@@ -135,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--root", default=Path(__file__).resolve().parents[1], type=Path)
     args = parser.parse_args(argv)
+    sys.stdout.reconfigure(errors="replace")
     problems = check(args.root)
     for problem in problems:
         print(problem)

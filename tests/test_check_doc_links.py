@@ -116,3 +116,33 @@ def test_main_prints_problems_and_exits_one(tmp_path, capsys):
 def test_main_exits_zero_when_clean(tmp_path):
     root = _repo(tmp_path, {"README.md": "# Hi\n"})
     assert cdl.main(["--root", str(root)]) == 0
+
+
+def test_reference_definitions_are_checked(tmp_path):
+    root = _repo(tmp_path, {"README.md": "[a][ref]\n\n[ref]: nope.md\n[^1]: a footnote\n"})
+    assert _reasons(root) == [("README.md", "nope.md")]
+
+
+def test_nested_image_link_checks_the_outer_target(tmp_path):
+    root = _repo(tmp_path, {"README.md": "[![b](README.md)](missing.md)\n"})
+    assert _reasons(root) == [("README.md", "missing.md")]
+
+
+def test_link_text_that_wraps_lines_is_checked(tmp_path):
+    root = _repo(tmp_path, {"README.md": "# T\n\nsee [a long\ntext](missing.md)\n"})
+    problems = cdl.check(root)
+    assert [(p.line, p.target) for p in problems] == [(4, "missing.md")]
+
+
+def test_anchor_case_is_exact(tmp_path):
+    root = _repo(tmp_path, {"README.md": "## a_b\n\n[ok](#a_b) [bad](#A_B)\n"})
+    assert _reasons(root) == [("README.md", "#A_B")]
+
+
+def test_non_ascii_file_names_are_checked(tmp_path):
+    import subprocess
+
+    root = _repo(tmp_path, {"café.md": "[gone](gone.md)\n"})
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    assert _reasons(root) == [("café.md", "gone.md")]

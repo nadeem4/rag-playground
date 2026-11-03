@@ -97,6 +97,29 @@ published tag.
    ```bash
    gh workflow run Release -f go_to_1_0_0=true
    ```
+5. **After each `v*` or `pandion-v*` tag is published,** regenerate the changelogs in a
+   `docs:` PR (see [Changelogs](#changelogs)).
+
+### Changelogs
+
+Three changelogs are generated, not written by hand: `CHANGELOG.md` (the app, `v*` tags),
+`packages/pandion/CHANGELOG.md` (`pandion-v*` tags, commits that touch the package) and
+`packages/pandion-api/CHANGELOG.md` (no tags yet, so one Unreleased section). They use
+one config, `cliff-changelog.toml`, with the tag pattern and path filter passed per file;
+`cliff.toml` is not used for them because it calculates the release version. Install
+`git-cliff` 2.14.2 (the version the Release workflow uses), then regenerate from the repo
+root:
+
+```bash
+git-cliff --config cliff-changelog.toml --tag-pattern "^v[0-9]+\.[0-9]+\.[0-9]+$" --output CHANGELOG.md
+git-cliff --config cliff-changelog.toml --tag-pattern "^pandion-v[0-9]+\.[0-9]+\.[0-9]+$" --include-path "packages/pandion/**" --output packages/pandion/CHANGELOG.md
+printf '\n---\n\nThe entries for 0.1.0 (#68 to #91) are listed under v0.2.0: the `pandion-v0.1.0` tag sits on a docs commit that does not touch the package.\n' >> packages/pandion/CHANGELOG.md
+git-cliff --config cliff-changelog.toml --tag-pattern "^pandion-api-v[0-9]+\.[0-9]+\.[0-9]+$" --include-path "packages/pandion-api/**" --output packages/pandion-api/CHANGELOG.md
+```
+
+The `printf` line re-adds the note about 0.1.0 at the end of the Pandion changelog.
+Regenerate the changelogs in a `docs:` PR after each `v*` or `pandion-v*` tag is
+published. A `docs:` title makes no release.
 
 ### Rolling back
 

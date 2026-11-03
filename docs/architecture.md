@@ -3,7 +3,7 @@
 RAG Playground is three parts that sit on top of each other. **Pandion** is the engine: it runs
 a retrieval pipeline from a config, with one plugin per strategy. **pandion-api** serves Pandion
 over REST. **The playground** is a web app for learning RAG by experiment, and it is the demo on
-Hugging Face. Each part uses only the public API of the part below it. This page shows how they
+Hugging Face. Each part uses only the public API of the parts below it. This page shows how they
 fit together, with four diagrams, and says where to find each part's code.
 
 ## Contents
@@ -21,6 +21,7 @@ fit together, with four diagrams, and says where to find each part's code.
 - [Serve mode](#serve-mode)
 - [How the web app talks to the API](#how-the-web-app-talks-to-the-api)
 - [How the web app holds a pipeline](#how-the-web-app-holds-a-pipeline)
+- [Where data lives](#where-data-lives)
 - [Where to read more](#where-to-read-more)
 
 ## System overview
@@ -95,7 +96,6 @@ flowchart TB
     PIPE["Pipeline<br/>IndexPipeline, RetrievalPipeline,<br/>QueryPipeline"]
     EXEC["executor.py and graph.py<br/>run the steps, emit events"]
     REG["registry.py<br/>plugins, entry points"]
-    EXT["Extension points<br/>register, register_store,<br/>register_conversation_store,<br/>register_source, access_rule,<br/>route_check, online_evaluator"]
     subgraph IDXSTAGES["Indexing, once per document"]
         direction LR
         S1["source"] --> S2["parse"] --> S3["clean"] --> S4["chunk"] --> S5["enrich"] --> S6["index"]
@@ -120,11 +120,10 @@ flowchart TB
     EXEC --> IDXSTAGES
     EXEC --> ASKSTAGES
     REG -.->|"supplies the steps"| EXEC
-    EXT -.-> REG
     EXEC --> ART
-    S6 --> EMB
-    S6 --> STORE
-    Q2 --> STORE
+    IDXSTAGES --> EMB
+    IDXSTAGES --> STORE
+    ASKSTAGES --> STORE
     TURN --> CONV
     ONLINE --> CONV
     ONLINE -.->|"promote adds a case"| EVAL
@@ -132,7 +131,8 @@ flowchart TB
 
 The stage names are the `Stage` values in `pandion/ports.py`. `query_transform` is a stage with
 no built-in strategy yet. `route` is not a stage: a pipeline file can sort documents into
-categories with route checks (`pandion/routing.py`) before indexing.
+categories with route checks (`pandion/routing.py`) before indexing. The `use_case` strategies
+are in `plugins/answer/`.
 
 | Stage | What it is for | Built-in strategies |
 |---|---|---|
@@ -181,8 +181,9 @@ says what the settings will do.
   and [examples/pandion/own_strategies/](../examples/pandion/own_strategies) writes one for every
   stage.
 
-Three kinds of store sit beside the pipeline. Each is a Stable contract with a conformance test in
-`pandion.testing`, and none is a pipeline step.
+Three kinds of store sit beside the pipeline. Each is a Stable contract, and none is a pipeline step.
+Index stores and conversation stores have a conformance test in `pandion.testing`
+(`trace_store_conformance` covers traces).
 
 - **Index stores** (`index_store.py`): `index_memory.py` is the reference, `index_lance.py` backs
   the `lancedb` step, and `index_qdrant.py` backs the `qdrant` step. See
@@ -232,7 +233,8 @@ sequenceDiagram
     P-->>A: text, sources, flags, trace id
     A-->>B: chat_rewrite, sources, token, done
     B->>A: POST /feedback with trace id and value
-    A->>T: add_feedback, owner only
+    A->>P: give_feedback, owner only
+    P->>T: add_feedback
 ```
 
 In both paths the pipeline runs through the executor, and every step is a cache hit when its
@@ -258,12 +260,12 @@ flowchart TB
     SERVE -->|"POST /chat, POST /feedback"| TR
     TR --> REV
     REV -->|"a trace worth keeping"| PROM
-    PROM -->|"adds a case"| Q
+    PROM -->|"adds a case, JSON only"| Q
 ```
 
 1. **Evaluate offline.** `pandion eval CONFIG QUESTIONS` asks every question and scores it.
-   `--record-baseline PATH` saves a run, and `--baseline PATH` compares a later run with it. The gate counts newly missed questions per
-   `category:<name>` tag, so one category's loss is never hidden by another's gain, and exits 1
+   `--record-baseline PATH` saves a run, and `--baseline PATH` compares
+   a later run with it. The gate counts newly missed questions per `category:<name>` tag, so one category's loss is never hidden by another's gain, and exits 1
    when a category is over `--allow`. `--judge` grades each answer with a model, and `--judge-gate`
    fails the comparison when mean correctness falls by more than 0.05. See
    [Evaluate a pipeline](pandion.md#evaluate-a-pipeline) and
@@ -294,7 +296,7 @@ refused).
 - The manifest (`manifest.json` under the pipeline's `path`, see `pandion/manifest.py`) records each
   document's content hash, version, pieces, category and roles. A sync reads only the documents
   whose version changed, runs the index steps again from cached steps, reports what was added,
-  changed, removed and unchanged, and deletes the previous index.
+  changed, removed and unchanged, and deletes the previous index binding (its collection stays, see below).
 - A source that lists nothing is refused, so the index and the manifest stay as they were.
 - One sync runs at a time (`sync.lock`, `pandion/synclock.py`); a second raises `SyncBusy`.
 - A document that cannot be indexed is set aside, listed in `SyncReport.failed` and tried again
@@ -340,7 +342,8 @@ A run is two requests. `POST /api/v2/runs` (a card's Run on Build) or `POST /api
 the pipeline as a config, checks it, resolves the API keys from the request headers, starts the
 run in a worker thread and answers 202 with the run id. `GET /api/v2/runs/{run_id}/events`
 then streams the run's events as server-sent events: `run_started`, `node_started`,
-`node_skipped`, `node_failed`, `run_finished` or `run_cancelled`, then `stream_end`. A client
+`node_finished`, `node_skipped`, `node_failed`, `run_cancelled` (when stopped), `run_finished`,
+then `stream_end`. A cancelled run sends `run_cancelled` and then `run_finished`. A client
 that reconnects passes the last event id. `POST /api/v2/runs/{run_id}/cancel` stops a run, and
 `GET /api/v2/runs/{run_id}` holds its result.
 
@@ -423,10 +426,24 @@ refuses the third.
   under the new key converts the old one with `graphToConfig`, and never writes or removes an old
   key. What cannot be converted is kept with its reason, never dropped.
 - **The guided run** on Build (`components/guide/`, `state/guide.ts`) walks Document, Parse, Clean,
-  Chunk and Index with real runs, from a link such as `/build?guide=<stage>`.
+  Chunk, Index, Ask and Fix with real runs (`GuideStage` in `state/guide.ts`), from a link such as `/build?guide=<stage>`.
 
 The fixture `playground/frontend/src/api/fixtures/starter.config.json` is `samples/starter.yaml`
 as the browser holds it, and two tests pin that converting the app's Starter gives that file.
+
+## Where data lives
+
+- The server keeps its files in one data folder with `sources/`, `artifacts/` and `embeddings/`.
+  The playground sets the first two with `RAG_PLAYGROUND_SOURCES` and `RAG_PLAYGROUND_ARTIFACTS`
+  (`playground/backend/deps.py`), and they must sit side by side.
+- In serve mode the SQL conversation and trace store is the database in `PANDION_CONVERSATIONS_URL`.
+  Without it, it is a SQLite file, `conversations.db`, in the data folder (`default_store` in
+  `pandion_api/serve.py`).
+- The lessons are switched off while they are reworked (`LESSONS_ENABLED` in
+  `playground/frontend/src/state/lessons.ts`).
+- `servedConfig` in `playground/frontend/src/state/config.ts` is where the browser drops prompts and
+  settings the server does not know.
+- `scripts/publish_space.py` deploys the Hugging Face Space.
 
 ## Where to read more
 

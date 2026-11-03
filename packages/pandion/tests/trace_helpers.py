@@ -17,7 +17,7 @@ class StubPipeline:
 
     def __init__(self, stats=None, ok=True, hits=None):
         self.stats, self.ok = stats if stats is not None else {"cited": 1}, ok
-        self.hits = [SimpleNamespace(chunk=SimpleNamespace(text="The notice period is 30 days."))] if hits is None else hits
+        self.hits = [SimpleNamespace(chunk=SimpleNamespace(id="c1", text="The notice period is 30 days."))] if hits is None else hits
 
     def ask(self, question, **kwargs):
         payload = {"answer": [{"text": "The notice period is 30 days."}], "citations": [{"chunk_id": "c1"}],

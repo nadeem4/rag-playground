@@ -11,7 +11,8 @@
     pandion init my-project [--index text --query balanced] [--questions questions.json] [--overwrite]
     pandion trace TRACE_ID --url-env VAR [--json]
     pandion report [--since 7d] [--flagged] --url-env VAR [--json]
-    pandion review [--evaluate [--only NAME ...] [--sample 1.0] [--rerun]] [--since 7d] --url-env VAR
+    pandion review [--evaluate [--only NAME ...] [--sample 1.0] [--rerun] [--judge [--judge-model ID]]] [--since 7d] --url-env VAR
+    pandion review --promote TRACE_ID --questions questions.json [pipeline.yaml] --url-env VAR
     pandion questions report.pdf --model claude-haiku-4-5 [--count 15] [--out questions.json] [--parser pdfium] [--overwrite]
 
 Every command takes --plugins a,b: modules imported before the file is read,
@@ -36,7 +37,7 @@ import yaml
 
 import pandion
 from pandion import ConfigError, Pipeline
-from pandion.extend import PluginError, TRACE_LIMIT, format_review_list, format_review_result, parse_sample, run_evaluators, EVALUATORS, TraceStore, format_trace, format_trace_report, parse_since, summarise_traces, get_conversation_store, load_plugins as load_modules, plugin_listing
+from pandion.extend import PluginError, TRACE_LIMIT, format_review_list, format_review_result, parse_sample, promote, relevance_evaluator, run_evaluators, EVALUATORS, TraceStore, format_trace, format_trace_report, parse_since, summarise_traces, get_conversation_store, load_plugins as load_modules, plugin_listing
 from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K, JudgeSettings, QuestionSetError, load_questions
 
 #: Pandion's name for each key, and the environment variable it is read from.
@@ -262,6 +263,17 @@ def cmd_review(args: argparse.Namespace) -> int:
     store = _trace_store(args)
     if store is None:
         return 1
+    if args.promote:
+        if not args.questions:
+            print("--promote adds a case to a question set: give the file with --questions FILE.", file=sys.stderr)
+            return 1
+        try:
+            p = _load(args) if args.config else None
+            print(promote(store, args.promote, args.questions, p=p, credentials=credentials_from_env()))
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        return 0
     since = parse_since(args.since) if args.since else None
     if not args.evaluate:
         traces = store.traces(since=since, limit=TRACE_LIMIT)
@@ -271,10 +283,21 @@ def cmd_review(args: argparse.Namespace) -> int:
         return 0
     try:
         sample = parse_sample(args.sample)
-        if not args.only and not EVALUATORS:
+        names, extra = args.only, []
+        if args.judge:
+            # The built-in relevance judge is never registered; it runs only here.
+            if names is None or "relevance" in names:
+                judge = JudgeSettings(on=True, **({"model": args.judge_model} if args.judge_model else {}))
+                extra = [relevance_evaluator(judge, credentials_from_env())]
+            if names is not None:
+                names = [n for n in names if n != "relevance"]
+        elif args.judge_model or (names and "relevance" in names):
+            print("The relevance evaluator calls a model, so it runs only with --judge (and --judge-model goes with it).", file=sys.stderr)
+            return 1
+        if not names and not extra and not EVALUATORS:
             print("No online evaluators are registered. Write one with @online_evaluator and load it with --plugins.", file=sys.stderr)
             return 1
-        result = run_evaluators(store, since=since, names=args.only, sample=sample, limit=TRACE_LIMIT, rerun=args.rerun)
+        result = run_evaluators(store, since=since, names=names, sample=sample, limit=TRACE_LIMIT, rerun=args.rerun, extra=extra)
     except ValueError as exc:
         print(exc, file=sys.stderr)
         return 1
@@ -679,6 +702,11 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--only", nargs="+", metavar="NAME", help="only these evaluators; the default is all of them")
     sub.add_argument("--sample", default="1.0", help="the share of traces to score, such as 0.02 or 2%%; the same traces each run")
     sub.add_argument("--rerun", action="store_true", help="score again traces this version of an evaluator already scored")
+    sub.add_argument("--judge", action="store_true", help="with --evaluate, also run the relevance judge (one model call per trace with stored passages)")
+    sub.add_argument("--judge-model", dest="judge_model", help="the relevance judge's chat model id (default claude-haiku-4-5)")
+    sub.add_argument("--promote", metavar="TRACE_ID", help="add this trace to a question set as a case, with --questions FILE")
+    sub.add_argument("--questions", help="the JSON question set --promote adds to (created if it is not there)")
+    sub.add_argument("config", nargs="?", help="with --promote, a pipeline file: also say whether the miss is in retrieval or in the answer")
     sub.add_argument("--since", help="only traces since a duration like 24h or 7d, or an ISO 8601 date")
     sub.add_argument("--store", default="sql", help="the conversation store, sql by default")
     sub.add_argument("--url-env", help="the environment variable that holds the store's database url")

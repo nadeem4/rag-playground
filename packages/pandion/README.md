@@ -97,7 +97,7 @@ writes the same folder for any pipeline. See
 ## Use Pandion from the command line
 
 `pandion validate pipeline.yaml`, `pandion index pipeline.yaml report.pdf`, `pandion ask pipeline.yaml "..."`,
-`pandion forget-user alice --url-env VAR --yes` (deletes one user's conversations, memories and traces from a conversation store), `pandion trace TRACE_ID --url-env VAR` and `pandion report --since 7d --url-env VAR` (read the traces a conversation store kept), `pandion review --url-env VAR` (list the flagged and thumbs-down traces; with `--evaluate [--only NAME] [--sample 2%]` it scores the stored traces with your `@online_evaluator` plugins, in a batch you schedule), and `pandion sync pipeline.yaml` (reads the `source:` block of the file, needs `pandion[files]`
+`pandion forget-user alice --url-env VAR --yes` (deletes one user's conversations, memories and traces from a conversation store), `pandion trace TRACE_ID --url-env VAR` and `pandion report --since 7d --url-env VAR` (read the traces a conversation store kept), `pandion review --url-env VAR` (list the flagged and thumbs-down traces; with `--evaluate [--only NAME] [--sample 2%] [--judge]` it scores the stored traces with your `@online_evaluator` plugins and, with `--judge`, a relevance judge, in a batch you schedule; `--promote TRACE_ID --questions q.json` adds a trace to a question set), and `pandion sync pipeline.yaml` (reads the `source:` block of the file, needs `pandion[files]`
 for the `files` source, prints one JSON summary line and exits non-zero when a document was
 left out): the same pipeline, from the command line. `pandion eval pipeline.yaml questions.json
 --record-baseline base.json` saves a baseline with the platform and models it was made with, and

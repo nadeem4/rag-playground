@@ -70,6 +70,33 @@ def online_evaluator(name: str, *, version: str, outputs: dict[str, str]) -> Cal
     return add
 
 
+class SkipTrace(Exception):
+    """Raised by an evaluator that has nothing to score on this trace: counted as skipped, not failed."""
+
+
+class JudgeFailed(Exception):
+    """The relevance judge gave no usable score. Counted as a failure by this type."""
+
+
+def relevance_evaluator(settings: Any, credentials: dict[str, Any] | None = None) -> OnlineEvaluator:
+    """The built-in `relevance` evaluator: a model judges the stored answer against the stored passages.
+
+    It is not registered; `pandion review --evaluate --judge` hands it to `run_evaluators`
+    as `extra`. A trace with no stored passages is skipped. It never searches again.
+    """
+    from pandion.judge import judge_relevance
+
+    def relevance(trace: TraceRecord) -> dict[str, float]:
+        if not trace.sources:
+            raise SkipTrace
+        verdict = judge_relevance(trace.standalone or trace.question, trace.answer, [s.text for s in trace.sources], settings, credentials)
+        if verdict is None:
+            raise JudgeFailed
+        return {"score": verdict.score}
+
+    return OnlineEvaluator("relevance", "1", {"score": "float"}, relevance)
+
+
 class ReviewResult(BaseModel):
     #: Traces read from the store.
     traces: int = 0
@@ -108,6 +135,7 @@ def _checked(ev: OnlineEvaluator, result: Any) -> dict[str, Any]:
 
 def run_evaluators(
     store: TraceStore, *, since: str | None, names: list[str] | None, sample: float, limit: int, rerun: bool = False,
+    extra: list[OnlineEvaluator] | None = None,
 ) -> ReviewResult:
     """Score stored traces with the registered evaluators (all, or `names`).
 
@@ -121,6 +149,7 @@ def run_evaluators(
             if name not in EVALUATORS:
                 raise ValueError(f"There is no online evaluator named '{name}'. The evaluators are: {', '.join(sorted(EVALUATORS)) or 'none'}.")
         chosen = [EVALUATORS[n] for n in dict.fromkeys(names)]
+    chosen += extra or []  # built-ins that are never registered, such as relevance
     result = ReviewResult(by_evaluator={ev.label: 0 for ev in chosen})
     traces = store.traces(since=since, limit=limit)
     result.traces = len(traces)
@@ -133,6 +162,9 @@ def run_evaluators(
                 continue
             try:
                 scores = _checked(ev, ev.fn(trace.model_copy(deep=True)))
+            except SkipTrace:
+                result.skipped += 1
+                continue
             except Exception as exc:  # a plugin's failure must not stop the batch
                 by_type = result.failures.setdefault(ev.label, {})
                 by_type[type(exc).__name__] = by_type.get(type(exc).__name__, 0) + 1

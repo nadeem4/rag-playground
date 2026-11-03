@@ -53,7 +53,8 @@ def test_feedback_on_another_users_trace_is_a_404(tmp_path):
 def test_feedback_bad_input_is_422_without_echoing_it(tmp_path, extra):
     with serve(tmp_path) as c:
         r = give(c, turn(c), **extra)
-    assert r.status_code == 422 and ("y" * 501) not in r.text and ("x" * 41) not in r.text
+    assert r.status_code == 422
+    assert all(text not in r.text for text in ("y" * 501, "x" * 41, "meh"))
 
 
 def test_feedback_without_trace_support_is_501_with_a_sentence(tmp_path):
@@ -83,7 +84,7 @@ def test_anonymous_policy_cannot_give_feedback(tmp_path):
 
 def metric_client(tmp_path):
     pytest.importorskip("prometheus_client")
-    return serve(tmp_path, serve=ServeSettings(metrics_on_app=True))
+    return serve(tmp_path, serve=ServeSettings(metrics_on_app=True, feedback_categories=("wrong_answer",)))
 
 
 def sample(c, name, **labels):
@@ -99,12 +100,32 @@ def test_feedback_total_counts_value_and_category(tmp_path):
         assert sample(c, "feedback_total", value="up", category="") == 1
 
 
-@pytest.mark.parametrize("category", ["Wrong Answer!", "a/b", "user@example.com"])
-def test_a_category_outside_the_pattern_becomes_other_in_the_metric(tmp_path, category):
+@pytest.mark.parametrize("category", ["Wrong Answer!", "wrong", "user@example.com"])
+def test_an_unlisted_category_becomes_other_in_the_metric(tmp_path, category):
     with metric_client(tmp_path) as c:
         assert give(c, turn(c), "down", category=category).status_code == 200
         assert sample(c, "feedback_total", value="down", category="other") == 1
         assert sample(c, "feedback_total", value="down", category=category) is None
+
+
+def test_with_no_list_every_category_is_other(tmp_path):
+    pytest.importorskip("prometheus_client")
+    with serve(tmp_path, serve=ServeSettings(metrics_on_app=True)) as c:
+        give(c, turn(c), "down", category="wrong_answer")
+        assert sample(c, "feedback_total", value="down", category="other") == 1
+
+
+def test_a_missing_field_is_422_that_names_the_field_and_not_the_value(tmp_path):
+    with serve(tmp_path) as c:
+        r = c.post("/feedback", json={"value": "down", "comment": SECRET})
+    assert r.status_code == 422 and "trace_id" in r.text and SECRET not in r.text
+
+
+def test_an_empty_user_id_cannot_give_feedback(tmp_path):
+    with serve(tmp_path) as c:
+        trace_id = turn(c)
+        r = give(c, trace_id, headers={"x-user": ""})
+    assert r.status_code == 403
 
 
 def test_a_long_category_is_refused_and_never_a_label(tmp_path):

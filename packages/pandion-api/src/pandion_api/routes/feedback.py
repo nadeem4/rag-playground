@@ -37,6 +37,8 @@ async def feedback(body: FeedbackIn, request: Request):
     if isinstance(app.policy, AnonymousPolicy):
         raise HTTPException(status_code=403, detail=NEEDS_USER)
     user_id = app.policy.user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=403, detail=NEEDS_USER)
     if not app.feedback_limiter.allow(user_id):
         raise HTTPException(status_code=429, detail=TOO_FAST)
     try:

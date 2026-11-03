@@ -87,3 +87,15 @@ def test_two_metrics_objects_do_not_share_series():
 def test_prometheus_client_is_imported_only_when_metrics_are_on():
     code = "import sys\nimport pandion_api.serve\nassert 'prometheus_client' not in sys.modules, 'imported'\n"
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+def test_a_rate_limiter_refuses_then_allows_after_a_minute_and_forgets_quiet_users():
+    from pandion_api.limits import RateLimiter
+
+    now = [0.0]
+    limiter = RateLimiter(2, clock=lambda: now[0])
+    assert [limiter.allow("ann") for _ in range(3)] == [True, True, False]
+    assert limiter.allow("bob") is True
+    now[0] = 61.0
+    assert limiter.allow("ann") is True
+    assert list(limiter._times) == ["ann"]

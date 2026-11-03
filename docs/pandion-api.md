@@ -511,7 +511,7 @@ curl http://127.0.0.1:8000/feedback \
 | `comment` | Optional, up to 500 characters. It is the user's own text. |
 
 The user comes from the Policy's `user_id`, so the route needs a Policy that says who is asking.
-`Policy.anonymous()` gives every caller one identity, so with it the route answers 403. A trace
+`Policy.anonymous()` gives every caller one identity, and an empty user id is no identity, so both answer 403. A trace
 that does not exist and a trace that is another user's are the same 404. A bad `value`, or a
 category or comment that is too long, is a 422 with one sentence that does not repeat the text.
 A conversation store that keeps no traces (see [Conversations](pandion.md#conversations)) answers
@@ -632,7 +632,7 @@ scrape_configs:
 | `cost_estimated_usd_total` | none | Estimated dollars of answered turns. A model with no price adds nothing. |
 | `errors_total` | `step` | Steps that failed. |
 | `turns_flagged_total` | `category` | Answered turns by flag. `category` is `low_grounding`, `declined` or `not_in_documents`, and a turn with two flags counts in both. See [Traces](pandion.md#traces). |
-| `feedback_total` | `value`, `category` | Feedback saved by `POST /feedback`. `value` is `up` or `down`. `category` is what the user sent when it is lowercase letters and underscores (up to 40), empty when none was sent, and `other` for anything else. |
+| `feedback_total` | `value`, `category` | Feedback saved by `POST /feedback`. `value` is `up` or `down`. `category` is what the user sent when it is on `ServeSettings.feedback_categories` (empty by default), empty when none was sent, and `other` for anything else, so the number of series stays fixed. |
 
 No label ever holds a question, an answer, a user id, a conversation id or a chunk id, so the
 number of series stays small. Before this release `turns_flagged_total` used the labels `weak`,

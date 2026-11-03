@@ -1,7 +1,8 @@
 """Serve mode's Prometheus metrics (docs/pandion-api.md, "Metrics").
 
 Labels are only route template, status, step name, token kind, flag name,
-feedback value and a feedback category that matches `CATEGORY`. No question, answer, user id, conversation id or chunk id is ever a
+feedback value and a feedback category from the list the operator set in
+`ServeSettings.feedback_categories` (else "other"). No question, answer, user id, conversation id or chunk id is ever a
 label. The client library is the optional extra `pandion-api[metrics]` and is
 imported only when a `Metrics` object is made.
 """
@@ -9,14 +10,10 @@ imported only when a `Metrics` object is made.
 from __future__ import annotations
 
 import importlib
-import re
 from typing import Any
 
 from pandion.extend import MissingExtra
 
-#: A feedback category that may be a label: lowercase letters and underscores, 40 at most.
-#: Anything else is counted as "other", so a user cannot make a series per string.
-CATEGORY = re.compile(r"[a-z_]{1,40}")
 
 
 def _client() -> Any:
@@ -31,7 +28,8 @@ def _client() -> Any:
 class Metrics:
     """The counters and histogram of one serve app, in a registry of their own."""
 
-    def __init__(self, registry: Any = None) -> None:
+    def __init__(self, registry: Any = None, categories: tuple[str, ...] = ()) -> None:
+        self._categories = frozenset(categories)
         prom = _client()
         self.registry = registry or prom.CollectorRegistry()
         r = self.registry
@@ -68,8 +66,8 @@ class Metrics:
             self._flagged.labels(category=flag).inc()
 
     def feedback(self, value: str, category: str) -> None:
-        """Count one saved piece of feedback. A category outside `CATEGORY` is "other"; none stays empty."""
-        if category and not CATEGORY.fullmatch(category):
+        """Count one saved piece of feedback. A category not on the operator's list is "other"; none stays empty."""
+        if category and category not in self._categories:
             category = "other"
         self._feedback.labels(value=value, category=category).inc()
 

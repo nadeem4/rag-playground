@@ -622,8 +622,8 @@ def cmd_init(args: argparse.Namespace) -> int:
             "  uv lock                       # once; commit uv.lock\n"
             "  cp .env.example .env          # and fill it in\n"
             "  docker build -t my-rag .\n"
-            "  docker run --rm --env-file .env my-rag pandion sync pipeline.yaml\n"
-            "  docker run --env-file .env -p 8000:8000 my-rag\n"
+            '  docker run --rm --env-file .env -v rag-index:/app/index -v "$PWD/docs:/app/docs:ro" my-rag pandion sync pipeline.yaml\n'
+            "  docker run --env-file .env -v rag-index:/app/index -p 8000:8000 my-rag\n"
             "README.md says the same, and how to record the quality baseline."
         )
         return 0

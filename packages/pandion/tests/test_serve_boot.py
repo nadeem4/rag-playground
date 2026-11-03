@@ -30,12 +30,24 @@ QUESTIONS = {
 ASK = {"question": "What is the capital of France?"}
 
 
-@pytest.fixture
-def project(tmp_path) -> Path:
-    folder = tmp_path / "project"
+def build_project(folder: Path) -> Path:
     pandion.new_project(folder, OFFLINE, kind="serve", categories_questions=QUESTIONS)
     (folder / "docs").mkdir()
     (folder / "docs" / "report.pdf").write_bytes(build_pdf(SAMPLE_PAGES))
+    return folder
+
+
+@pytest.fixture
+def project(tmp_path) -> Path:
+    """A fresh project, for a test that changes it."""
+    return build_project(tmp_path / "project")
+
+
+@pytest.fixture(scope="module")
+def synced(tmp_path_factory) -> Path:
+    """One synced project shared by the tests that only read it."""
+    folder = build_project(tmp_path_factory.mktemp("synced") / "project")
+    assert cli.main(["sync", str(folder / "pipeline.yaml")]) == 0
     return folder
 
 
@@ -75,9 +87,8 @@ def test_boot_check_ready_only_after_sync(project):
         assert client.get("/ready").json() == {"ready": True}
 
 
-def test_chat_answers_after_sync(project):
-    assert sync(project) == 0
-    with TestClient(app_for(project)) as client:
+def test_chat_answers_after_sync(synced):
+    with TestClient(app_for(synced)) as client:
         reply = client.post("/chat", json={"messages": [{"role": "user", "content": ASK["question"]}]})
         assert reply.status_code == 200 and reply.json()["ok"] is True
         assert reply.json()["sources"]
@@ -86,14 +97,14 @@ def test_chat_answers_after_sync(project):
         assert '"event": "sources"' in streamed.text and '"event": "done"' in streamed.text
 
 
-def test_the_default_server_app_refuses_a_request_without_a_user(project):
-    sys.path.insert(0, str(project))
+def test_the_default_server_app_refuses_a_request_without_a_user(synced):
+    sys.path.insert(0, str(synced))
     try:
-        spec = importlib.util.spec_from_file_location("generated_serve_default", project / "serve.py")
+        spec = importlib.util.spec_from_file_location("generated_serve_default", synced / "serve.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
     finally:
-        sys.path.remove(str(project))
+        sys.path.remove(str(synced))
         sys.modules.pop("policy", None)
     with TestClient(module.app) as client:
         assert client.post("/ask", json=ASK).status_code == 401
@@ -136,11 +147,10 @@ def test_quality_runs_stale_check_before_the_gate(project):
     assert "The question set is stale" in stale.stdout and "not a retrieval regression" in stale.stdout
 
 
-def test_quality_fails_with_a_sentence_when_the_baseline_is_missing(project):
-    assert sync(project) == 0
+def test_quality_fails_with_a_sentence_when_the_baseline_is_missing(synced):
     done = subprocess.run(
         [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_quality.py"],
-        cwd=project, capture_output=True, text=True, timeout=600,
+        cwd=synced, capture_output=True, text=True, timeout=600,
     )
     assert done.returncode != 0 and "evals/baseline.json is missing" in done.stdout
 

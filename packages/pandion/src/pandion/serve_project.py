@@ -65,8 +65,8 @@ def serve_pipeline(data: dict[str, Any], source: str, index_store: str, index_ur
             raise ValueError("The Qdrant store needs the address of the server, such as https://qdrant.example.com:6333.")
         store.update(use="qdrant", settings={"url": index_url, "api_key_env": "QDRANT_API_KEY"})
     else:
-        if index_url.startswith(_REMOTE):
-            raise ValueError("LanceDB keeps its index in the index/ folder of the server. For an index shared by several servers, use index_store='qdrant'.")
+        if index_url != "./index":
+            raise ValueError("LanceDB keeps its index in the ./index folder of the server, so index_url must be './index'. For an index shared by several servers, use index_store='qdrant'.")
         store["use"] = "lancedb"
     out["index"] = {**out["index"], "store": store}
     return out

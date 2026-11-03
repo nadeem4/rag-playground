@@ -30,8 +30,8 @@ The order matters. The server answers `/ready` with `false` until the index exis
 ```
 uv lock
 docker build -t my-rag .
-docker run --rm --env-file .env my-rag pandion sync pipeline.yaml
-docker run --env-file .env -p 8000:8000 my-rag
+docker run --rm --env-file .env -v rag-index:/app/index -v "$$PWD/docs:/app/docs:ro" my-rag pandion sync pipeline.yaml
+docker run --env-file .env -v rag-index:/app/index -p 8000:8000 my-rag
 ```
 
 $source_note

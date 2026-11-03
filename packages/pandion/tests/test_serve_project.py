@@ -107,7 +107,7 @@ def test_only_the_named_files_are_rendered(tmp_path):
         assert (first / name).read_text(encoding="utf-8") == (second / name).read_text(encoding="utf-8")
 
 
-def test_serve_templates_ship_in_the_wheel():
+def test_serve_template_files_are_packaged_resources():
     folder = files("pandion.templates.serve")
     for name in [*FIXED, "README.md.tmpl"]:
         assert folder.joinpath(name).is_file(), name
@@ -288,6 +288,25 @@ def test_cli_init_serve_writes_the_serve_project(tmp_path, capsys):
     assert not (folder / "run.py").exists()
     out = capsys.readouterr().out
     assert "uv lock" in out and "docker build" in out and "pandion sync" in out
+    assert out.count("-v rag-index:/app/index") == 2
+    assert '-v "$PWD/docs:/app/docs:ro"' in out
+
+
+def test_readme_runs_mount_the_index_volume_and_the_docs(tmp_path):
+    text = (make(tmp_path) / "README.md").read_text(encoding="utf-8")
+    sync, serve = [l for l in text.splitlines() if l.startswith("docker run") and "pandion sync" in l or l.startswith("docker run") and "-p 8000" in l]
+    assert "-v rag-index:/app/index" in sync and '-v "$PWD/docs:/app/docs:ro"' in sync
+    assert "-v rag-index:/app/index" in serve
+
+
+def test_dockerfile_creates_index_and_models_before_chown(tmp_path):
+    text = (make(tmp_path) / "Dockerfile").read_text(encoding="utf-8")
+    assert text.index("mkdir -p /app/index /models") < text.index("chown")
+
+
+def test_local_lancedb_refuses_another_index_url(tmp_path):
+    with pytest.raises(ValueError, match="./index"):
+        make(tmp_path, index_url="./somewhere")
 
 
 def pins_hidden(text: str) -> str:

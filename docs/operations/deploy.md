@@ -252,3 +252,10 @@ from a tested staging commit. A private staging copy follows `main`; the Release
 then calculates the version from the commits, runs the release checks, tags the staging
 commit, publishes it and verifies it. Pushing a tag alone changes nothing on the demo. See
 [Staging](release.md#staging) and [Releasing](release.md#releasing).
+
+## Deploy your own pipeline as a service
+
+This page deploys the RAG Playground app. To serve one of your own pipelines to your
+users, run `pandion init my-service --serve`: it writes a Docker project (pandion-api in
+serve mode, a policy file for your sign-in system and a quality test). See
+[A project to serve](../pandion/templates-and-projects.md#a-project-to-serve).

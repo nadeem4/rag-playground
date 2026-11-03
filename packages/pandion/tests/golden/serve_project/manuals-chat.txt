@@ -106,7 +106,7 @@ COPY pipeline.yaml serve.py policy.py ./
 # Public weights only, no secret. At run time pipeline.yaml says download: never.
 RUN pandion models pull pipeline.yaml
 
-RUN useradd --create-home app && mkdir -p /app/index && chown -R app /app /models
+RUN useradd --create-home app && mkdir -p /app/index /models && chown -R app /app /models
 USER app
 EXPOSE 8000
 CMD ["uvicorn", "serve:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

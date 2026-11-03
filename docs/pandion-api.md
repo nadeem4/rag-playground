@@ -442,6 +442,7 @@ Serve starts safe. Each default below is on until you change it.
 | Keys from the environment | Model keys come only from the server's environment variables. A key header is ignored, and `Policy.key` and `Policy.credentials` are not called. | Nothing. |
 | Public endpoints only | A custom model endpoint in the pipeline file must be a public https address, or startup fails. The check resolves DNS, so a host that does not resolve also stops startup. A URL document is held to the same rule. | Nothing. |
 | 20 turns a minute | A user past `ServeSettings.turns_per_minute` gets a 429. | A bigger number. |
+| 30 feedback posts a minute | A user past `ServeSettings.feedback_per_minute` gets a 429 from `POST /feedback`. | A bigger number. |
 | 2 active turns | A user with `ServeSettings.active_turns_per_user` questions being answered gets a 429. | A bigger number. |
 | 64 KB request body | A larger body is a 413 before it is parsed. | `ServeSettings.max_body_bytes`. |
 | 120 second turn | A turn past `ServeSettings.turn_deadline_s` is cancelled and ends with the generic error. | `ServeSettings.turn_deadline_s`. |
@@ -490,6 +491,33 @@ If the client disconnects, the turn is cancelled and no half turn is stored. Aft
 the server folds old turns into the running summary and, when `ServeSettings.chat.memory`
 is on, keeps facts the user shared. The user never waits for either. Cancel on disconnect applies to streams only: a JSON request runs to its end. A stream cannot be
 resumed on another server copy: there is no events route in serve.
+
+### POST /feedback
+
+A user says whether an answer was good. Send the `trace_id` that `/chat` returned:
+
+```bash
+curl http://127.0.0.1:8000/feedback \
+  -H 'content-type: application/json' \
+  -d '{"trace_id": "9f2c...", "value": "down", "category": "wrong_answer", "comment": "It missed page 2."}'
+# {"ok": true}
+```
+
+| Field | Meaning |
+|---|---|
+| `trace_id` | The trace of one of this user's own turns. |
+| `value` | `up` or `down`. |
+| `category` | Optional, up to 40 characters, such as `wrong_answer`. |
+| `comment` | Optional, up to 500 characters. It is the user's own text. |
+
+The user comes from the Policy's `user_id`, so the route needs a Policy that says who is asking.
+`Policy.anonymous()` gives every caller one identity, so with it the route answers 403. A trace
+that does not exist and a trace that is another user's are the same 404. A bad `value`, or a
+category or comment that is too long, is a 422 with one sentence that does not repeat the text.
+A conversation store that keeps no traces (see [Conversations](pandion.md#conversations)) answers
+501 with "This server's conversation store does not keep traces." One user has one piece of
+feedback for each trace, and a newer one replaces the older. The question, the answer and the
+comment are never logged or used as a metric label.
 
 ### POST /ask, conversations and memories
 
@@ -603,10 +631,12 @@ scrape_configs:
 | `tokens_total` | `step`, `kind` | Model tokens. `kind` is `input` or `output`. |
 | `cost_estimated_usd_total` | none | Estimated dollars of answered turns. A model with no price adds nothing. |
 | `errors_total` | `step` | Steps that failed. |
-| `turns_flagged_total` | `category` | Answered turns with at least one claim graded `weak`, `none` or `not_found`. |
+| `turns_flagged_total` | `category` | Answered turns by flag. `category` is `low_grounding`, `declined` or `not_in_documents`, and a turn with two flags counts in both. See [Traces](pandion.md#traces). |
+| `feedback_total` | `value`, `category` | Feedback saved by `POST /feedback`. `value` is `up` or `down`. `category` is what the user sent when it is lowercase letters and underscores (up to 40), empty when none was sent, and `other` for anything else. |
 
 No label ever holds a question, an answer, a user id, a conversation id or a chunk id, so the
-number of series stays small. A `feedback_total` metric arrives with the feedback route.
+number of series stays small. Before this release `turns_flagged_total` used the labels `weak`,
+`none` and `not_found`; they are retired, so change any dashboard that filters on them.
 
 Teams usually want three ratios, which you write in your own dashboard. The error rate of a
 step is `errors_total` divided by `step_seconds_count + errors_total` for the same step. The

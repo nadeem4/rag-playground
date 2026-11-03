@@ -27,17 +27,17 @@ from pandion.extend import ChatSettings
 from pandion.extend import ConversationStore, get_conversation_store
 from pandion_api.metrics import Metrics, start_server, stop_server
 from pandion_api.errors import generic
-from pandion_api.limits import BodyLimit, TurnLimiter
+from pandion_api.limits import BodyLimit, RateLimiter, TurnLimiter
 from pandion_api.observability import TraceIdMiddleware, configure_logging, setup_tracing
 from pandion_api.policy import AnonymousPolicy, Policy
-from pandion_api.routes import chat, conversations, serve_ask, serve_health
+from pandion_api.routes import chat, conversations, feedback, serve_ask, serve_health
 from pandion_api.runs import RunManager
 from pandion_api.settings import ApiSettings
 
 logger = logging.getLogger(__name__)
 
 #: Every router serve mounts. Lab's `ROUTERS` is a different tuple.
-SERVE_ROUTERS = (serve_health.router, chat.router, serve_ask.router, conversations.router)
+SERVE_ROUTERS = (serve_health.router, chat.router, serve_ask.router, conversations.router, feedback.router)
 
 
 #: Seconds between two retention sweeps.
@@ -60,6 +60,8 @@ class ServeSettings:
     #: Default limits for each user (see `pandion_api.limits`). In memory, per server copy.
     turns_per_minute: int = 20
     active_turns_per_user: int = 2
+    #: Feedback posts a minute for each user.
+    feedback_per_minute: int = 30
     max_body_bytes: int = 65536
     turn_deadline_s: float = 120.0
     #: Sites allowed to call the API from a browser. Empty: CORS is off. No "*".
@@ -203,6 +205,7 @@ def create_serve_app(
     state.settings, state.policy, state.runs = settings, policy, manager
     state.serve, state.metrics = serve, metrics
     state.limiter = TurnLimiter(serve.turns_per_minute, serve.active_turns_per_user)
+    state.feedback_limiter = RateLimiter(serve.feedback_per_minute)
     state.background = set()
     state.tracer = setup_tracing()  # None unless OTEL_EXPORTER_OTLP_ENDPOINT is set
     state.pipeline = loaded

@@ -1,7 +1,7 @@
 """Serve mode's Prometheus metrics (docs/pandion-api.md, "Metrics").
 
-Labels are only route template, status, step name, token kind and grounding
-category. No question, answer, user id, conversation id or chunk id is ever a
+Labels are only route template, status, step name, token kind, flag name,
+feedback value and a feedback category that matches `CATEGORY`. No question, answer, user id, conversation id or chunk id is ever a
 label. The client library is the optional extra `pandion-api[metrics]` and is
 imported only when a `Metrics` object is made.
 """
@@ -9,12 +9,14 @@ imported only when a `Metrics` object is made.
 from __future__ import annotations
 
 import importlib
+import re
 from typing import Any
 
 from pandion.extend import MissingExtra
 
-#: The grounding labels that mean a reply may be wrong, counted per turn.
-FLAGGED = ("weak", "none", "not_found")
+#: A feedback category that may be a label: lowercase letters and underscores, 40 at most.
+#: Anything else is counted as "other", so a user cannot make a series per string.
+CATEGORY = re.compile(r"[a-z_]{1,40}")
 
 
 def _client() -> Any:
@@ -38,7 +40,8 @@ class Metrics:
         self._tokens = prom.Counter("tokens_total", "Model tokens by step and kind.", ["step", "kind"], registry=r)
         self._cost = prom.Counter("cost_estimated_usd_total", "Estimated dollars spent on answered turns.", registry=r)
         self._errors = prom.Counter("errors_total", "Failed steps.", ["step"], registry=r)
-        self._flagged = prom.Counter("turns_flagged_total", "Answered turns with a weak, none or not_found claim.", ["category"], registry=r)
+        self._flagged = prom.Counter("turns_flagged_total", "Answered turns by flag: low_grounding, declined or not_in_documents.", ["category"], registry=r)
+        self._feedback = prom.Counter("feedback_total", "Feedback by value and category.", ["value", "category"], registry=r)
 
     def request(self, route: str, status: int) -> None:
         """Count one request. `route` is the route template, never the raw path."""
@@ -56,15 +59,19 @@ class Metrics:
                 if usage.get(key):
                     self._tokens.labels(step=step, kind=name).inc(usage[key])
 
-    def turn_done(self, answer: Any) -> None:
-        """Add an answered turn's estimated cost and its flagged claims."""
+    def turn_done(self, answer: Any, flags: Any = ()) -> None:
+        """Add an answered turn's estimated cost and its flags (`TurnResult.flags`)."""
         dollars = answer.cost().get("dollars")
         if dollars:
             self._cost.inc(dollars)
-        stats = (getattr(getattr(answer, "output", None), "payload", None) or {}).get("stats") or {}
-        for category in FLAGGED:
-            if stats.get(category):
-                self._flagged.labels(category=category).inc()
+        for flag in flags:
+            self._flagged.labels(category=flag).inc()
+
+    def feedback(self, value: str, category: str) -> None:
+        """Count one saved piece of feedback. A category outside `CATEGORY` is "other"; none stays empty."""
+        if category and not CATEGORY.fullmatch(category):
+            category = "other"
+        self._feedback.labels(value=value, category=category).inc()
 
 
 def start_server(metrics: Metrics, port: int) -> tuple[Any, Any]:

@@ -56,6 +56,31 @@ class TurnLimiter:
                 self._active.pop(user_id, None)
 
 
+class RateLimiter:
+    """A sliding one-minute window of calls for each user id, for a route that holds no slot."""
+
+    def __init__(self, per_minute: int, clock: Callable[[], float] = time.monotonic) -> None:
+        self._per_minute, self._clock = per_minute, clock
+        self._times: dict[str, deque[float]] = defaultdict(deque)
+        self._lock = threading.Lock()
+
+    def allow(self, user_id: str) -> bool:
+        """Count a call and return True, or return False and count nothing."""
+        with self._lock:
+            now = self._clock()
+            for uid in list(self._times):  # forget users with nothing in the window
+                old = self._times[uid]
+                while old and now - old[0] >= 60:
+                    old.popleft()
+                if not old:
+                    del self._times[uid]
+            times = self._times[user_id]
+            if len(times) >= self._per_minute:
+                return False
+            times.append(now)
+            return True
+
+
 class BodyLimit:
     """ASGI middleware: a request body over `max_bytes` is a 413, by its
     Content-Length before anything is read, and by a running count when it is chunked."""

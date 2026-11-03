@@ -14,7 +14,7 @@ from pandion_api import Policy
 
 class GatewayPolicy(Policy):
     def user_id(self, request) -> str:
-        header = os.environ.get("USER_ID_HEADER", "x-user-id")
+        header = os.environ.get("USER_ID_HEADER") or "x-user-id"
         user = request.headers.get(header, "").strip()
         if not user:
             raise HTTPException(status_code=401, detail="Sign in to ask a question.")

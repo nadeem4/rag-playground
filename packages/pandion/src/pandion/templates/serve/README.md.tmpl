@@ -1,1 +1,110 @@
-$title
+# $title
+
+This folder is a Pandion server for your documents. It answers questions over HTTP from the pipeline in `pipeline.yaml`, and you build it into a container image.
+
+## What is in this folder
+
+| File | What it is |
+|---|---|
+| `pipeline.yaml` | The pipeline: categories, routing, the index store, the models. Access control is off; the file ends with an example. |
+| `serve.py` | The server. Run it with `uvicorn serve:app`. |
+| `policy.py` | Who is asking. Read the next section before you deploy. |
+| `Dockerfile` | Builds the image: locked install, models pulled, non-root, one worker. |
+| `pyproject.toml` | The dependencies. Run `uv lock` once and commit `uv.lock`. |
+| `.env.example` | Every secret the server reads, by name. Copy it to `.env` and fill it in. Never commit `.env`. |
+| `evals/` | Your questions (`questions.json`) and, once you record it, `baseline.json`. |
+| `tests/test_quality.py` | The quality gate, a few lines over `pandion eval`. |
+
+$key_note
+
+## Who is asking
+
+`policy.py` has a `GatewayPolicy`. It expects your gateway to sign the user in and pass the user's id in the header named by `USER_ID_HEADER` (default `x-user-id`). A request without that header is refused with a 401, so keep this server on a private network that only the gateway can reach.
+
+`roles(request)` returns no roles. Fill it in from your identity system. Until you do, and once you turn `access:` on in `pipeline.yaml`, nobody sees any document.
+
+## First deploy
+
+The order matters. The server answers `/ready` with `false` until the index exists.
+
+```
+uv lock
+docker build -t my-rag .
+docker run --rm --env-file .env my-rag pandion sync pipeline.yaml
+docker run --env-file .env -p 8000:8000 my-rag
+```
+
+$source_note
+
+Run the same `pandion sync pipeline.yaml` on a schedule (cron, or a Kubernetes CronJob) with the same image to pick up changed documents.
+
+## The quality gate
+
+Record the baseline by running the built image, never at build time: a build would put keys and documents in the image layers. Mount `evals/` so the file lands in this folder:
+
+```
+chmod a+w evals
+docker run --rm --env-file .env -v "$$PWD/evals:/app/evals" my-rag \
+  pandion eval pipeline.yaml evals/questions.json --record-baseline evals/baseline.json
+```
+
+Commit `evals/baseline.json`. From then on, run the gate with the same image:
+
+```
+docker run --rm --env-file .env -v "$$PWD/evals:/app/evals" my-rag \
+  pandion eval pipeline.yaml evals/questions.json --baseline evals/baseline.json
+```
+
+It first checks that every expected passage is still in its document, then that no question that was found before is now missed. `pytest tests/test_quality.py` runs the same command. Questions carry a `category:<name>` tag, so a category that got worse fails the gate even when the total did not.
+
+## Secrets
+
+Names only are in `.env.example`. Put the values in `.env` for a local run, or in your platform's secret store. A key is never written to `pipeline.yaml`.
+
+## Where data goes
+
+| Data | Where it is kept |
+|---|---|
+| Your documents | The `source:` in `pipeline.yaml`. They are never copied into the image. |
+| The index | The `index.store` in `pipeline.yaml`. $store_note |
+| Conversations and memories | The database in `DATABASE_URL`, else a SQLite file in `index/`. |
+| Questions sent to a model | The model provider named in `answer` and in any step that calls a model. |
+| Models | `/models` in the image, pulled at build time. The server never downloads. |
+
+## Security checklist
+
+- Keep the server on a private network behind your gateway, with TLS ended at the gateway.
+- Do not publish `/metrics`. Metrics are off until you turn them on in `serve.py`; give them their own port.
+- Fill in `roles()` before you turn `access:` on.
+- Keep `.env` out of git and out of the image (`.gitignore` and `.dockerignore` already do).
+- Rebuild the image to update; the lockfile makes the build repeatable.
+
+## Call it
+
+```
+curl -H "x-user-id: ann" -H "content-type: application/json" \
+  -d '{"messages":[{"role":"user","content":"What is the notice period?"}]}' \
+  http://localhost:8000/chat
+```
+
+Add `"stream": true` to get server-sent events: `chat_rewrite`, `sources`, `token`, `done` (and `error` before `done` after a failure). In a browser or Node:
+
+```js
+const res = await fetch("/chat", {
+  method: "POST",
+  headers: { "content-type": "application/json", "x-user-id": "ann" },
+  body: JSON.stringify({ messages: [{ role: "user", content: "What is the notice period?" }], stream: true }),
+});
+const reader = res.body.getReader();
+const decoder = new TextDecoder();
+for (;;) {
+  const { value, done } = await reader.read();
+  if (done) break;
+  console.log(decoder.decode(value)); // lines "event: ..." and "data: {...}"
+}
+```
+
+## The local defaults are for laptops
+
+LanceDB on `./index` and SQLite conversations work on one machine only. To run more than one copy, keep the index in Qdrant (`index_store="qdrant"` when you generate this project), and the conversations in a SQL database (`DATABASE_URL`; install the database's driver in `pyproject.toml`).
+$extra

@@ -127,6 +127,12 @@ def test_pipeline_yaml_has_version_1_source_models_and_access_off(tmp_path):
     assert "# access:" in (folder / "pipeline.yaml").read_text(encoding="utf-8")
 
 
+def test_the_access_example_in_pipeline_yaml_is_valid_when_uncommented(tmp_path):
+    text = (make(tmp_path) / "pipeline.yaml").read_text(encoding="utf-8")
+    block = [line[2:] for line in text.splitlines() if line.startswith("# ") and line[2:].startswith(("access:", "  "))]
+    pandion.Pipeline.from_dict({**yaml.safe_load(text), **yaml.safe_load("\n".join(block))})
+
+
 def test_pipeline_yaml_round_trips_through_pandion(tmp_path):
     p = pandion.Pipeline.from_yaml(make(tmp_path) / "pipeline.yaml")
     assert p.config.source[0] == "files"
@@ -140,17 +146,18 @@ def test_source_bucket_goes_into_the_source_block(tmp_path):
 def test_qdrant_store_adds_its_extra_and_secret_name(tmp_path):
     folder = make(tmp_path, index_store="qdrant", index_url="https://qdrant.example.com:6333")
     store = yaml_of(folder)["index"]["store"]
-    assert store["use"] == "qdrant" and store["url"] == "https://qdrant.example.com:6333"
-    assert store["api_key_env"] == "QDRANT_API_KEY"
+    assert store["use"] == "qdrant"
+    assert store["settings"] == {"url": "https://qdrant.example.com:6333", "api_key_env": "QDRANT_API_KEY"}
     pandion.Pipeline.from_yaml(folder / "pipeline.yaml")
     assert "qdrant" in (folder / "pyproject.toml").read_text(encoding="utf-8")
     assert "QDRANT_API_KEY=\n" in (folder / ".env.example").read_text(encoding="utf-8")
 
 
-def test_a_remote_lancedb_goes_in_the_store_location(tmp_path):
-    folder = make(tmp_path, index_url="s3://acme/index")
-    assert yaml_of(folder)["index"]["store"]["location"] == "s3://acme/index"
-    pandion.Pipeline.from_yaml(folder / "pipeline.yaml")
+def test_a_remote_lancedb_is_refused_with_the_way_out(tmp_path):
+    with pytest.raises(ValueError, match="qdrant"):
+        make(tmp_path, index_url="s3://acme/index")
+    with pytest.raises(ValueError, match="index_store"):
+        make(tmp_path, index_store="mongo")
 
 
 def test_env_example_lists_every_secret_by_name_only(tmp_path):

@@ -1,7 +1,7 @@
 import type { ServeExportRequest, ServeWhere } from "@/api/types"
 
 import { usedBy } from "./categories"
-import { categoriesOf, type PipelineConfig } from "./config"
+import { categoriesOf, DEFAULT_CATEGORY, type PipelineConfig } from "./config"
 import type { Question } from "./goldSet"
 import type { Sorted } from "./sorting"
 import type { DocRef } from "./sourceDocs"
@@ -50,7 +50,8 @@ export function categoryRows(
   options: RowOptions = {},
 ): Row[] {
   return Object.entries(categoriesOf(config)).map(([id, def]) => {
-    const own = usedBy(docs, sorted, id)
+    // A config with one plain category has nothing to sort: every document is in it.
+    const own = config.categories ? usedBy(docs, sorted, id) : [...docs]
     const shas = own.map((d) => d.sha)
     const mine = questions.filter((q) => q.document && shas.includes(q.document))
     const sample = Boolean(options.fromSamples) && own.length > 0
@@ -82,8 +83,16 @@ export function summary(rows: readonly Row[]): { ready: number; questions: numbe
 
 export const defaultWhere = (): ServeWhere => ({ source: "./docs", index_store: "lancedb", index_url: "./index" })
 
+/** A plain config as one `default` category, so questions have a category to be filed under. */
+function withCategories(config: PipelineConfig): PipelineConfig {
+  if (config.categories) return config
+  const { parse, clean, chunk, ...shared } = config.index
+  const def = { name: "Default", parse: parse!, ...(clean ? { clean } : {}), chunk: chunk! }
+  return { ...config, index: shared, categories: { [DEFAULT_CATEGORY]: def }, route: [{ category: DEFAULT_CATEGORY }] }
+}
+
 /** The serve export request. A question names its document by filename, as the project's docs/ folder does. */
-export function exportBody(config: unknown, name: string, rows: readonly Row[], where: ServeWhere): ServeExportRequest {
+export function exportBody(config: PipelineConfig, name: string, rows: readonly Row[], where: ServeWhere): ServeExportRequest {
   const categories: ServeExportRequest["categories"] = {}
   for (const r of rows) {
     if (!r.documents.length) continue
@@ -102,5 +111,5 @@ export function exportBody(config: unknown, name: string, rows: readonly Row[], 
           })),
     }
   }
-  return { config, name, categories, where }
+  return { config: withCategories(config), name, categories, where }
 }

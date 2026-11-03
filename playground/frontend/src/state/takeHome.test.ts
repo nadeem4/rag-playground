@@ -54,6 +54,29 @@ describe("categoryRows", () => {
   })
 })
 
+describe("a pipeline with one plain category", () => {
+  it("puts every document in the default category", () => {
+    const plain = { index: { parse: step, chunk: step, store: step } } as unknown as PipelineConfig
+    const [r] = categoryRows(plain, [doc("a")], none, many(10, "a"))
+    expect(r).toMatchObject({ documents: ["a.pdf"], count: 10, status: "ready" })
+  })
+})
+
+describe("exportBody with one plain category", () => {
+  it("sends the config with a default category, so the server finds the category the questions are filed under", () => {
+    const plain = { index: { parse: step, chunk: step, store: step }, retrieve: { search: step } } as unknown as PipelineConfig
+    const rows = categoryRows(plain, [doc("a")], none, many(2, "a"))
+    const body = exportBody(plain, "p", rows, defaultWhere())
+    expect(body.config).toMatchObject({
+      index: { store: step },
+      categories: { default: { name: "Default", parse: step, chunk: step } },
+      route: [{ category: "default" }],
+      retrieve: { search: step },
+    })
+    expect(Object.keys(body.categories)).toEqual(["default"])
+  })
+})
+
 describe("summary", () => {
   it("counts ready categories and exported questions (samples excluded)", () => {
     const docs = [doc("a", "reports"), doc("b", "notes")]

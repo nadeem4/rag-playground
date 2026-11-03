@@ -91,6 +91,7 @@ def limits() -> dict[str, int]:
         "max_files": MAX_UPLOADS_PER_VISITOR,
         "max_total_bytes": MAX_TOTAL_UPLOAD_BYTES,
         "ttl_hours": int(UPLOAD_TTL.total_seconds() // 3600),
+        "max_evaluation_questions": MAX_EVALUATION_QUESTIONS,
     }
 
 

@@ -463,6 +463,8 @@ export interface AppSettings {
     max_image_pixels?: number
     /** Links one browser may add in an hour. */
     max_fetches_per_hour?: number
+    /** The most questions one evaluation or one downloaded project holds. */
+    max_evaluation_questions?: number
   }
 }
 
@@ -1066,6 +1068,29 @@ export interface ProjectPreview {
   keys: { variable: string; optional: boolean }[]
   /** The most questions a project may hold (the demo's cap); null for no cap. */
   max_questions: number | null
+}
+
+/** Where a serve project runs: what the generated pipeline.yaml reads. */
+export interface ServeWhere {
+  source: string
+  index_store: "lancedb" | "qdrant"
+  index_url: string
+}
+
+/** `POST /api/v2/projects/serve`: the pipeline, the questions per category and where it runs. */
+export interface ServeExportRequest {
+  config: unknown
+  name: string
+  categories: Record<string, { questions: unknown[]; sample: boolean }>
+  where: ServeWhere
+}
+
+/** `POST /api/v2/projects/serve?preview=1`: the same files as text, and what was left out. */
+export interface ServePreview {
+  filename: string
+  files: Record<string, string>
+  keys: { variable: string; optional: boolean; note: string }[]
+  left_out: { categories: { id: string; reason: string }[]; documents: boolean; lock: boolean }
 }
 
 /** What `POST /pipelines/sort` says about each document, by sha: its category and why. */

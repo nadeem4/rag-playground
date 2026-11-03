@@ -9,7 +9,7 @@ Every route that takes a pipeline takes the pipeline file's shape as JSON, the s
 the default allows everything. It is a workspace package in this repository and is not
 on PyPI yet.
 
-[docs/pandion-api.md](../../docs/pandion-api.md) is the full reference.
+[docs/pandion-api.md](../../docs/pandion-api/index.md) is the full reference.
 
 ## Run it
 
@@ -28,7 +28,7 @@ uvicorn serve:app
 
 With no `prefix` the routes sit at the root, so once it runs, `curl http://127.0.0.1:8000/health`
 (or `/api/v2/health` with the prefix above) is the first call. The reference has a
-[step by step first run](../../docs/pandion-api.md#a-first-run-step-by-step).
+[step by step first run](../../docs/pandion-api/index.md#a-first-run-step-by-step).
 
 `ApiSettings` takes `data_dir`, the one folder every request runs under. It also takes
 `models` (a `pandion.ModelSettings`), `prefix` (where the routes are mounted) and `title`.
@@ -50,7 +50,7 @@ ask now (`limit`). Serve refuses to start without a Policy that overrides all th
 Serve is hardened by default: generic errors with a trace id, model keys from the environment
 only, public model endpoints only, a limit of 20 turns a minute and 2 active turns for each
 user, a 64 KB request body, a 120 second turn, no `/docs` and no CORS. See
-[Serve mode: hardened defaults](../../docs/pandion-api.md#serve-mode-hardened-defaults).
+[Serve mode: hardened defaults](../../docs/pandion-api/serve-mode.md#serve-mode-hardened-defaults).
 [`serve_policy.py`](../../examples/pandion-api/serve_policy.py) shows a Policy that checks a
 signed gateway token.
 
@@ -64,16 +64,16 @@ Serve also has `POST /ask` (one question, nothing stored), `GET /conversations`,
 `POST /feedback` (up or down on a trace). A user
 only ever sees their own; anything else is a 404.
 
-[docs/pandion-api.md](../../docs/pandion-api.md#serve-mode) has the request, the events and `/ready`.
+[docs/pandion-api.md](../../docs/pandion-api/serve-mode.md#serve-mode) has the request, the events and `/ready`.
 
 Serve deletes conversations older than `ServeSettings(retention_days=90)` every day, and
-`pandion forget-user` removes one user's data. See [Your users' data](../../docs/pandion-api.md#your-users-data).
+`pandion forget-user` removes one user's data. See [Your users' data](../../docs/pandion-api/serve-mode.md#your-users-data).
 
 Serve mode logs one JSON line per request, step and failure, and sets an `X-Trace-Id` header.
 For OpenTelemetry spans, install `pandion-api[otel]` and set `OTEL_EXPORTER_OTLP_ENDPOINT`.
-See [Logs and traces](../../docs/pandion-api.md#logs-and-traces).
+See [Logs and traces](../../docs/pandion-api/serve-mode.md#logs-and-traces).
 For Prometheus metrics on their own port, install `pandion-api[metrics]` and set
-`ServeSettings(metrics_port=9464)`. See [Metrics](../../docs/pandion-api.md#metrics).
+`ServeSettings(metrics_port=9464)`. See [Metrics](../../docs/pandion-api/serve-mode.md#metrics).
 
 ## The routes
 
@@ -119,7 +119,7 @@ Each path is under `prefix`.
 
 Every run's result carries `usage` on each step (the token counts and model ids of its
 model call, or null) and `cost` on each report (seconds, tokens and estimated dollars).
-[Speed and cost](../../docs/pandion-api.md#speed-and-cost) lists the fields.
+[Speed and cost](../../docs/pandion-api/index.md#speed-and-cost) lists the fields.
 
 ## The Policy
 

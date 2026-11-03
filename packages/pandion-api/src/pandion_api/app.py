@@ -16,7 +16,7 @@ from pandion_api.routes import settings as settings_routes
 from pandion_api.runs import RunManager
 from pandion_api.settings import ApiSettings
 
-#: Every router, in the order docs/pandion-api.md lists them.
+#: Every router, in the order docs/pandion-api/index.md lists them.
 ROUTERS = (
     health.router, strategies.router, documents.router, questions.router, run_routes.router, sort.router, ask.router,
     evaluations.router, results.router, settings_routes.router,
@@ -38,7 +38,7 @@ def create_app(
     loads the one pipeline file at `pipeline` and answers POST /chat; it keeps
     conversations in `conversations` (a Pandion conversation store, else SQL in
     the data folder) and takes its chat settings from `serve` (`ServeSettings`).
-    See docs/pandion-api.md, "Serve mode"."""
+    See docs/pandion-api/serve-mode.md, "Serve mode"."""
     if mode == "serve":
         from pandion_api.serve import create_serve_app
 

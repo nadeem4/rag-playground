@@ -77,7 +77,7 @@ answer:                 # optional; what p.ask runs after retrieval
 
 Every key under a step, other than `use`, is a setting of that step. The names are the
 ones in the app's settings forms, so the same pipeline built in the app and written in a
-file gives the same artifact ids and shares a cache. [Strategies](../strategies.md) lists
+file gives the same artifact ids and shares a cache. [Strategies](../app/strategies.md) lists
 every step and setting. The chunkers are `recursive_character`, `markdown_header`,
 `token_based`, `layout_blocks` and `sentence_window`.
 `pandion.chunk.count_tokens(text)` counts tokens the way `token_based` does.
@@ -288,4 +288,4 @@ The contexts are stored like any other result, so the same pieces again cost not
 Changing anything that makes new pieces, such as the parser, a cleaner or the chunk size,
 pays again in full. A document with more pieces than `max_pieces` (200) is refused before
 any call, and if one call fails the step fails and names the piece. See
-[Strategies](../strategies.md#enrich) for every setting and the built-in prompt.
+[Strategies](../app/strategies.md#enrich) for every setting and the built-in prompt.

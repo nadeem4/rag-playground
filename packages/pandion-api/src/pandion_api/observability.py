@@ -1,4 +1,4 @@
-"""Serve mode's logs, trace id and OpenTelemetry spans (docs/pandion-api.md, "Logs and traces").
+"""Serve mode's logs, trace id and OpenTelemetry spans (docs/pandion-api/serve-mode.md, "Logs and traces").
 
 Every log line is one JSON object. Text a user wrote or an answer gave is only
 logged when `PANDION_LOG_CONTENT=true`. One trace id per request is shown in the

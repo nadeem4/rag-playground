@@ -106,7 +106,7 @@ The server looks for each provider's key in three places and uses the first it f
    environment, so programs it starts do not inherit the keys.
 
 In demo mode only the first counts: the server ignores its own environment and `.env`, so
-visitors can never spend the host's keys. See [deploy.md](deploy.md#demo-mode).
+visitors can never spend the host's keys. See [deploy.md](../operations/deploy.md#demo-mode).
 
 The same order holds on pandion-api's routes (`/api/v2`): the header, then the server's
 variable, then `.env`, and on the demo only the header.

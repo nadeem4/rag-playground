@@ -1,4 +1,4 @@
-"""Serve mode's Prometheus metrics (docs/pandion-api.md, "Metrics").
+"""Serve mode's Prometheus metrics (docs/pandion-api/serve-mode.md, "Metrics").
 
 Labels are only route template, status, step name, token kind, flag name,
 feedback value and a feedback category from the list the operator set in

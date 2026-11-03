@@ -193,12 +193,13 @@ def test_every_executed_step_of_the_judged_answer_is_counted(fake):
     from types import SimpleNamespace as NS
 
     from pandion.evaluation import _judge_one
+    from pandion.access import ALL_ROLES
 
     steps = [NS(status="executed", name="rerank"), NS(status="cached", name="search"), NS(status="executed", name="answer")]
     answer = NS(ok=True, text="Paris.", hits=[], _costed=lambda: steps)
     p = NS(ask=lambda *a, **kw: answer)
     spent: list = []
-    _judge_one(p, {"question": "Q?"}, "Paris", 5, None, ON, JudgeTally(), None, None, spent)
+    _judge_one(p, {"question": "Q?"}, "Paris", 5, None, ON, JudgeTally(), None, None, spent, ALL_ROLES)
     assert [s.name for s in spent] == ["rerank", "answer"]
 
 

@@ -1,0 +1,56 @@
+name: Publish pandion-api
+
+# Publishes the pandion-api package to PyPI. Only the owner starts it, after an
+# explicit yes in chat for that version, by pushing a tag:
+#   git tag pandion-api-v0.1.0 && git push origin pandion-api-v0.1.0
+# Pandion's version inside pandion-api's declared range must already be on PyPI.
+# In order, stopping at the first that fails:
+#   1. Check the tag names the version in packages/pandion-api/pyproject.toml.
+#   2. Build both wheels (Pandion is built only so the check can install it).
+#   3. Install the pandion-api wheel in a new environment and test it there
+#      (checks/pandion-api-install/run_check.py).
+#   4. Upload the pandion-api files to PyPI, and nothing of Pandion's. PyPI trusts
+#      this workflow by its file name and the `pypi` environment (trusted
+#      publishing), so no token is stored here. Do not rename either without
+#      changing the publisher on pypi.org.
+on:
+  push:
+    tags: ["pandion-api-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv build packages/pandion --out-dir dist
+      - run: uv build packages/pandion-api --out-dir dist
+      - run: >-
+          uv run python checks/pandion-api-install/run_check.py
+          --wheel dist/pandion_api-*.whl --find-links dist --tag "$GITHUB_REF_NAME"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/pandion-api/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      # Pandion has its own workflow and tag; this one uploads only pandion-api.
+      - run: rm -f dist/pandion-[0-9]*
+      - uses: pypa/gh-action-pypi-publish@release/v1

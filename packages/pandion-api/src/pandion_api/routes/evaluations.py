@@ -26,6 +26,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field, model_validator
 
 from pandion import compare, evaluate
+from pandion.extend import ALL_ROLES
 from pandion.evaluation import (
     COMPARE_STAGES,
     DEFAULT_TOP_K,
@@ -250,7 +251,9 @@ def _compare_on_one_question(body: ComparisonIn, pipelines: list, documents: dic
             def emit(e: dict[str, Any], n: int = n) -> None:
                 on_event({**e, "variant": n, "variants": len(body.variants)})
 
-            kwargs = dict(documents=documents, credentials=credentials, on_event=emit, cancel=cancel)
+            kwargs = dict(
+                documents=documents, credentials=credentials, on_event=emit, cancel=cancel, roles=ALL_ROLES
+            )
             if body.answer:
                 report = p.ask(body.question, **kwargs)
                 item = {"answer": reports.answer(report)}

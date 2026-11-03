@@ -30,6 +30,7 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
+from pandion.access import ALL_ROLES
 from pandion.chat_turn import ChatSettings, standalone_question
 from pandion.config import ConfigError, _block, from_dict, to_dict
 from pandion.cost import STAGE_ORDER, total_cost
@@ -737,6 +738,7 @@ def evaluate(
     cancel: threading.Event | None = None,
     chat: ChatSettings | None = None,
     judge: JudgeSettings | None = None,
+    roles: Any = ALL_ROLES,
 ) -> EvaluationReport:
     """Search for every question in `questions` and say whether the answer came back.
 
@@ -767,6 +769,9 @@ def evaluate(
     `on_event` gets every event of every search, with the question's id under
     "question", and a "question_finished" event after each question. `cancel`
     stops before the next question; the report then says it was cancelled.
+
+    With an `access:` block the searches run as `roles`, which is every role
+    (an admin run) unless you pass the roles of one person.
 
     A question with a `history` is a follow-up: it is first made standalone the
     way a chat turn does (`standalone_question`, with `chat`'s rewrite model,
@@ -817,7 +822,7 @@ def evaluate(
             )
             text, reason = standalone_question(conversation, q["question"], chat or ChatSettings(), credentials)
         retrieval = p.retrieval._retrieve(
-            text, None, resolved, credentials=credentials, on_event=emit, cancel=cancel
+            text, None, resolved, roles=roles, credentials=credentials, on_event=emit, cancel=cancel
         )
         if not retrieval.ok and cancel is not None and cancel.is_set():
             cancelled = True
@@ -858,7 +863,7 @@ def evaluate(
         result.expected = q.get("answer") or ""
         if judging and result.error is None and result.expected:
             result.judge = _judge_one(
-                p, q, result.expected, top_k, resolved, judge, tally, credentials, cancel, answer_steps
+                p, q, result.expected, top_k, resolved, judge, tally, credentials, cancel, answer_steps, roles
             )
         results.append(result)
         if on_event is not None:
@@ -886,6 +891,7 @@ def _judge_one(
     credentials: dict[str, str] | None,
     cancel: threading.Event | None,
     answer_steps: list[StageResult],
+    roles: Any,
 ) -> dict[str, Any]:
     """Answer one question through the pipeline and have the judge grade it.
 
@@ -894,7 +900,7 @@ def _judge_one(
     """
     skipped = {"skipped": True}
     try:
-        answer = p.ask(q["question"], top_k, documents=documents, credentials=credentials, cancel=cancel)
+        answer = p.ask(q["question"], top_k, documents=documents, roles=roles, credentials=credentials, cancel=cancel)
     except Exception:
         tally.skipped += 1
         return skipped
@@ -918,6 +924,7 @@ def reask_missed(
     documents: Any = None,
     credentials: dict[str, str] | None = None,
     chat: ChatSettings | None = None,
+    roles: Any = ALL_ROLES,
 ) -> tuple[EvaluationReport, list[str]]:
     """Ask each question newly missed against `baseline` once more, when a
     retrieval step can differ between runs (`report.nondeterministic`).
@@ -936,7 +943,7 @@ def reask_missed(
     ]
     again = evaluate(
         p, [q for q in asked if q["id"] in missed], top_k, documents=documents, credentials=credentials,
-        chat=chat,
+        chat=chat, roles=roles,
     )
     passed = {q.id: q for q in again.questions if q.found}
     # The ask that is not kept still cost something.
@@ -1374,6 +1381,7 @@ def compare(
     on_event: Callable[[dict[str, Any]], None] | None = None,
     cancel: threading.Event | None = None,
     through: str | None = None,
+    roles: Any = ALL_ROLES,
 ) -> Comparisons:
     """Run `p` once per variant, with only `stage` changed, and evaluate each.
 
@@ -1447,7 +1455,7 @@ def compare(
         report = None
         if asked is not None and index.ok:
             report = evaluate(
-                pipeline, asked, top_k, credentials=credentials, on_event=emit, cancel=cancel
+                pipeline, asked, top_k, credentials=credentials, on_event=emit, cancel=cancel, roles=roles
             )
             results.cancelled = results.cancelled or report.cancelled
         results.append(Comparison(stage=stage, variant=variant, pipeline=pipeline, index=index, report=report))

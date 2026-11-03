@@ -12,9 +12,12 @@ Times are UTC ISO 8601 strings. A store fills `created_at` only when it is empty
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import ClassVar, Protocol
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, runtime_checkable
 
 from pydantic import BaseModel, field_validator
+
+if TYPE_CHECKING:
+    from pandion.trace_record import Feedback, TraceRecord
 
 TITLE_LENGTH = 80
 
@@ -96,9 +99,33 @@ class ConversationStore(Protocol):
     def delete_user(self, user_id: str) -> dict[str, int]:
         """Remove all of the user's conversations (with their turns) and memories.
         Returns `{"conversations": n, "memories": m}`; an unknown user gives zeros.
-        When trace records (T20) and feedback (T26) are stored per user, this must remove them too."""
+        A store that is also a `TraceStore` removes the user's traces and feedback too."""
         ...
     def expire(self, older_than_days: int) -> int: ...
+
+
+@runtime_checkable
+class TraceStore(Protocol):
+    """Optional. A conversation store that also keeps trace records and feedback.
+
+    `chat_turn` saves a trace only when the store is a `TraceStore`; a store
+    without these methods keeps chatting. A trace follows the conversation:
+    `delete_user`, `delete` and `expire` must remove the traces and feedback too.
+    """
+
+    def save_trace(self, record: TraceRecord) -> None:
+        """Keep the record. `created_at` is filled when empty. Saving the same id again replaces it and its feedback."""
+        ...
+    def trace(self, trace_id: str, user_id: str | None = None) -> TraceRecord | None:
+        """The record with its feedback. With a `user_id`, another user's trace is None; without one, any (the operator's view)."""
+        ...
+    def traces(self, *, since: str | None = None, flagged_only: bool = False, limit: int = 100) -> list[TraceRecord]:
+        """Newest first. `since` is a UTC ISO time; `flagged_only` keeps records that have a flag."""
+        ...
+    def add_feedback(self, trace_id: str, user_id: str, feedback: Feedback) -> bool:
+        """Add feedback, stamping `created_at`. False when the trace is missing or not this user's."""
+        ...
+    def save_scores(self, trace_id: str, scores: dict[str, Any]) -> None: ...
 
 
 _STORES: dict[str, type] = {}

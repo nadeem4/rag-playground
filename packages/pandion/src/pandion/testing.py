@@ -6,6 +6,9 @@
     from pandion.testing import conversation_store_conformance
     conversation_store_conformance(lambda: MyConversationStore(MySettings()))
 
+    from pandion.testing import trace_store_conformance
+    trace_store_conformance(lambda: MyConversationStore(MySettings()))  # only for a store that is also a TraceStore
+
 Each check gets a fresh store from the factory. The first failure raises
 `AssertionError("<check name>: <why>")`.
 """
@@ -18,6 +21,7 @@ from datetime import UTC, datetime, timedelta
 from pandion.conversation_store import (
     ConversationNotFound, ConversationStore, Memory, Turn, TITLE_LENGTH,
 )
+from pandion.trace_record import Feedback, TraceRecord
 from pandion.index_store import (
     NO_FILTER, AnyOf, And, Eq, In, IndexMeta, IndexRow, IndexStore,
 )
@@ -395,6 +399,96 @@ def check_a_turn_round_trips_every_field(store):
 def conversation_store_conformance(factory: Callable[[], ConversationStore]) -> None:
     """Run every check on a fresh store; raise AssertionError(f"{name}: {why}") on the first failure."""
     for name, check in CONVERSATION_CHECKS.items():
+        try:
+            check(factory())
+        except AssertionError as e:
+            raise AssertionError(f"{name}: {e}") from None
+        except Exception as e:
+            raise AssertionError(f"{name}: {type(e).__name__}: {e}") from None
+
+
+TRACE_CHECKS: dict[str, Callable[[ConversationStore], None]] = {}
+
+
+def _trace_check(fn):
+    TRACE_CHECKS[fn.__name__.removeprefix("check_")] = fn
+    return fn
+
+
+def _record(trace_id="t1", user_id="u1", **fields) -> TraceRecord:
+    return TraceRecord(trace_id=trace_id, user_id=user_id, conversation_id=fields.pop("conversation_id", "c1"),
+                       question="q", **fields)
+
+
+@_trace_check
+def check_a_trace_round_trips_and_is_private_to_its_user(store):
+    store.save_trace(_record(answer="a", label="cited", source_ids=["s1"], flags=["declined"], latency_ms=5))
+    got = store.trace("t1", "u1")
+    _expect(got is not None and (got.answer, got.label, got.source_ids, got.flags) == ("a", "cited", ["s1"], ["declined"]),
+            "a saved trace must come back with its fields")
+    _expect(got.created_at, "a trace with no created_at must be stamped")
+    _expect(store.trace("t1", "u2") is None, "another user must not read the trace")
+    _expect(store.trace("nope", "u1") is None, "an unknown trace must be None")
+
+
+@_trace_check
+def check_feedback_is_kept_only_for_the_owner(store):
+    store.save_trace(_record())
+    _expect(store.add_feedback("t1", "u2", Feedback(value="up")) is False, "another user's feedback must be refused")
+    _expect(store.add_feedback("t1", "u1", Feedback(value="down")) is True, "the owner's feedback must be kept")
+    _expect([f.value for f in store.trace("t1", "u1").feedback] == ["down"], "feedback must come back on the trace")
+
+
+@_trace_check
+def check_traces_are_newest_first_and_filtered(store):
+    store.save_trace(_record("old", created_at=_ago(5)))
+    store.save_trace(_record("new", created_at=_ago(1), flags=["low_grounding"]))
+    _expect([r.trace_id for r in store.traces()] == ["new", "old"], "traces must be newest first")
+    _expect([r.trace_id for r in store.traces(since=_ago(3))] == ["new"], "since must leave older traces out")
+    _expect([r.trace_id for r in store.traces(flagged_only=True)] == ["new"], "flagged_only must keep flagged traces")
+
+
+@_trace_check
+def check_delete_user_removes_their_traces_and_feedback(store):
+    store.append("c1", "u1", _turn())
+    store.save_trace(_record())
+    store.add_feedback("t1", "u1", Feedback(value="up"))
+    store.save_trace(_record("t2", "u2", conversation_id="c2"))
+    store.delete_user("u1")
+    _expect(store.trace("t1") is None, "delete_user must remove the user's traces")
+    _expect([r.trace_id for r in store.traces()] == ["t2"], "delete_user must leave other users' traces alone")
+    store.save_trace(_record())
+    _expect(store.trace("t1").feedback == [], "delete_user must remove the user's feedback too")
+
+
+@_trace_check
+def check_delete_removes_traces(store):
+    store.append("c1", "u1", _turn())
+    store.save_trace(_record())
+    store.add_feedback("t1", "u1", Feedback(value="up"))
+    store.save_trace(_record("t2", conversation_id="c2"))
+    store.delete("c1", "u1")
+    _expect(store.trace("t1") is None, "delete must remove the conversation's traces")
+    _expect(store.trace("t2") is not None, "delete must leave other conversations' traces alone")
+    store.save_trace(_record())
+    _expect(store.trace("t1").feedback == [], "delete must remove the conversation's feedback too")
+
+
+@_trace_check
+def check_expire_removes_traces(store):
+    store.append("old", "u1", Turn(question="q", answer="a", created_at=_ago(40)))
+    store.save_trace(_record("t-old", conversation_id="old"))
+    store.add_feedback("t-old", "u1", Feedback(value="up"))
+    store.save_trace(_record("t-new", conversation_id="new"))
+    store.expire(30)
+    _expect(store.trace("t-old") is None, "expire must remove the traces of expired conversations")
+    _expect(store.trace("t-new") is not None, "expire must keep traces of live conversations")
+
+
+def trace_store_conformance(factory: Callable[[], ConversationStore]) -> None:
+    """Run every trace check on a fresh store that is also a `TraceStore`; the first failure raises
+    AssertionError(f"{name}: {why}")."""
+    for name, check in TRACE_CHECKS.items():
         try:
             check(factory())
         except AssertionError as e:

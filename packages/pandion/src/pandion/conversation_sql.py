@@ -19,13 +19,16 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, SecretStr, model_validator
 
 from pandion.conversation_store import (
-    TITLE_LENGTH, Conversation, ConversationInfo, ConversationNotFound, Memory, Turn, register_conversation_store,
-    utc_now,
+    TITLE_LENGTH, Conversation, ConversationInfo, ConversationNotFound, Memory, Turn, _utc,
+    register_conversation_store, utc_now,
 )
 from pandion.errors import FormatTooNew, require
+from pandion.trace_record import Feedback, TraceRecord
 
 _STEP = "The sql conversation store"
 _SCHEMA_VERSION = 1
+#: One format row per group of tables: the chats, and the trace records.
+_SCHEMA_KEYS = ("conversations", "traces")
 _RETRIES = 5
 
 
@@ -91,7 +94,7 @@ class SqlStore:
             sa = require("sqlalchemy", extra="sql", step=_STEP)
             url = self._url()  # a missing variable is a plain sentence, raised before anything opens
             try:
-                engine = sa.create_engine(url)
+                engine = sa.create_engine(url, hide_parameters=True)  # a failed statement must not echo user text
                 tables = self._make_tables(sa)
                 self._prepare(sa, engine, tables)
             except (FormatTooNew, ImportError):
@@ -123,6 +126,17 @@ class SqlStore:
                 sa.Column("seq", sa.Integer, primary_key=True, autoincrement=True),
                 sa.Column("id", text, nullable=False, unique=True), sa.Column("user_id", text, nullable=False, index=True),
                 sa.Column("text", sa.Text, nullable=False), sa.Column("created_at", text, nullable=False)),
+            "traces": sa.Table(
+                "traces", meta,
+                sa.Column("trace_id", text, primary_key=True), sa.Column("user_id", text, nullable=False, index=True),
+                sa.Column("conversation_id", text, nullable=False, index=True),
+                sa.Column("created_at", text, nullable=False, index=True), sa.Column("flagged", sa.Boolean, nullable=False),
+                sa.Column("data", sa.Text, nullable=False)),
+            "feedback": sa.Table(
+                "feedback", meta,
+                sa.Column("seq", sa.Integer, primary_key=True, autoincrement=True),
+                sa.Column("trace_id", text, nullable=False, index=True), sa.Column("user_id", text, nullable=False),
+                sa.Column("data", sa.Text, nullable=False)),
         }
 
     @staticmethod
@@ -131,20 +145,22 @@ class SqlStore:
         inspector = sa.inspect(engine)
         if inspector.has_table("pandion_schema"):
             with engine.connect() as conn:
-                found = conn.execute(sa.select(schema.c.value).where(schema.c.key == "conversations")).scalar()
-            if found is not None and found > _SCHEMA_VERSION:
-                raise FormatTooNew(
-                    f"This conversation store was written in format {found}, which this pandion does not read. "
-                    "Please upgrade pandion."
-                )
+                for key in _SCHEMA_KEYS:
+                    found = conn.execute(sa.select(schema.c.value).where(schema.c.key == key)).scalar()
+                    if found is not None and found > _SCHEMA_VERSION:
+                        raise FormatTooNew(
+                            f"This conversation store was written in format {found}, which this pandion does not read. "
+                            "Please upgrade pandion."
+                        )
         t["meta"].create_all(engine)
         with engine.begin() as conn:
-            if conn.execute(sa.select(schema.c.value).where(schema.c.key == "conversations")).first() is None:
-                try:
-                    with conn.begin_nested():
-                        conn.execute(sa.insert(schema).values(key="conversations", value=_SCHEMA_VERSION))
-                except sa.exc.IntegrityError:
-                    pass  # another server starting at the same time wrote the row first
+            for key in _SCHEMA_KEYS:
+                if conn.execute(sa.select(schema.c.value).where(schema.c.key == key)).first() is None:
+                    try:
+                        with conn.begin_nested():
+                            conn.execute(sa.insert(schema).values(key=key, value=_SCHEMA_VERSION))
+                    except sa.exc.IntegrityError:
+                        pass  # another server starting at the same time wrote the row first
 
     def _sa(self):
         self.check()
@@ -227,6 +243,7 @@ class SqlStore:
             owned = conn.execute(sa.select(c.c.id).where(c.c.id == conversation_id, c.c.user_id == user_id)).first()
             if owned is None:
                 return
+            self._delete_traces(sa, conn, self._t["traces"].c.conversation_id == conversation_id)
             conn.execute(sa.delete(turns).where(turns.c.conversation_id == conversation_id))
             conn.execute(sa.delete(c).where(c.c.id == conversation_id))
 
@@ -258,6 +275,7 @@ class SqlStore:
         c, turns, m = self._t["conversations"], self._t["turns"], self._t["memories"]
         with self._engine.begin() as conn:
             mine = sa.select(c.c.id).where(c.c.user_id == user_id)
+            self._delete_traces(sa, conn, self._t["traces"].c.user_id == user_id)
             conn.execute(sa.delete(turns).where(turns.c.conversation_id.in_(mine)))
             gone_conversations = conn.execute(sa.delete(c).where(c.c.user_id == user_id)).rowcount
             gone = conn.execute(sa.delete(m).where(m.c.user_id == user_id)).rowcount
@@ -274,6 +292,86 @@ class SqlStore:
             old = conn.execute(sa.select(c.c.id).where(c.c.updated_at < cutoff)).scalars().all()
             for chunk in range(0, len(old), 500):
                 ids = old[chunk:chunk + 500]
+                self._delete_traces(sa, conn, self._t["traces"].c.conversation_id.in_(ids))
                 conn.execute(sa.delete(turns).where(turns.c.conversation_id.in_(ids)))
                 conn.execute(sa.delete(c).where(c.c.id.in_(ids)))
+            self._delete_traces(sa, conn, self._t["traces"].c.created_at < cutoff)  # also traces with no conversation left
         return len(old)
+
+    # -- traces (the optional TraceStore) ----------------------------------
+
+    def _delete_traces(self, sa, conn, where) -> None:
+        """Remove the traces that match `where`, and their feedback, inside the caller's transaction."""
+        traces, feedback = self._t["traces"], self._t["feedback"]
+        conn.execute(sa.delete(feedback).where(feedback.c.trace_id.in_(sa.select(traces.c.trace_id).where(where))))
+        conn.execute(sa.delete(traces).where(where))
+
+    def save_trace(self, record: TraceRecord) -> None:
+        sa = self._sa()
+        t, feedback = self._t["traces"], self._t["feedback"]
+        record = record.model_copy(update={"created_at": _utc(record.created_at) or utc_now(), "feedback": []})
+        with self._engine.begin() as conn:
+            owner = conn.execute(sa.select(t.c.user_id).where(t.c.trace_id == record.trace_id)).scalar()
+            if owner is not None and owner != record.user_id:
+                raise ValueError(f"Trace '{record.trace_id}' already belongs to another user.")
+            conn.execute(sa.delete(feedback).where(feedback.c.trace_id == record.trace_id))
+            conn.execute(sa.delete(t).where(t.c.trace_id == record.trace_id))
+            conn.execute(sa.insert(t).values(
+                trace_id=record.trace_id, user_id=record.user_id, conversation_id=record.conversation_id,
+                created_at=record.created_at, flagged=bool(record.flags), data=record.model_dump_json()))
+
+    def _records(self, sa, conn, rows) -> list[TraceRecord]:
+        """The records of `rows` (trace_id, data), each with its feedback in the order it was given."""
+        feedback = self._t["feedback"]
+        ids = [r.trace_id for r in rows]
+        given: dict[str, list[Feedback]] = {i: [] for i in ids}
+        for chunk in range(0, len(ids), 500):
+            found = conn.execute(sa.select(feedback.c.trace_id, feedback.c.data)
+                                 .where(feedback.c.trace_id.in_(ids[chunk:chunk + 500])).order_by(feedback.c.seq)).all()
+            for trace_id, data in found:
+                given[trace_id].append(Feedback.model_validate(json.loads(data)))
+        return [TraceRecord.model_validate(json.loads(r.data)).model_copy(update={"feedback": given[r.trace_id]})
+                for r in rows]
+
+    def trace(self, trace_id: str, user_id: str | None = None) -> TraceRecord | None:
+        sa = self._sa()
+        t = self._t["traces"]
+        query = sa.select(t.c.trace_id, t.c.data).where(t.c.trace_id == trace_id)
+        if user_id is not None:
+            query = query.where(t.c.user_id == user_id)
+        with self._engine.connect() as conn:
+            rows = conn.execute(query).all()
+            return self._records(sa, conn, rows)[0] if rows else None
+
+    def traces(self, *, since: str | None = None, flagged_only: bool = False, limit: int = 100) -> list[TraceRecord]:
+        sa = self._sa()
+        t = self._t["traces"]
+        query = sa.select(t.c.trace_id, t.c.data).order_by(t.c.created_at.desc(), t.c.trace_id).limit(limit)
+        if since:
+            query = query.where(t.c.created_at >= _utc(since))
+        if flagged_only:
+            query = query.where(t.c.flagged.is_(True))
+        with self._engine.connect() as conn:
+            return self._records(sa, conn, conn.execute(query).all())
+
+    def add_feedback(self, trace_id: str, user_id: str, feedback: Feedback) -> bool:
+        sa = self._sa()
+        t, f = self._t["traces"], self._t["feedback"]
+        feedback = feedback.model_copy(update={"created_at": _utc(feedback.created_at) or utc_now()})
+        with self._engine.begin() as conn:
+            if conn.execute(sa.select(t.c.trace_id).where(t.c.trace_id == trace_id, t.c.user_id == user_id)).first() is None:
+                return False
+            conn.execute(sa.insert(f).values(trace_id=trace_id, user_id=user_id, data=feedback.model_dump_json()))
+        return True
+
+    def save_scores(self, trace_id: str, scores: dict[str, Any]) -> None:
+        """Add `scores` to the trace's own. An unknown trace is ignored."""
+        sa = self._sa()
+        t = self._t["traces"]
+        with self._engine.begin() as conn:
+            row = conn.execute(sa.select(t.c.data).where(t.c.trace_id == trace_id)).first()
+            if row is None:
+                return
+            record = TraceRecord.model_validate(json.loads(row.data))
+            record = record.model_copy(update={"scores": {**record.scores, **scores}})
+            conn.execute(sa.update(t).where(t.c.trace_id == trace_id).values(data=record.model_dump_json()))

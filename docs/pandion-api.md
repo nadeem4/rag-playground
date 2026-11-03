@@ -561,7 +561,7 @@ Serve keeps each user's conversations and memories in the conversation store, un
 
 - **Where the store is.** Set `PANDION_CONVERSATIONS_URL` to a SQLAlchemy url. The store reads it itself, so the url never sits in your code or files. With no variable, serve uses a SQLite file in `data_dir`.
 - **Retention.** `ServeSettings(retention_days=90)` is how long a conversation is kept after its newest turn. The server deletes older ones at startup and then every 24 hours, and logs `retention sweep: removed N conversations older than D days`. A sweep that fails is logged and tried again the next day; it never stops the server. Memories are not removed by the sweep. The value must be at least 1.
-- **Forget one user.** `pandion forget-user USER_ID --url-env PANDION_CONVERSATIONS_URL --yes` deletes all of that user's conversations and memories. See [Forget one user](pandion.md#forget-one-user). Backups of the database and the retention of your model providers are out of its reach.
+- **Forget one user.** `pandion forget-user USER_ID --url-env PANDION_CONVERSATIONS_URL --yes` deletes all of that user's conversations, memories, trace records and feedback. See [Forget one user](pandion.md#forget-one-user). Backups of the database and the retention of your model providers are out of its reach.
 - **Where the data goes.** Fill in the region column for your deployment. The same table is in [privacy.md](privacy.md#in-a-pandion-server-serve-mode).
 
 | Where your users' data goes | What is sent or kept | Region (yours to record) |

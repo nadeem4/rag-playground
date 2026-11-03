@@ -2530,7 +2530,7 @@ A conversation store keeps chats and what Pandion remembers about a user. It is 
 | `memories(user_id)` | The user's memories, oldest first |
 | `add_memory(user_id, memory)` | Keeps a memory; the store gives it an id |
 | `delete_memory(user_id, memory_id)` | Removes one memory |
-| `delete_user(user_id)` | Removes all of the user's conversations (with their turns) and memories, and returns `{"conversations": n, "memories": m}`. An unknown user gives zeros |
+| `delete_user(user_id)` | Removes all of the user's conversations (with their turns) and memories, and returns `{"conversations": n, "memories": m}`. An unknown user gives zeros. A store that keeps [traces](#traces) removes those too |
 | `expire(older_than_days)` | Deletes conversations whose newest turn is older than the limit and returns how many |
 
 A `Turn` holds the question, the answer, the standalone `rewrite` the turn was searched with, the `source_ids`, a `trace_id` and `created_at`. Times are UTC ISO 8601 strings, and a store fills `created_at` only when it is empty.
@@ -2594,15 +2594,46 @@ print(second.text, second.source_ids)
 fold_summary(store, conversation_id=first.conversation_id, user_id="ana")  # after replying
 ```
 
-`chat_turn(p, store, *, user_id, question, conversation_id=None, settings=None, roles=None, credentials=None, on_event=None, trace_id=None, cancel=None)` returns a `TurnResult`: `conversation_id`, `question` (as typed), `standalone`, `text`, `source_ids` (the unique piece ids the answer cites, or the pieces a `search` answer returned), and `answer`, the pipeline's `Answer`. Leave `conversation_id` out to start a new conversation. An id that belongs to another user raises `ConversationNotFound` before anything is asked. When the answer fails, `text` is empty, no turn is stored, and `answer` says why; if that was the first turn of a new conversation, `conversation_id` is empty because nothing was stored. `cancel` is a `threading.Event`, handed to the pipeline as it is: set it and the step that is running finishes and no other starts. A cancelled answer is not ok, so no turn is stored.
+`chat_turn(p, store, *, user_id, question, conversation_id=None, settings=None, roles=None, credentials=None, on_event=None, trace_id=None, cancel=None)` returns a `TurnResult`: `conversation_id`, `question` (as typed), `standalone`, `text`, `source_ids` (the unique piece ids the answer cites, or the pieces a `search` answer returned), `answer`, the pipeline's `Answer`, and `trace_id` (the id of the turn's trace). Leave `conversation_id` out to start a new conversation. An id that belongs to another user raises `ConversationNotFound` before anything is asked. When the answer fails, `text` is empty, no turn is stored, and `answer` says why; if that was the first turn of a new conversation, `conversation_id` is empty because nothing was stored. `cancel` is a `threading.Event`, handed to the pipeline as it is: set it and the step that is running finishes and no other starts. A cancelled answer is not ok, so no turn is stored.
 
 - A first turn costs no rewrite call. When the rewrite call fails, or its reply is empty, or longer than 300 characters or more than one line, the question is searched as typed, so a reply is never lost to a rewrite.
 - The history is placed inside a labelled block and the model is told it is text to read, not instructions.
 - `ChatSettings` holds `last_turns` (default 6, at least 1), `rewrite_model` and `summary_model` (default `claude-haiku-4-5`, any key of `pandion.llm.CHAT_MODELS`) `memory` (default off; see [Memory across conversations](#memory-across-conversations)) and `strip_urls` (default on; see [Answer safety](#answer-safety)).
-- The turn emits one event, `chat_rewrite`, with `standalone` and `reason` (`no history`, `rewritten`, `failed` or `too long`), through `on_event`, with the `trace_id` when one was given. An empty reply (or a refusal) counts as `failed`.
+- The turn emits one event, `chat_rewrite`, with `standalone` and `reason` (`no history`, `rewritten`, `failed` or `too long`), through `on_event`, with the turn's `trace_id` (the one you passed, or the one the turn made). An empty reply (or a refusal) counts as `failed`.
 - `fold_summary(store, *, conversation_id, user_id, settings=None, credentials=None)` folds the turns older than the last `last_turns` into the running summary, keeps those last turns verbatim, and returns `True`. It returns `False`, calling no model, when there is nothing new to fold or the conversation is not the user's, so calling it again does no harm. A summary over 1,500 characters is cut at a sentence end. A failed model call raises and changes nothing, so the next call folds the same turns again. Pandion starts no thread: run it after replying so the user never waits.
 
 The example [`chat_turn.py`](../examples/pandion/chat_turn.py) runs a first turn offline, and with `ANTHROPIC_API_KEY` set a follow-up too.
+
+### Traces
+
+A trace is one record of what a chat turn did, kept so a person can read it later. It is **Provisional**. After an answered turn, `chat_turn` saves a `TraceRecord` when the store is also a `TraceStore`; a store without those methods keeps chatting and saves no trace. A failed or cancelled answer saves none, like the turn itself. A trace that cannot be saved is logged (the error type only, never its text, which may hold the question) and never fails the turn. `expire` also removes traces older than the limit, even when their conversation is gone.
+
+A `TraceRecord` holds `trace_id`, `user_id`, `conversation_id`, `question` (as typed), `standalone`, `answer`, `label`, `source_ids`, `stages`, `cost`, `latency_ms`, `flags`, `scores`, `feedback` and `created_at`.
+
+- `trace_id` is the id you pass to `chat_turn(..., trace_id=)`. When you pass none, `chat_turn` makes one (a uuid4 in hex) and puts it on the `Turn` too. The server passes the request's trace id.
+- `label` is the worst grounding label in the answer, from worst to best `none`, `weak`, `similarity`, `cited`. An answer that only declined has `not_found`; one with no grounding counts (a `search` answer) has an empty label.
+- `stages` lists each stage once, in order, as `{"name", "ms", "dollars"}`. `dollars` is the estimated price of that stage, or `None` when it called no priced model. `cost` is the total, as `Answer.cost()` gives it, and `latency_ms` is the whole turn.
+- `flags` and `scores` are empty for now. Online flags and evaluator scores fill them in later.
+- `feedback` is a list of `Feedback(value="up" or "down", category, comment, created_at)`; `category` is at most 40 characters and `comment` at most 500.
+- A record never holds a credential or an API key.
+
+`TraceStore` is a runtime-checkable protocol with five methods. The `sql` store implements it in two more tables, `traces` and `feedback`, with a `traces` format row beside the `conversations` one in `pandion_schema`.
+
+| Method | What it does |
+| --- | --- |
+| `save_trace(record)` | Keeps the record, stamping `created_at` when empty. Saving an id again replaces the record and its feedback; an id that belongs to another user is refused with `ValueError` |
+| `trace(trace_id, user_id=None)` | The record with its feedback. With a `user_id`, another user's trace is `None`; without one it is any trace, for the operator's tools |
+| `traces(*, since=None, flagged_only=False, limit=100)` | Newest first. `since` is a UTC ISO time; `flagged_only` keeps records that have a flag |
+| `add_feedback(trace_id, user_id, feedback)` | Adds feedback. Returns `False` when the trace is missing or is not this user's |
+| `save_scores(trace_id, scores)` | Adds scores to the trace's own |
+
+A trace holds the user's question and answer, so it follows the conversation. `delete_user`, `delete` and `expire` remove the traces and the feedback of the conversations they remove (and `delete_user` all of that user's), inside the same transaction. A store that implements `TraceStore` must do the same. Prove it with `trace_store_conformance`, from `pandion.testing`, which also checks that one user never reads or gives feedback on another user's trace.
+
+```python
+from pandion.testing import trace_store_conformance
+
+trace_store_conformance(lambda: MyStore(MySettings()))
+```
 
 ### Memory across conversations
 

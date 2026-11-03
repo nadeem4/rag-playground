@@ -188,11 +188,9 @@ async def serve_project(request: Request, preview: bool = False) -> Response:
         except HTTPException as exc:
             if exc.status_code != 413:
                 raise
-            found = re.search(r"\d+", str(exc.detail).split(" has ")[-1])
-            count = found.group() if found else total
             raise HTTPException(
                 status_code=413,
-                detail=f"This server packs fewer questions into a download than the {count} you sent. Leave some out, or run it yourself to take them all.",
+                detail=f"This server packs fewer questions into a download than the {total} you sent. Leave some out, or run it yourself to take them all.",
             ) from None
         name = slug(body.name)
         files = await run_in_threadpool(_build, name, pipeline, kept, body.where)

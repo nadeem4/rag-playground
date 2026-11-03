@@ -55,7 +55,7 @@ docker run --rm --env-file .env -v "$$PWD/evals:/app/evals" my-rag \
   pandion eval pipeline.yaml evals/questions.json --baseline evals/baseline.json
 ```
 
-It first checks that every expected passage is still in its document, then that no question that was found before is now missed. `pytest tests/test_quality.py` runs the same command. Questions carry a `category:<name>` tag, so a category that got worse fails the gate even when the total did not.
+It first checks that every expected passage is still in its document, then that no question that was found before is now missed. `tests/test_quality.py` is the same gate for CI with the pipeline's models available. Questions carry a `category:<name>` tag, so a category that got worse fails the gate even when the total did not.
 
 ## Secrets
 

@@ -2,7 +2,7 @@
 
 No network and no model: the fake embedder and `answer: {use: search}`. The
 project's serve.py is imported from its folder with this repo's environment (no
-`uv sync`, because pandion-api is not on PyPI yet), and a real `pandion sync`
+`uv sync`, so the test needs no network), and a real `pandion sync`
 fills its index.
 """
 

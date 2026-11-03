@@ -37,6 +37,20 @@ ACCESS_EXAMPLE = """
 """
 
 
+#: With the `local` extra, Linux takes CPU-only torch, not the multi-GB CUDA build.
+CPU_TORCH = """
+# On Linux (the Docker image) take CPU-only torch, not the multi-GB CUDA build.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+"""
+
+
 def _template(name: str) -> str:
     resource = files("pandion.templates.serve")
     for part in name.split("/"):
@@ -45,8 +59,11 @@ def _template(name: str) -> str:
 
 
 def _no_login(address: str, what: str) -> None:
-    if "@" in urlsplit(address).netloc:
+    parts = urlsplit(address)
+    if "@" in parts.netloc:
         raise ValueError(f"{what} has a user name or password in its address, which would be written into the project. Remove it; keys go in .env.")
+    if parts.query:
+        raise ValueError(f"{what} has a query string in its address, which could carry a key into the project. Remove it; keys go in .env.")
 
 
 def serve_pipeline(data: dict[str, Any], source: str, index_store: str, index_url: str) -> dict[str, Any]:
@@ -80,13 +97,14 @@ def render_pyproject(p: Any, name: str) -> str:
     from pandion.project import _pin
 
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "pandion-serve"
+    extras = _extras(p)
     return (
         "[project]\n"
         f'name = "{slug}"\n'
         'version = "0.1.0"\n'
         'requires-python = ">=3.13,<3.14"\n'
         "dependencies = [\n"
-        f'    "pandion[{",".join(_extras(p))}]{_pin()}",\n'
+        f'    "pandion[{",".join(extras)}]{_pin()}",\n'
         f'    "pandion-api{SERVE_API_PIN}",\n'
         '    "uvicorn>=0.30,<1",\n'
         "]\n"
@@ -97,6 +115,10 @@ def render_pyproject(p: Any, name: str) -> str:
         "# An application, not a library: `uv sync` installs the dependencies and nothing else.\n"
         "[tool.uv]\n"
         "package = false\n"
+        f"{CPU_TORCH if 'local' in extras else ''}"
+        "\n"
+        "[tool.pytest.ini_options]\n"
+        'testpaths = ["tests"]\n'
     )
 
 

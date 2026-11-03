@@ -27,8 +27,13 @@ body:
   - type: textarea
     id: problem
     attributes:
-      label: What went wrong?
-      description: Say what you expected and what happened instead.
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
     validations:
       required: true
   - type: textarea
@@ -43,3 +48,4 @@ body:
     attributes:
       label: Logs or screenshots
       description: Remove any keys or private data first.
+      render: shell

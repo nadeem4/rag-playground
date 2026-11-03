@@ -263,6 +263,18 @@ def cmd_review(args: argparse.Namespace) -> int:
     store = _trace_store(args)
     if store is None:
         return 1
+    if args.evaluate and args.promote:
+        print("--promote and --evaluate are two different jobs: run them one at a time.", file=sys.stderr)
+        return 1
+    if (args.judge or args.judge_model) and not args.evaluate:
+        print("--judge and --judge-model go with --evaluate, which scores the stored traces.", file=sys.stderr)
+        return 1
+    if args.evaluate and args.promote:
+        print("--promote and --evaluate are two different jobs: run them one at a time.", file=sys.stderr)
+        return 1
+    if (args.judge or args.judge_model) and not args.evaluate:
+        print("--judge and --judge-model go with --evaluate, which scores the stored traces.", file=sys.stderr)
+        return 1
     if args.promote:
         if not args.questions:
             print("--promote adds a case to a question set: give the file with --questions FILE.", file=sys.stderr)
@@ -288,7 +300,8 @@ def cmd_review(args: argparse.Namespace) -> int:
             # The built-in relevance judge is never registered; it runs only here.
             if names is None or "relevance" in names:
                 judge = JudgeSettings(on=True, **({"model": args.judge_model} if args.judge_model else {}))
-                extra = [relevance_evaluator(judge, credentials_from_env())]
+                evaluator, tally = relevance_evaluator(judge, credentials_from_env())  # refuses a missing key now
+                extra = [evaluator]
             if names is not None:
                 names = [n for n in names if n != "relevance"]
         elif args.judge_model or (names and "relevance" in names):
@@ -298,6 +311,8 @@ def cmd_review(args: argparse.Namespace) -> int:
             print("No online evaluators are registered. Write one with @online_evaluator and load it with --plugins.", file=sys.stderr)
             return 1
         result = run_evaluators(store, since=since, names=names, sample=sample, limit=TRACE_LIMIT, rerun=args.rerun, extra=extra)
+        if extra:
+            result.judge_dollars = tally.dollars
     except ValueError as exc:
         print(exc, file=sys.stderr)
         return 1

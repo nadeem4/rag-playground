@@ -58,6 +58,8 @@ def format_review_result(r: ReviewResult) -> tuple[str, str]:
         f"{label}: {sum(kinds.values())} failed ({', '.join(f'{kind}: {n}' for kind, n in sorted(kinds.items()))})"
         for label, kinds in r.failures.items()
     ]
+    if r.judge_dollars:
+        out.append(f"Judge cost: about ${r.judge_dollars:.4f} (estimate).")
     return "\n".join(out), "\n".join(err)
 
 
@@ -76,7 +78,8 @@ class Promoted(BaseModel):
                 else f"Trace {self.trace_id} is already in the question set")
         if self.history_turns:
             head += f" with {self.history_turns} earlier turn(s) of history"
-        return head + "." + (f"\n{self.diagnosis}" if self.diagnosis else "")
+        hint = " Each expected passage is a whole cited passage: trim it to the sentence that answers." if self.added else ""
+        return head + "." + hint + (f"\n{self.diagnosis}" if self.diagnosis else "")
 
 
 def _history(store: Any, trace: TraceRecord) -> list[dict[str, str]]:
@@ -135,12 +138,14 @@ def promote(store: Any, trace_id: str, questions_path: str | Path, *, p: Any = N
     path = Path(questions_path)
     body, cases = _read_cases(path)
     case: dict[str, Any] = {
-        "id": trace.trace_id, "question": trace.standalone or trace.question,
+        "id": trace.trace_id, "question": trace.question,
         "gold_answers": [s.text for s in trace.sources], "tags": ["promoted"],
     }
     history = _history(store, trace)
     if history:
-        case["history"] = history
+        case["history"] = history  # with history the case keeps the question as asked, so evaluate replays the rewrite
+    else:
+        case["question"] = trace.standalone or trace.question
     added = all(c.get("id") != trace.trace_id for c in cases if isinstance(c, dict))
     if added:
         cases.append(case)

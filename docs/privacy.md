@@ -30,7 +30,7 @@ with a run, and a question set while it is checked.
 
 | What | Where | How long |
 |---|---|---|
-| Trace records (when the conversation store keeps them) | In the conversation store you chose, under the user's id | The question and the answer of each turn, with the standalone question, the cited passages (the text of each source, up to 2,000 characters each), the timings and the estimated cost, the flags that mark a turn to look at, and any feedback the user gave (an up or down, a short category and a comment of up to 500 characters, which is the user's own text). They follow the conversation's retention: `expire`, deleting the conversation and `pandion forget-user` remove them. They never hold a credential. |
+| Trace records (when the conversation store keeps them) | In the conversation store you chose, under the user's id | The question and the answer of each turn, with the standalone question, the cited passages (the text of each source, up to 2,000 characters each), the timings and the estimated cost, the flags that mark a turn to look at, and any feedback the user gave (an up or down, a short category and a comment of up to 500 characters, which is the user's own text). They follow the conversation's retention: `expire`, deleting the conversation and `pandion forget-user` remove them. They never hold a credential. A case you promote with `pandion review --promote` is a copy written to your own questions file, outside retention: `expire` and `pandion forget-user` do not reach it, so you own it and delete it yourself. |
 | Memories (only when you turn memory on in code) | In the conversation store you chose | Until the user deletes one, or the site runs `pandion forget-user`. When memory is on, the user's question is sent to the summary model to extract facts, and the memories are sent to the rewrite model. The playground does not turn memory on. |
 
 ## In a Pandion server (serve mode)
@@ -49,7 +49,7 @@ Where a site's users' data goes (record the region for your own deployment). Ret
 | Remote embedder (if you use one) | The text of your documents and each question |  |
 | Judge model (online checks, when used) | The question, the answer and its sources |  |
 | OpenTelemetry exporter (if you set an endpoint) | Step names, timings, model names and token counts; the question only when `PANDION_LOG_CONTENT=true` |  |
-| Conversation store | Conversations, turns, memories and trace records (the question and the answer), under the user's id |  |
+| Conversation store | Conversations, turns, memories and trace records (the question, the answer and the cited passages), under the user's id |  |
 
 ## On the demo server
 

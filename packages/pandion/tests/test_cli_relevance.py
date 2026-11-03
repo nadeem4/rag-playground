@@ -26,7 +26,7 @@ def calls(monkeypatch):
 
     def fake(model, **kwargs):
         seen.append(kwargs)
-        return Completion(text='{"score": 0.8, "reason": "ok"}', usage={}, stop_reason="end_turn")
+        return Completion(text='{"score": 0.8, "reason": "ok"}', usage={"input_tokens": 1000, "output_tokens": 100}, stop_reason="end_turn")
 
     monkeypatch.setattr("pandion.llm.complete", fake)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
@@ -70,3 +70,26 @@ def test_a_judge_failure_is_counted_like_any_evaluator_failure(store, calls, mon
 def test_only_relevance_without_judge_says_it_needs_judge(store, capsys):
     assert cli.main(["review", "--evaluate", "--only", "relevance", "--url-env", VAR]) == 1
     assert "--judge" in capsys.readouterr().err
+
+
+def test_the_judge_cost_is_shown(store, calls, capsys):
+    cli.main(["review", "--evaluate", "--judge", "--url-env", VAR])
+    assert "Judge cost: about $0.0015" in capsys.readouterr().out
+
+
+def test_judge_without_an_api_key_exits_1_before_any_call(store, calls, monkeypatch, capsys):
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    assert cli.main(["review", "--evaluate", "--judge", "--url-env", VAR]) == 1
+    assert "ANTHROPIC_API_KEY" in capsys.readouterr().err
+    assert calls == []
+
+
+@pytest.mark.parametrize("flags", [["--judge"], ["--judge-model", "claude-haiku-4-5"]])
+def test_judge_flags_without_evaluate_are_refused(store, flags, capsys):
+    assert cli.main(["review", *flags, "--url-env", VAR]) == 1
+    assert "--evaluate" in capsys.readouterr().err
+
+
+def test_evaluate_with_promote_is_refused(store, tmp_path, capsys):
+    assert cli.main(["review", "--evaluate", "--promote", "with", "--questions", str(tmp_path / "q.json"), "--url-env", VAR]) == 1
+    assert "--promote" in capsys.readouterr().err

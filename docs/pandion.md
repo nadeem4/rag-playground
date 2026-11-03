@@ -2654,7 +2654,7 @@ A `TraceRecord` holds `trace_id`, `user_id`, `conversation_id`, `question` (as t
 | `add_feedback(trace_id, user_id, feedback)` | Adds feedback, replacing the same user's earlier feedback on that trace. Returns `False` when the trace is missing or is not this user's |
 | `save_scores(trace_id, scores)` | Adds scores to the trace's own |
 
-A trace holds the user's question and answer, so it follows the conversation. `delete_user`, `delete` and `expire` remove the traces and the feedback of the conversations they remove (and `delete_user` all of that user's), inside the same transaction. A store that implements `TraceStore` must do the same. Prove it with `trace_store_conformance`, from `pandion.testing`, which also checks that one user never reads or gives feedback on another user's trace.
+A trace holds the user's question, the answer and the passages it cited, so it follows the conversation. `delete_user`, `delete` and `expire` remove the traces and the feedback of the conversations they remove (and `delete_user` all of that user's), inside the same transaction. A store that implements `TraceStore` must do the same. Prove it with `trace_store_conformance`, from `pandion.testing`, which also checks that one user never reads or gives feedback on another user's trace.
 
 ```python
 from pandion.testing import trace_store_conformance
@@ -2687,7 +2687,7 @@ give_feedback(store, result.trace_id, "alice", "down", category="wrong", comment
 
 #### Read traces from the command line
 
-`pandion trace` and `pandion report` only read traces from the store you point at (the store may create its tables on first open). They print no more than the record or the summary shows. A trace holds the user's question and answer, so treat the output as you would the conversation.
+`pandion trace` and `pandion report` only read traces from the store you point at (the store may create its tables on first open). They print no more than the record or the summary shows. A trace holds the user's question, the answer and the passages it cited, so treat the output as you would the conversation.
 
 ```
 pandion trace TRACE_ID [--store sql] --url-env VAR [--json]
@@ -2755,7 +2755,7 @@ pandion review --evaluate [--only NAME ...] [--sample 1.0] [--rerun] [--judge [-
 
 A trace keeps the passages its answer cited (`sources`: an id and the text, each cut to 2,000 characters; traces saved before this have none). `pandion review --evaluate --judge [--judge-model ID]` adds the built-in `relevance` evaluator, which asks a model whether the answer addresses the question and stays within those passages, and saves a score from 0 to 1 as `relevance@1.score`.
 
-- It runs only with `--judge`; `--only relevance` without `--judge` is refused. It is one model call per trace, so combine it with `--sample`.
+- It runs only with `--judge`; `--only relevance` without `--judge` is refused, as is `--judge` without `--evaluate` or `--evaluate` together with `--promote`. It checks the model key once before the batch and exits 1 if it is missing. It is one model call per trace, so combine it with `--sample`; the summary ends with `Judge cost: about $...`.
 - The judge reads the stored question, answer and passages in fenced blocks (any `<` is escaped, so text cannot close a fence), at temperature 0. It never searches again. Models that need a name or URL (OpenRouter, custom) are refused.
 - A trace with no stored passages is counted as skipped. A reply that is not usable, or a failed call, is counted as a failure like any evaluator failure, and the trace is tried again next time.
 
@@ -2765,7 +2765,7 @@ A trace keeps the passages its answer cited (`sources`: an id and the text, each
 pandion review --promote TRACE_ID --questions questions.json [pipeline.yaml] --url-env VAR
 ```
 
-adds the trace to a JSON question set as one case: its id is the trace id, its question is the standalone question, the passages it cited are the expected `gold_answers`, and a follow-up carries the earlier turns of its conversation as `history`. The file is created if it is not there; promoting the same trace twice adds it once. The file loads and runs with `pandion eval` like any other set.
+adds the trace to a JSON question set as one case: its id is the trace id, its question is the standalone question (for a follow-up, the question as asked, with the earlier turns as `history`, so `pandion eval` replays the rewrite), the passages it cited are the expected `gold_answers`, each one a whole cited passage of up to 2,000 characters, so trim it to the sentence that answers (the command prints this hint). The file is created if it is not there; promoting the same trace twice adds it once. The case is a copy in your file, outside retention: `forget-user` and `expire` do not reach it. The file loads and runs with `pandion eval` like any other set.
 
 With a pipeline file it also runs the new case once and says whether the miss is in retrieval (the search does not return the cited passage), in the answer step (it does), or that the cited passage is no longer in the document. It exits 1, with a sentence, for a trace that does not exist, a trace with no stored passages, or a questions file that is not JSON.
 

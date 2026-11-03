@@ -53,7 +53,7 @@ def test_promote_a_followup_keeps_its_history(store, tmp_path):
     path = tmp_path / "q.json"
     assert promote(path, "follow") == 0
     (case,) = cases(path)
-    assert case["question"] == "What is the notice period?"
+    assert case["question"] == "and the notice?"  # the original, so evaluate replays the rewrite
     assert case["history"] == [{"question": "What is the contract?", "answer": "A lease."}]
 
 
@@ -85,16 +85,35 @@ def test_promote_a_trace_without_stored_passages_exits_1(store, tmp_path, capsys
     assert "passages" in capsys.readouterr().err
 
 
+def _fingerprint_of(path):
+    from pandion.evaluation import _fingerprint
+
+    return _fingerprint([{**q, "golds": q["gold_answers"]} for q in load_questions(path)["questions"]])
+
+
 def test_promoted_file_still_loads_and_hashes(store, tmp_path):
     path = tmp_path / "q.json"
     promote(path, "first")
+    before = _fingerprint_of(path)
     promote(path, "follow")
     loaded = load_questions(path)
     assert [q["id"] for q in loaded["questions"]] == ["first", "follow"]
     assert loaded["questions"][1]["history"]
-    from pandion.evaluation import _fingerprint
+    after = _fingerprint_of(path)
+    assert after != before
+    assert after == _fingerprint_of(path)  # a fresh load of the same file hashes the same
 
-    assert len(_fingerprint([{**q, "golds": q["gold_answers"]} for q in loaded["questions"]])) == 64
+
+def test_promote_prints_the_trim_hint(store, tmp_path, capsys):
+    promote(tmp_path / "q.json", "first")
+    assert "sentence that answers" in capsys.readouterr().out
+
+
+def test_promote_with_a_stale_passage_says_so(store, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "_load", lambda args: object())
+    monkeypatch.setattr("pandion.evaluation.stale_check", lambda p, q, *a, **k: SimpleNamespace(ok=False, warnings=[]))
+    assert promote(tmp_path / "q.json", "first", "pipe.yaml") == 0
+    assert "no longer in the document" in capsys.readouterr().out
 
 
 def test_promote_with_a_pipeline_names_retrieval_or_answer(store, tmp_path, monkeypatch, capsys):

@@ -78,23 +78,32 @@ class JudgeFailed(Exception):
     """The relevance judge gave no usable score. Counted as a failure by this type."""
 
 
-def relevance_evaluator(settings: Any, credentials: dict[str, Any] | None = None) -> OnlineEvaluator:
-    """The built-in `relevance` evaluator: a model judges the stored answer against the stored passages.
+def relevance_evaluator(settings: Any, credentials: dict[str, Any] | None = None) -> tuple[OnlineEvaluator, Any]:
+    """The built-in `relevance` evaluator and the `JudgeTally` that counts its cost.
+
+    A model judges the stored answer against the stored passages. Raises ValueError,
+    naming the variable, when the judge's model has no key in `credentials`, before any trace is read.
 
     It is not registered; `pandion review --evaluate --judge` hands it to `run_evaluators`
     as `extra`. A trace with no stored passages is skipped. It never searches again.
     """
-    from pandion.judge import judge_relevance
+    from pandion import llm
+    from pandion.judge import JudgeTally, judge_relevance
+
+    model = llm.CHAT_MODELS[settings.model]
+    if llm.key_for(model, credentials) is None:
+        raise ValueError(f"The relevance judge needs a key for {settings.model}: set {llm.KEY_NAMES[model.provider][1]}.")
+    tally = JudgeTally()
 
     def relevance(trace: TraceRecord) -> dict[str, float]:
         if not trace.sources:
             raise SkipTrace
-        verdict = judge_relevance(trace.standalone or trace.question, trace.answer, [s.text for s in trace.sources], settings, credentials)
+        verdict = judge_relevance(trace.standalone or trace.question, trace.answer, [s.text for s in trace.sources], settings, credentials, tally)
         if verdict is None:
             raise JudgeFailed
         return {"score": verdict.score}
 
-    return OnlineEvaluator("relevance", "1", {"score": "float"}, relevance)
+    return OnlineEvaluator("relevance", "1", {"score": "float"}, relevance), tally
 
 
 class ReviewResult(BaseModel):
@@ -107,6 +116,8 @@ class ReviewResult(BaseModel):
     by_evaluator: dict[str, int] = {}
     #: Failures by "name@version", then by exception type. Never a message.
     failures: dict[str, dict[str, int]] = {}
+    #: What the relevance judge's calls cost, when it ran.
+    judge_dollars: float = 0.0
 
 
 def _chosen(name: str, trace_id: str, sample: float) -> bool:

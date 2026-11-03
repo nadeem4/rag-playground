@@ -96,12 +96,15 @@ def _info(path: str) -> DocumentInfo:
 
 
 def test_answer_length_evaluator_scores_a_trace_and_is_listed():
-    from pandion.extend import TraceRecord, plugin_listing
+    from pandion.extend import EVALUATORS, TraceRecord, plugin_listing
 
     module = load("answer_length_evaluator")
-    trace = TraceRecord(trace_id="t", user_id="u", conversation_id="c", question="q", answer="Thirty days notice.")
-    assert module.answer_length(trace) == {"words": 3.0, "one_word": False}
-    assert any(r["kind"] == "online evaluator" and r["name"] == "answer_length" for r in plugin_listing())
+    try:
+        trace = TraceRecord(trace_id="t", user_id="u", conversation_id="c", question="q", answer="Thirty days notice.")
+        assert module.answer_length(trace) == {"words": 3.0, "one_word": False}
+        assert any(r["kind"] == "online evaluator" and r["name"] == "answer_length" for r in plugin_listing())
+    finally:
+        EVALUATORS.pop("answer_length", None)
 
 
 def test_owner_access_gives_the_team_folder_its_role():

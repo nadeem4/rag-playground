@@ -13,6 +13,7 @@ VAR = "PANDION_TEST_REVIEW_URL"
 @pytest.fixture(autouse=True)
 def clean_registry():
     before = dict(online.EVALUATORS)
+    online.EVALUATORS.clear()
     yield
     online.EVALUATORS.clear()
     online.EVALUATORS.update(before)

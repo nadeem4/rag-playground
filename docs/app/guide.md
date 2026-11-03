@@ -877,6 +877,8 @@ at home.
 3.13. If the pipeline cannot be packed, such as one that loads plugins, the sheet says
 why in plain words.
 
+The same project can also be made for a server: pandion-api's `POST /projects/serve` (at `/api/v2/projects/serve` here) writes the serve project, with the questions of each category in one `evals/questions.json`. The hosted demo applies its question cap to that route too. A page for it comes later.
+
 ## Read
 
 The Read page lists the author's posts on each step, in pipeline order, with the date

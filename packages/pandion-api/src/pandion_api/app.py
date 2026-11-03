@@ -10,7 +10,7 @@ from fastapi import FastAPI
 
 from pandion_api.documents import DocumentStore
 from pandion_api.policy import Policy
-from pandion_api.routes import ask, documents, evaluations, health, questions, results, sort, strategies
+from pandion_api.routes import ask, documents, evaluations, health, projects, questions, results, sort, strategies
 from pandion_api.routes import runs as run_routes
 from pandion_api.routes import settings as settings_routes
 from pandion_api.runs import RunManager
@@ -19,7 +19,7 @@ from pandion_api.settings import ApiSettings
 #: Every router, in the order docs/pandion-api/index.md lists them.
 ROUTERS = (
     health.router, strategies.router, documents.router, questions.router, run_routes.router, sort.router, ask.router,
-    evaluations.router, results.router, settings_routes.router,
+    evaluations.router, results.router, settings_routes.router, projects.router,
 )
 
 

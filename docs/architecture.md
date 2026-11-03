@@ -363,6 +363,9 @@ startup and answers `POST /chat` (and `POST /ask`, `/feedback`, `/conversations`
 find (`roles`) and how often they may ask (`limit`). The route reuses the run manager, so a turn
 is a run on a worker thread, and the client's disconnect cancels it.
 
+The playground serves pandion-api's `POST /api/v2/projects/serve`, which writes the serve project
+(`pandion.new_project(kind="serve")`) from a pipeline, its questions per category and where it will run.
+
 Serve starts hardened: it will not start without a Policy that overrides all three methods
 (`Policy.anonymous()` says so on purpose), a caller sees a generic error with a trace id, keys
 come from the environment only, and each user has a rate limit and an active-turn cap. A middleware

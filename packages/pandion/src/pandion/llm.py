@@ -305,8 +305,14 @@ def complete(
     max_tokens: int = 2048,
     public_only: bool = False,
     cache_prefix: str | None = None,
+    temperature: float | None = None,
 ) -> Completion:
     """One answer from any registered model. Raises a readable error, key-free.
+
+    `temperature` is sent only when given, and not to a model that rejects it
+    (Claude with adaptive thinking, and OpenAI's own models, which are
+    reasoning models). OpenRouter and custom endpoints get it as sent. The
+    default request is unchanged.
 
     `public_only` is for a server that strangers share: a custom endpoint must
     then be a public https address (`pandion.endpoints`).
@@ -333,6 +339,8 @@ def complete(
             "messages": [{"role": "user", "content": content}],
             **anthropic_request_extras(model.id),
         }
+        if temperature is not None and model.id not in ADAPTIVE_THINKING:
+            request["temperature"] = temperature
         response = call_anthropic(make_anthropic_client(api_key), request, api_key)
         usage: dict[str, int | None] = {
             "input_tokens": response.usage.input_tokens,
@@ -388,6 +396,9 @@ def complete(
             api_key or NO_KEY_PLACEHOLDER, base_url, public_only=public_only
         )
         where = f"the custom endpoint at {base_url}"
+
+    if temperature is not None and model.provider != "openai":
+        request["temperature"] = temperature
 
     response = _call_openai(client, request, api_key, where)
     choice = response.choices[0]

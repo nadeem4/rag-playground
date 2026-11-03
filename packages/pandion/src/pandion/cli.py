@@ -36,7 +36,7 @@ import yaml
 import pandion
 from pandion import ConfigError, Pipeline
 from pandion.extend import PluginError, TraceStore, format_trace, format_trace_report, parse_since, summarise_traces, get_conversation_store, load_plugins as load_modules, plugin_listing
-from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K, JudgeSettings
+from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K, JudgeSettings, QuestionSetError, load_questions
 
 #: Pandion's name for each key, and the environment variable it is read from.
 ENV_KEYS = {
@@ -398,9 +398,13 @@ def cmd_eval(args: argparse.Namespace) -> int:
     # Read the baseline before anything runs, so a wrong file costs nothing.
     baseline = pandion.evaluation.load_baseline(args.baseline) if args.baseline is not None else None
     p = _load(args)
+    try:
+        asked = load_questions(args.questions)["questions"]
+    except QuestionSetError:
+        asked = []  # the run below reports a bad set in its own words
     if judge.on and p.query is None:
         raise ValueError("--judge answers each question, so the pipeline file needs an answer: section.")
-    env = pandion.evaluation.environment(p)
+    env = pandion.evaluation.environment(p, asked)
     # A baseline from another platform or with other models is refused before any search is paid for.
     env_notes = pandion.evaluation.check_environment(baseline, env) if baseline is not None else []
     # An expected passage that is gone fails the run here, before any search is paid for.
@@ -430,6 +434,8 @@ def cmd_eval(args: argparse.Namespace) -> int:
             data["regression"] = {**regression.to_dict(), "gate_ok": regression.gate_ok(args.allow or 0, args.judge_gate)}
             data["reasked"] = [{"id": i, "found": found_again[i]} for i in reasked]
         print(json.dumps(data, indent=2))
+        if getattr(report, "rewrites_failed", 0):  # stdout stays the report alone
+            print(f"{report.rewrites_failed} follow-up question(s) could not be rewritten and were searched as written.", file=sys.stderr)
     else:
         print(report)
         print(cost_line(report.cost()))

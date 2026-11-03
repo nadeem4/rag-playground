@@ -14,6 +14,9 @@ content deciding which parser reads it rather than the name it was saved under.
 It is strict about the two things that make a set worthless: a question with no
 text, and a question with no gold passage. Those are refused, naming the row.
 
+A question may carry a `history`: earlier `{question, answer}` turns it follows
+(JSON only). The key is left out when empty, so older sets are unchanged.
+
 **The check** exists because a gold passage that was retyped rather than copied
 never matches at evaluation time, and the retriever gets the blame. Each gold
 passage is looked for in the document as the parser reads it: exactly, then
@@ -214,7 +217,7 @@ def _question(label: str, record: dict, fmt: str, max_golds: int | None = None) 
         )
     if max_golds is not None and len(golds) > max_golds:
         raise QuestionSetError(f"{label}: {len(golds)} gold passages; at most {max_golds} fit in one question")
-    return {
+    out = {
         "id": _one(record.get("id")),
         "question": question,
         "gold_answers": golds,
@@ -222,6 +225,27 @@ def _question(label: str, record: dict, fmt: str, max_golds: int | None = None) 
         "tags": _list(record.get("tags"), ","),
         "document": _one(record.get("document")),
     }
+    history = _history(label, record.get("history"))
+    if history:  # only when there is one, so every older set reads and hashes as before
+        out["history"] = history
+    return out
+
+
+def _history(label: str, value: Any) -> list[dict[str, str]]:
+    """The earlier turns a follow-up question comes after: `{question, answer}` pairs."""
+    if value in (None, "", []):
+        return []
+    pairs = value if isinstance(value, list) else None
+    ok = pairs is not None and all(
+        isinstance(t, dict) and _one(t.get("question")) and isinstance(t.get("answer"), str) and t["answer"].strip()
+        for t in pairs
+    )
+    if not ok:
+        raise QuestionSetError(
+            f"{label}: history must be a list of pairs, each with a question and an answer. "
+            "Write it in a JSON file"
+        )
+    return [{"question": _one(t["question"]), "answer": _one(t["answer"])} for t in pairs]
 
 
 def _one_document(document: str, questions: list[dict], labels: list[str], *, strict: bool = True) -> str:

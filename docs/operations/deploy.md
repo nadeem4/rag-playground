@@ -152,29 +152,14 @@ on localhost work, question sets are kept beside their document, and the Dev men
 
 ## Variables and secrets
 
-| Variable | Default | What it does |
-|---|---|---|
-| `RAG_PLAYGROUND_DEMO` | unset | `1` turns on demo mode. Any other value leaves it off. |
-| `PORT` | `8000` | The port, when `--port` is not given. |
-| `RAG_PLAYGROUND_HOST` | `127.0.0.1` | The interface, when `--host` is not given. |
-| `RAG_PLAYGROUND_SOURCES` | `sources/` in the repo | Where uploads and uploaded question sets are kept. `/data/sources` in Docker. |
-| `RAG_PLAYGROUND_ARTIFACTS` | `artifacts/` in the repo | Where cached run results are kept. `/data/artifacts` in Docker. |
-| `HF_HOME` | `~/.cache/huggingface` | Hugging Face's own variable: where models are downloaded. `/data/hf` in Docker. |
-| `RAG_PLAYGROUND_PORT` | `8000` | Docker Compose only: the port published on your machine. |
+Every variable and secret, with its default and what it does, is in [Configuration](configuration.md#environment-variables).
 
 The sources and artifacts folders must sit side by side in one folder, named `sources`
 and `artifacts` (the Docker image uses `/data/sources` and `/data/artifacts`); the server
 refuses to start otherwise. Embeddings are cached in `<data>/embeddings` beside `sources`
 and `artifacts`; an old `artifacts/.embcache` folder is no longer read and can be deleted.
 
-Secrets, each optional and used only with demo mode off:
-
-| Secret | Provider |
-|---|---|
-| `ANTHROPIC_API_KEY` | Anthropic |
-| `OPENAI_API_KEY` | OpenAI |
-| `OPENROUTER_API_KEY` | OpenRouter |
-| `OPENAI_COMPATIBLE_API_KEY` | A custom OpenAI-compatible endpoint |
+Provider keys are optional and used only with demo mode off; they are listed in [Configuration](configuration.md#provider-keys).
 
 Locally, put them in the environment or in `.env`; see
 [models-and-keys.md](../app/models-and-keys.md#adding-a-key). On a Space, add them as secrets.

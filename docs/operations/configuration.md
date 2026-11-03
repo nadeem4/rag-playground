@@ -1,6 +1,6 @@
 # Configuration
 
-Every setting that comes from the environment or from code, in one place. A test (`tests/test_configuration_doc.py`) fails if the code reads a `RAG_PLAYGROUND_*` or `PANDION_*` variable that is not in the first table, so this page stays true.
+Every setting that comes from the environment or from code, in one place. A test (`tests/test_configuration_doc.py`) fails if the code reads a `RAG_PLAYGROUND_*` or `PANDION_*` variable that is not in a table on this page, so this page stays true.
 
 ## Contents
 
@@ -20,7 +20,7 @@ Every setting that comes from the environment or from code, in one place. A test
 | `RAG_PLAYGROUND_ARTIFACTS` | the app | `artifacts/` in the repo | Where cached run results are kept. `/data/artifacts` in Docker. | [deploy](deploy.md#variables-and-secrets) |
 | `RAG_PLAYGROUND_PORT` | Docker Compose | `8000` | The port published on your machine. | [deploy](deploy.md#run-it-with-docker) |
 | `RAG_PLAYGROUND_COMMIT` | the app | empty | The commit a Space was published from. `scripts/publish_space.py --commit` sets it. `/api/health` reports it. | [release](release.md#staging) |
-| `RAG_PLAYGROUND_VERSION` | the app | empty | The release tag a Space was published from. `scripts/publish_space.py --version` sets it. `/api/health` reports it. | [release](release.md#staging) |
+| `RAG_PLAYGROUND_VERSION` | the app | the installed package version | The release tag a Space was published from. `scripts/publish_space.py --version` sets it. `/api/health` reports it. | [release](release.md#staging) |
 | `PANDION_CONVERSATIONS_URL` | pandion-api serve mode | unset | A SQLAlchemy url for the conversation and trace store. Without it, serve mode uses a SQLite file in the data folder. | [serve mode](../pandion-api/serve-mode.md#your-users-data) |
 | `PANDION_LOG_CONTENT` | pandion-api serve mode | unset | `true` adds the question and the answer to the turn log and to trace span attributes. Without it, they are not logged. | [serve mode](../pandion-api/serve-mode.md#logs-and-traces) |
 | `PORT` | the app | `8000` | The port, when `--port` is not given. | [deploy](deploy.md#run-it-with-uv) |
@@ -49,6 +49,8 @@ These are read by the scripts and workflows in [the release runbook](release.md)
 | `GITHUB_TOKEN` or `GH_TOKEN` | `scripts/release_gate.py` | Lets the gate read the commit status of staging. |
 | `PR_TITLE` | `scripts/check_pr_title.py` | The pull request title to check. The workflow sets it. |
 | `ANTHROPIC_API_KEY` | `scripts/record_clips.py` | The key the Home clip recorder sends for Chat. |
+| `PANDION_CHECK_VENV` | `checks/pandion-install/` | Internal, CI checks only. The folder of the new environment the install check tests. |
+| `PANDION_CHECK_SAMPLES` | `checks/pandion-install/` | Internal, CI checks only. The sample PDFs, joined with the path separator. |
 
 ## Serve mode settings in code
 

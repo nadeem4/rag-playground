@@ -78,6 +78,7 @@ it for your site's users.
 ## Learn more
 
 - [Docs index](docs/index.md): every page, grouped by who reads it.
+- [The playground app](playground/README.md): how its server and web app fit together.
 - [Architecture](docs/architecture.md) and [Lessons learned](docs/lessons-learned.md).
 - [Contributing](CONTRIBUTING.md), [Security](SECURITY.md) and
   [Code of conduct](CODE_OF_CONDUCT.md).

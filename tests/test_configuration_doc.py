@@ -15,6 +15,7 @@ SOURCES = [
     *(ROOT / "packages").glob("*/src/**/*.py"),
     *(ROOT / "playground" / "backend").rglob("*.py"),
     *(ROOT / "scripts").glob("*.py"),
+    *(ROOT / "checks").rglob("*.py"),
     ROOT / "Dockerfile",
     ROOT / "docker-compose.yml",
 ]

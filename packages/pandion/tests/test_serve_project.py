@@ -177,6 +177,37 @@ def test_pyproject_pins_pandion_and_pandion_api(tmp_path):
     assert "package = false" in text
 
 
+LOCAL = {**OFFLINE, "index": {**OFFLINE["index"], "embed": {"use": "bge-small-en-v1.5"}}}
+
+
+def test_pyproject_with_the_local_extra_locks_cpu_torch(tmp_path):
+    text = (make(tmp_path, LOCAL) / "pyproject.toml").read_text(encoding="utf-8")
+    assert "local" in text.split("dependencies")[1].split("]")[0]
+    assert "torch = [{ index = \"pytorch-cpu\", marker = \"sys_platform == 'linux'\" }]" in text
+    assert "torchvision = [{ index = \"pytorch-cpu\", marker = \"sys_platform == 'linux'\" }]" in text
+    assert '[[tool.uv.index]]\nname = "pytorch-cpu"\nurl = "https://download.pytorch.org/whl/cpu"\nexplicit = true' in text
+
+
+def test_pyproject_without_the_local_extra_has_no_torch_source(tmp_path):
+    assert "pytorch-cpu" not in (make(tmp_path) / "pyproject.toml").read_text(encoding="utf-8")
+
+
+def test_pyproject_tests_run_from_the_tests_folder(tmp_path):
+    text = (make(tmp_path) / "pyproject.toml").read_text(encoding="utf-8")
+    assert '[tool.pytest.ini_options]\ntestpaths = ["tests"]' in text
+
+
+def test_readme_names_the_docker_gate_not_pytest(tmp_path):
+    text = (make(tmp_path) / "README.md").read_text(encoding="utf-8")
+    assert "`pytest tests/test_quality.py` runs the same command" not in text
+    assert "for CI with the pipeline's models available" in text
+
+
+def test_address_with_a_query_string_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="query string"):
+        make(tmp_path, index_store="qdrant", index_url="https://qdrant.example.com:6333?api_key=abc")
+
+
 def test_pyproject_has_no_jwt_dependency(tmp_path):
     text = (make(tmp_path) / "pyproject.toml").read_text(encoding="utf-8").lower()
     assert "jwt" not in text and "jose" not in text

@@ -69,6 +69,19 @@ dev = ["pytest>=8"]
 # An application, not a library: `uv sync` installs the dependencies and nothing else.
 [tool.uv]
 package = false
+
+# On Linux (the Docker image) take CPU-only torch, not the multi-GB CUDA build.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 === .env.example
 # Names only. Put the values in .env (never commit it) or in your platform's secret store.
 

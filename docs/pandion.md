@@ -2545,7 +2545,7 @@ print(second.text, second.source_ids)
 fold_summary(store, conversation_id=first.conversation_id, user_id="ana")  # after replying
 ```
 
-`chat_turn(p, store, *, user_id, question, conversation_id=None, settings=None, roles=None, credentials=None, on_event=None, trace_id=None, cancel=None)` returns a `TurnResult`: `conversation_id`, `question` (as typed), `standalone`, `text`, `source_ids` (the unique piece ids the answer cites, or the pieces a `search` answer returned), and `answer`, the pipeline's `Answer`. Leave `conversation_id` out to start a new conversation. An id that belongs to another user raises `ConversationNotFound` before anything is asked. When the answer fails, `text` is empty, no turn is stored, and `answer` says why; if that was the first turn of a new conversation, `conversation_id` is empty because nothing was stored. `cancel` is a `threading.Event`, handed to the pipeline as it is: set it and the step that is running finishes and no other starts. A cancelled answer is not ok, so no turn is stored.
+`chat_turn(p, store, *, user_id, question, conversation_id=None, settings=None, roles=None, credentials=None, on_event=None, trace_id=None, cancel=None)` returns a `TurnResult`: `conversation_id`, `question` (as typed), `standalone`, `text`, `source_ids` (the unique piece ids the answer cites, or the pieces a `search` answer returned), `answer`, the pipeline's `Answer`, and `trace_id` (the id of the turn's trace). Leave `conversation_id` out to start a new conversation. An id that belongs to another user raises `ConversationNotFound` before anything is asked. When the answer fails, `text` is empty, no turn is stored, and `answer` says why; if that was the first turn of a new conversation, `conversation_id` is empty because nothing was stored. `cancel` is a `threading.Event`, handed to the pipeline as it is: set it and the step that is running finishes and no other starts. A cancelled answer is not ok, so no turn is stored.
 
 - A first turn costs no rewrite call. When the rewrite call fails, or its reply is empty, or longer than 300 characters or more than one line, the question is searched as typed, so a reply is never lost to a rewrite.
 - The history is placed inside a labelled block and the model is told it is text to read, not instructions.
@@ -2557,7 +2557,7 @@ The example [`chat_turn.py`](../examples/pandion/chat_turn.py) runs a first turn
 
 ### Traces
 
-A trace is one record of what a chat turn did, kept so a person can read it later. It is **Provisional**. After an answered turn, `chat_turn` saves a `TraceRecord` when the store is also a `TraceStore`; a store without those methods keeps chatting and saves no trace. A failed or cancelled answer saves none, like the turn itself. A trace that cannot be saved is logged and never fails the turn.
+A trace is one record of what a chat turn did, kept so a person can read it later. It is **Provisional**. After an answered turn, `chat_turn` saves a `TraceRecord` when the store is also a `TraceStore`; a store without those methods keeps chatting and saves no trace. A failed or cancelled answer saves none, like the turn itself. A trace that cannot be saved is logged (the error type only, never its text, which may hold the question) and never fails the turn. `expire` also removes traces older than the limit, even when their conversation is gone.
 
 A `TraceRecord` holds `trace_id`, `user_id`, `conversation_id`, `question` (as typed), `standalone`, `answer`, `label`, `source_ids`, `stages`, `cost`, `latency_ms`, `flags`, `scores`, `feedback` and `created_at`.
 
@@ -2572,7 +2572,7 @@ A `TraceRecord` holds `trace_id`, `user_id`, `conversation_id`, `question` (as t
 
 | Method | What it does |
 | --- | --- |
-| `save_trace(record)` | Keeps the record, stamping `created_at` when empty. Saving an id again replaces the record and its feedback |
+| `save_trace(record)` | Keeps the record, stamping `created_at` when empty. Saving an id again replaces the record and its feedback; an id that belongs to another user is refused with `ValueError` |
 | `trace(trace_id, user_id=None)` | The record with its feedback. With a `user_id`, another user's trace is `None`; without one it is any trace, for the operator's tools |
 | `traces(*, since=None, flagged_only=False, limit=100)` | Newest first. `since` is a UTC ISO time; `flagged_only` keeps records that have a flag |
 | `add_feedback(trace_id, user_id, feedback)` | Adds feedback. Returns `False` when the trace is missing or is not this user's |

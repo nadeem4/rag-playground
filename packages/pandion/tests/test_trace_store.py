@@ -99,6 +99,31 @@ def test_deleting_a_conversation_removes_its_traces(tmp_path):
     assert store.trace("t1") is None
 
 
+def test_the_engine_hides_statement_parameters(tmp_path):
+    store = make_store(tmp_path)
+    store.check()
+    assert store._engine.hide_parameters is True
+
+
+def test_save_trace_never_replaces_another_users_trace(tmp_path):
+    store = make_store(tmp_path)
+    store.save_trace(make_record(answer="mine"))
+    with pytest.raises(ValueError):
+        store.save_trace(make_record(user_id="u2"))
+    assert store.trace("t1", "u1").answer == "mine"
+
+
+def test_expire_removes_old_orphaned_traces_and_their_feedback(tmp_path):
+    store = make_store(tmp_path)
+    store.save_trace(make_record(trace_id="old", conversation_id="gone", created_at=ago(40)))
+    store.add_feedback("old", "u1", Feedback(value="up"))
+    store.save_trace(make_record(trace_id="new", conversation_id="gone"))
+    store.expire(30)
+    assert [r.trace_id for r in store.traces()] == ["new"]
+    store.save_trace(make_record(trace_id="old", conversation_id="gone"))
+    assert store.trace("old").feedback == []
+
+
 def test_a_newer_trace_format_is_refused(tmp_path):
     import sqlalchemy as sa
 

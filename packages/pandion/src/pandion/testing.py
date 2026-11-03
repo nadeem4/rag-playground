@@ -461,6 +461,30 @@ def check_delete_user_removes_their_traces_and_feedback(store):
     _expect(store.trace("t1").feedback == [], "delete_user must remove the user's feedback too")
 
 
+@_trace_check
+def check_delete_removes_traces(store):
+    store.append("c1", "u1", _turn())
+    store.save_trace(_record())
+    store.add_feedback("t1", "u1", Feedback(value="up"))
+    store.save_trace(_record("t2", conversation_id="c2"))
+    store.delete("c1", "u1")
+    _expect(store.trace("t1") is None, "delete must remove the conversation's traces")
+    _expect(store.trace("t2") is not None, "delete must leave other conversations' traces alone")
+    store.save_trace(_record())
+    _expect(store.trace("t1").feedback == [], "delete must remove the conversation's feedback too")
+
+
+@_trace_check
+def check_expire_removes_traces(store):
+    store.append("old", "u1", Turn(question="q", answer="a", created_at=_ago(40)))
+    store.save_trace(_record("t-old", conversation_id="old"))
+    store.add_feedback("t-old", "u1", Feedback(value="up"))
+    store.save_trace(_record("t-new", conversation_id="new"))
+    store.expire(30)
+    _expect(store.trace("t-old") is None, "expire must remove the traces of expired conversations")
+    _expect(store.trace("t-new") is not None, "expire must keep traces of live conversations")
+
+
 def trace_store_conformance(factory: Callable[[], ConversationStore]) -> None:
     """Run every trace check on a fresh store that is also a `TraceStore`; the first failure raises
     AssertionError(f"{name}: {why}")."""

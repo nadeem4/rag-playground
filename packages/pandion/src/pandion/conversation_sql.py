@@ -94,7 +94,7 @@ class SqlStore:
             sa = require("sqlalchemy", extra="sql", step=_STEP)
             url = self._url()  # a missing variable is a plain sentence, raised before anything opens
             try:
-                engine = sa.create_engine(url)
+                engine = sa.create_engine(url, hide_parameters=True)  # a failed statement must not echo user text
                 tables = self._make_tables(sa)
                 self._prepare(sa, engine, tables)
             except (FormatTooNew, ImportError):
@@ -295,6 +295,7 @@ class SqlStore:
                 self._delete_traces(sa, conn, self._t["traces"].c.conversation_id.in_(ids))
                 conn.execute(sa.delete(turns).where(turns.c.conversation_id.in_(ids)))
                 conn.execute(sa.delete(c).where(c.c.id.in_(ids)))
+            self._delete_traces(sa, conn, self._t["traces"].c.created_at < cutoff)  # also traces with no conversation left
         return len(old)
 
     # -- traces (the optional TraceStore) ----------------------------------
@@ -310,6 +311,9 @@ class SqlStore:
         t, feedback = self._t["traces"], self._t["feedback"]
         record = record.model_copy(update={"created_at": _utc(record.created_at) or utc_now(), "feedback": []})
         with self._engine.begin() as conn:
+            owner = conn.execute(sa.select(t.c.user_id).where(t.c.trace_id == record.trace_id)).scalar()
+            if owner is not None and owner != record.user_id:
+                raise ValueError(f"Trace '{record.trace_id}' already belongs to another user.")
             conn.execute(sa.delete(feedback).where(feedback.c.trace_id == record.trace_id))
             conn.execute(sa.delete(t).where(t.c.trace_id == record.trace_id))
             conn.execute(sa.insert(t).values(

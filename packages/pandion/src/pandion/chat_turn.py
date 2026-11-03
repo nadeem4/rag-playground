@@ -95,6 +95,8 @@ class TurnResult:
     text: str
     source_ids: list[str]
     answer: Any
+    #: The id of the turn's trace record (the one passed, or the one the turn made).
+    trace_id: str = ""
 
 
 def _call(model_id: str, system: str, user: str, credentials: dict | None, max_tokens: int) -> str:
@@ -191,7 +193,7 @@ def chat_turn(
     )
     if not answer.ok:
         # Nothing was stored, so a new conversation has no id yet.
-        return TurnResult(conversation_id or "", question, standalone, "", [], answer)
+        return TurnResult(conversation_id or "", question, standalone, "", [], answer, trace_id)
     conversation_id = conversation_id or uuid.uuid4().hex
     text, sources = answer.text, _source_ids(answer)
     if settings.strip_urls:
@@ -200,14 +202,15 @@ def chat_turn(
         conversation_id, user_id,
         Turn(question=question, answer=text, rewrite=standalone, source_ids=sources, trace_id=trace_id),
     )
-    result = TurnResult(conversation_id, question, standalone, text, sources, answer)
+    result = TurnResult(conversation_id, question, standalone, text, sources, answer, trace_id)
     if isinstance(store, TraceStore):
         try:
             store.save_trace(record_from_turn(
                 result, user_id=user_id, conversation_id=conversation_id, question=question,
                 started=started, trace_id=trace_id))
         except Exception as exc:  # noqa: BLE001  (a trace is a record of the turn, never a reason to lose it)
-            logger.warning("Trace %s was not saved (%s: %s).", trace_id, type(exc).__name__, exc)
+            # Only the type: a database error can carry the question and answer.
+            logger.warning("Trace %s was not saved (%s).", trace_id, type(exc).__name__)
     return result
 
 

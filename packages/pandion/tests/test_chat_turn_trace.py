@@ -66,3 +66,17 @@ def test_trace_stages_list_every_stage_once(store):
     assert [s["name"] for s in stages] == ["search", "answer"]
     assert stages[0]["ms"] == 12 and stages[0]["dollars"] is None
     assert stages[1]["dollars"] == pytest.approx(0.0015, abs=1e-6)
+
+
+def test_a_failing_trace_save_does_not_log_the_question(store, monkeypatch, caplog):
+    def boom(self, record):
+        raise RuntimeError(f"[parameters: ({record.question!r}, {record.answer!r})]")
+
+    monkeypatch.setattr(type(store), "save_trace", boom)
+    chat_turn(StubPipeline(), store, user_id="u", question="my secret question", trace_id="x")
+    assert "my secret question" not in caplog.text and "RuntimeError" in caplog.text
+
+
+def test_the_result_carries_the_trace_id(store):
+    assert chat_turn(StubPipeline(), store, user_id="u", question="q", trace_id="abc").trace_id == "abc"
+    assert len(chat_turn(StubPipeline(), store, user_id="u", question="q").trace_id) == 32

@@ -1264,6 +1264,30 @@ The `Regression` it returns has these fields:
   before categories existed still compare: categories are read from each question's `tags`.
   `to_dict()` carries `by_category` and `gate_ok` beside its old keys.
 
+**Follow-up questions.** A question may carry a `history`: the earlier turns it comes
+after, as `{"question", "answer"}` pairs (JSON files only; the key is left out when there
+is none, so older sets and their fingerprints do not change).
+
+```json
+{
+  "id": "notice",
+  "question": "And the notice?",
+  "gold_answer": "Notice is 30 days.",
+  "history": [{"question": "Tell me about the lease.", "answer": "It runs for two years."}]
+}
+```
+
+`evaluate` makes such a question standalone first, the way a chat turn does
+(`standalone_question`), and searches with that. The rewrite uses the chat settings'
+rewrite model: pass `chat=ChatSettings(rewrite_model=...)` to choose one, else the chat
+default (`claude-haiku-4-5`) runs, so the key for it goes in `credentials`. A question
+without a history makes no model call. If the rewrite fails or comes back too long, the
+question is searched as written and counted in `report.rewrites_failed`. Each follow-up
+result records `history`, `rewrite` and `rewrite_reason` (`rewritten`, `failed` or
+`too long`) in `to_dict()`, and a follow-up with no `category:` tag counts as its own
+category, `follow-up`, in `by_category`. `reask_missed` takes the same `chat=`;
+`stale_check` searches nothing, so it needs no rewrite.
+
 **Tag your questions by category.** Put `category:<name>` in a question's `tags`, and keep
 one file per category as a habit, such as `evals/billing.json` and `evals/returns.json`
 (then run `pandion eval` on a merged set, or one file at a time). About 10 questions per

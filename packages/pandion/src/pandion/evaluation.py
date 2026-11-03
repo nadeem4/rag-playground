@@ -30,9 +30,11 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
+from pandion.chat_turn import ChatSettings, standalone_question
 from pandion.config import ConfigError, _block, from_dict, to_dict
 from pandion.cost import STAGE_ORDER, total_cost
 from pandion.cost import cost as _cost
+from pandion.conversation_store import Conversation, Turn
 from pandion.events import event
 from pandion.payloads import ChunkSet, Query, RetrievalResult
 from pandion.pipeline import IndexReport, Pipeline, Retrieval
@@ -150,6 +152,9 @@ class QuestionResult:
     A question with no `id` in the set is named by its place, "question 3".
     `document` is the document the question names, by its content hash (its
     location, for a source other than upload), or None when it names none.
+    A follow-up case carries its earlier `history`; `rewrite` is the standalone
+    question the search used and `rewrite_reason` how it came about
+    (`rewritten`, or `failed` and `too long` when the question itself was used).
     """
 
     id: str
@@ -164,6 +169,9 @@ class QuestionResult:
     error: str | None = None
     retrieval: Retrieval | None = field(default=None, repr=False)
     document: str | None = None
+    history: list[dict[str, str]] = field(default_factory=list)
+    rewrite: str | None = None
+    rewrite_reason: str | None = None
 
     @property
     def result_id(self) -> str | None:
@@ -176,6 +184,9 @@ class QuestionResult:
     def to_dict(self) -> dict[str, Any]:
         """Plain JSON, without the retrieval, but with its final result's id
         (`result_id`), so the hit rows can be fetched by id."""
+        followup = {}
+        if self.history:  # only follow-up cases carry these, so older reports are unchanged
+            followup = {"history": list(self.history), "rewrite": self.rewrite, "rewrite_reason": self.rewrite_reason}
         return {
             "id": self.id,
             "question": self.question,
@@ -189,6 +200,7 @@ class QuestionResult:
             "error": self.error,
             "result_id": self.result_id,
             "document": self.document,
+            **followup,
         }
 
 
@@ -213,6 +225,11 @@ class EvaluationReport:
     @property
     def total(self) -> int:
         return len(self.questions)
+
+    @property
+    def rewrites_failed(self) -> int:
+        """Follow-up cases searched with their own wording because the rewrite failed."""
+        return sum(q.rewrite_reason in ("failed", "too long") for q in self.questions)
 
     @property
     def found(self) -> int:
@@ -272,6 +289,12 @@ class EvaluationReport:
         if failed:
             total += f" {failed} question{'' if failed == 1 else 's'} could not be scored."
         out = [*lines, total]
+        if self.rewrites_failed:
+            n = self.rewrites_failed
+            out.append(
+                f"{n} follow-up question{'' if n == 1 else 's'} could not be rewritten, "
+                f"so {'it was' if n == 1 else 'they were'} searched as written."
+            )
         if self.cancelled:
             out.append("Stopped before every question was asked.")
         return "\n".join(out)
@@ -287,6 +310,7 @@ class EvaluationReport:
             "document_shas": list(self.document_shas),
             "nondeterministic": list(self.nondeterministic),
             "asked_again": list(self.asked_again),
+            **({"rewrites_failed": self.rewrites_failed} if self.rewrites_failed else {}),
             **self.totals(),
             "by_tag": self.by_tag(),
             "by_document": self.by_document(),
@@ -355,7 +379,11 @@ _POSITIONAL = re.compile(r"question \d+")
 
 def _fingerprint(questions: list[dict[str, Any]]) -> str:
     """A hash of the questions and their gold passages, whatever their order."""
-    entries = sorted(json.dumps([q["question"], sorted(q["golds"])]) for q in questions)
+    # The history joins the hash only when there is one, so older sets keep their fingerprint.
+    entries = sorted(
+        json.dumps([q["question"], sorted(q["golds"]), *([q["history"]] if q.get("history") else [])])
+        for q in questions
+    )
     return hashlib.sha256(json.dumps(entries).encode("utf-8")).hexdigest()
 
 
@@ -409,7 +437,7 @@ def category_of(question: dict[str, Any]) -> str:
     for tag in question.get("tags") or []:
         if isinstance(tag, str) and tag.startswith("category:") and tag[9:]:
             return tag[9:]
-    return "uncategorized"
+    return "follow-up" if question.get("history") else "uncategorized"
 
 
 def _by_category(pairs: list[tuple[dict[str, Any], dict[str, Any]]]) -> dict[str, dict[str, Any]]:
@@ -637,6 +665,7 @@ def evaluate(
     credentials: dict[str, str] | None = None,
     on_event: Callable[[dict[str, Any]], None] | None = None,
     cancel: threading.Event | None = None,
+    chat: ChatSettings | None = None,
 ) -> EvaluationReport:
     """Search for every question in `questions` and say whether the answer came back.
 
@@ -661,6 +690,13 @@ def evaluate(
     `on_event` gets every event of every search, with the question's id under
     "question", and a "question_finished" event after each question. `cancel`
     stops before the next question; the report then says it was cancelled.
+
+    A question with a `history` is a follow-up: it is first made standalone the
+    way a chat turn does (`standalone_question`, with `chat`'s rewrite model,
+    else the chat default) and the search uses that; a rewrite that fails falls
+    back to the question as written and is counted in `rewrites_failed`. A
+    question without one makes no model call. Gold passages are matched
+    against the pieces as before.
     """
     if top_k < 1:
         raise ValueError(
@@ -693,8 +729,15 @@ def evaluate(
         if on_event is not None:
             def emit(e: dict[str, Any], qid: str = qid) -> None:
                 on_event({**e, "question": qid})
+        text, reason = q["question"], None
+        history = q.get("history") or []
+        if history:
+            conversation = Conversation(
+                id="eval", user_id="eval", turns=[Turn(question=t["question"], answer=t["answer"]) for t in history]
+            )
+            text, reason = standalone_question(conversation, q["question"], chat or ChatSettings(), credentials)
         retrieval = p.retrieval._retrieve(
-            q["question"], None, resolved, credentials=credentials, on_event=emit, cancel=cancel
+            text, None, resolved, credentials=credentials, on_event=emit, cancel=cancel
         )
         if not retrieval.ok and cancel is not None and cancel.is_set():
             cancelled = True
@@ -704,6 +747,8 @@ def evaluate(
             "id": qid, "question": q["question"], "golds": q["gold_answers"], "tags": q["tags"],
             "document": None if owner is None else sha or owner,
         }
+        if history:
+            common.update(history=history, rewrite=text, rewrite_reason=reason)
         if not retrieval.ok:
             result = QuestionResult(
                 **common, found=False, rank=None, lost_at=None, trace=None, score={},
@@ -751,6 +796,7 @@ def reask_missed(
     *,
     documents: Any = None,
     credentials: dict[str, str] | None = None,
+    chat: ChatSettings | None = None,
 ) -> tuple[EvaluationReport, list[str]]:
     """Ask each question newly missed against `baseline` once more, when a
     retrieval step can differ between runs (`report.nondeterministic`).
@@ -768,7 +814,8 @@ def reask_missed(
         for n, q in enumerate(load_questions(questions)["questions"], start=1)
     ]
     again = evaluate(
-        p, [q for q in asked if q["id"] in missed], top_k, documents=documents, credentials=credentials
+        p, [q for q in asked if q["id"] in missed], top_k, documents=documents, credentials=credentials,
+        chat=chat,
     )
     passed = {q.id: q for q in again.questions if q.found}
     # The ask that is not kept still cost something.

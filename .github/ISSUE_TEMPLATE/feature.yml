@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest an idea or an improvement.
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part?
+      options:
+        - App
+        - pandion
+        - pandion-api
+        - Docs
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem do you want to solve?
+      description: Describe what you were trying to do and what got in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to see?
+      description: Your idea in a few sentences. Other ways you thought of are welcome too.
+    validations:
+      required: true

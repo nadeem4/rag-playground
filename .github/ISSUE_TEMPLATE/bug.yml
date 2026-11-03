@@ -1,0 +1,51 @@
+name: Bug report
+description: Something is broken or gives a wrong result.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For a security problem, do not use this form. Follow [SECURITY.md](https://github.com/nadeem4/rag-playground/security/policy) instead.
+  - type: dropdown
+    id: part
+    attributes:
+      label: Which part?
+      options:
+        - App (hosted demo or local)
+        - pandion
+        - pandion-api
+        - Docs
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The app version, or the output of `pip show pandion`.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Short steps, with the document, pipeline and question if you can share them.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Remove any keys or private data first.
+      render: shell

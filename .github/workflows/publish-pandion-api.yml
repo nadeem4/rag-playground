@@ -25,9 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
         with:
-          enable-cache: true
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
       - run: uv build packages/pandion --out-dir dist
       - run: uv build packages/pandion-api --out-dir dist
       - run: >-
@@ -53,4 +53,4 @@ jobs:
           path: dist/
       # Pandion has its own workflow and tag; this one uploads only pandion-api.
       - run: rm -f dist/pandion-[0-9]*
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1

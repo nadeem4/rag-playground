@@ -13,6 +13,7 @@ dependencies = [
     "python-multipart>=0.0.32",
 ]
 license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["retrieval", "rag", "rest", "fastapi", "pandion"]
 classifiers = [
     "Development Status :: 3 - Alpha",

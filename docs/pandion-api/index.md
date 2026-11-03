@@ -7,9 +7,11 @@ Everything a particular site wants to limit (who may read a document, how big an
 may be, how many runs may work at once) is one `Policy` object. The default allows
 everything.
 
-Install it with `pip install pandion-api`; it works with the Pandion versions its
-`pyproject.toml` declares (`>=0.8.0,<0.9` today). It lives in this repository as a
-workspace package (`packages/pandion-api/`). RAG Playground's server is pandion-api with the playground's own `Policy`,
+It lives in this repository as a workspace package (`packages/pandion-api/`) and goes to
+PyPI from its own tag (see the [release runbook](../operations/release.md#publishing-pandion-api));
+until then, install it with `uv sync --extra dev`. It works with the Pandion versions its
+`pyproject.toml` declares (`>=0.8.0,<0.9` today). The pipeline's store needs its extra,
+for example `pip install pandion-api "pandion[lancedb]"` once published. RAG Playground's server is pandion-api with the playground's own `Policy`,
 plus the playground's teaching routes.
 
 ## Contents

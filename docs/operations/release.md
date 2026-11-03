@@ -186,7 +186,8 @@ The **Publish pandion-api** workflow (`.github/workflows/publish-pandion-api.yml
 1. checks the tag names the package's version;
 2. builds the pandion-api wheel and source archive, and the Pandion wheel the check needs;
 3. installs the pandion-api wheel in a new environment, builds a serve-mode app from it and
-   calls `/health` (`checks/pandion-api-install/run_check.py --wheel ... --find-links dist --tag ...`);
+   calls `/health` (`checks/pandion-api-install/run_check.py --wheel ... --find-links dist --tag ...`;
+   it builds Pandion locally with `--find-links`, so it does not test the published Pandion);
 4. uploads the pandion-api files to PyPI. The Pandion files are removed first, so this workflow
    never uploads Pandion.
 

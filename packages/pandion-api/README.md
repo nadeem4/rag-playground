@@ -15,7 +15,8 @@ pip install pandion-api
 ```
 
 It needs Python 3.13 and works with the Pandion versions its `pyproject.toml` declares
-(`pandion>=0.8.0,<0.9` today), which `pip` installs for you.
+(`pandion>=0.8.0,<0.9` today), which `pip` installs for you. The pipeline's store needs its extra, for example
+`pip install pandion-api "pandion[lancedb]"`.
 
 [docs/pandion-api/index.md](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion-api/index.md) is the full reference.
 [Changelog](https://github.com/nadeem4/rag-playground/blob/main/packages/pandion-api/CHANGELOG.md): what changed in each release.

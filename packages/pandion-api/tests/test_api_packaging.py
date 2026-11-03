@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import re
 import tomllib
 from pathlib import Path
 
@@ -73,7 +74,7 @@ def test_publish_job_uses_the_pypi_environment_and_oidc():
     assert publish["needs"] == "build"
     assert publish["environment"]["name"] == "pypi"
     assert publish["permissions"] == {"id-token": "write"}
-    assert any(s.get("uses", "").startswith("pypa/gh-action-pypi-publish@release/v1") for s in publish["steps"])
+    assert any(s.get("uses", "").startswith("pypa/gh-action-pypi-publish@") for s in publish["steps"])
 
 
 def test_workflow_builds_both_wheels_and_runs_the_check():
@@ -95,3 +96,35 @@ def test_runbook_names_the_api_tag_and_workflow():
     assert "owner's explicit yes" in release
     contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
     assert "not published" not in contributing
+
+
+def test_the_readme_links_work_on_pypi():
+    """PyPI shows the README away from the repo, so a relative link would break there."""
+    text = (PACKAGE / "README.md").read_text(encoding="utf-8")
+    links = re.findall(r"\]\(([^)]+)\)", text)
+    assert links
+    assert [link for link in links if not link.startswith("https://")] == []
+
+
+def test_the_license_ships_with_the_package():
+    assert PROJECT["license"] == "MIT"
+    assert PROJECT["license-files"] == ["LICENSE"]
+    pandion_license = (ROOT / "packages" / "pandion" / "LICENSE").read_text(encoding="utf-8")
+    assert (PACKAGE / "LICENSE").read_text(encoding="utf-8") == pandion_license
+
+
+def test_the_publish_action_is_pinned_to_a_commit():
+    publish = workflow()["jobs"]["publish"]["steps"]
+    uses = next(s["uses"] for s in publish if "pypi-publish" in s.get("uses", ""))
+    assert re.fullmatch(r"pypa/gh-action-pypi-publish@[0-9a-f]{40}", uses)
+    checkout = next(s for s in workflow()["jobs"]["build"]["steps"] if s.get("uses", "").startswith("actions/checkout"))
+    assert checkout["with"]["persist-credentials"] is False
+
+
+def test_docs_do_not_claim_pandion_api_is_on_pypi_yet():
+    for name in ("README.md", "CONTRIBUTING.md"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert "pip install pandion-api" not in text, name
+        assert "published as `pandion-api`" not in text, name
+    index = (ROOT / "docs" / "pandion-api" / "index.md").read_text(encoding="utf-8")
+    assert "goes to\nPyPI from its own tag" in index

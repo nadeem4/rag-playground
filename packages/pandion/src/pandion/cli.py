@@ -8,6 +8,7 @@
     pandion eval pipeline.yaml questions.json [--documents report.pdf] [--top-k 5] [--json] [--baseline base.json [--allow 0] | --record-baseline base.json] [--judge [--judge-model ID] [--judge-gate]]
     pandion compare pipeline.yaml --vary chunk.chunk_size=200,400,800 notes/ [--questions questions.json] [--json]
     pandion install pipeline.yaml [--print]
+    pandion models pull pipeline.yaml [--cache-dir DIR]
     pandion init my-project [--index text --query balanced] [--questions questions.json] [--overwrite]
     pandion trace TRACE_ID --url-env VAR [--json]
     pandion report [--since 7d] [--flagged] --url-env VAR [--json]
@@ -215,6 +216,19 @@ def cmd_forget_user(args: argparse.Namespace) -> int:
     gone = store.delete_user(args.user_id)
     print(f"Deleted {gone['conversations']} conversations and {gone['memories']} memories for {args.user_id}.")
     print("Backups of the database and the retention of your model providers are out of its reach; clear those yourself.")
+    return 0
+
+
+def cmd_models(args: argparse.Namespace) -> int:
+    """`models pull`: download the public weights the pipeline needs, one line
+    per model. 1 with one sentence when a download fails; no token is printed."""
+    try:
+        pulled = pandion.pull_models(_load(args), args.cache_dir, lambda model_id, revision: print(f"{model_id} {revision}".rstrip() + " ready"))
+    except (RuntimeError, ImportError) as exc:
+        print(f"pandion: {exc}", file=sys.stderr)
+        return 1
+    if not pulled:
+        print("This pipeline uses no local model.")
     return 0
 
 
@@ -694,6 +708,11 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--store", default="sql", help="the conversation store, sql by default")
     sub.add_argument("--url-env", help="the environment variable that holds the store's database url")
     sub.add_argument("--yes", action="store_true", help="do it; without this nothing is deleted")
+
+    sub = command("models", "download the public model weights a pipeline needs", cmd_models)
+    sub.add_argument("action", choices=["pull"], help="pull: download the weights now, such as at Docker build time")
+    sub.add_argument("config")
+    sub.add_argument("--cache-dir", help="the folder to download into (default: the file's models.cache_dir, else the Hugging Face default)")
 
     for name, help, fn in (("trace", "show one stored chat trace", cmd_trace), ("report", "summarise the stored chat traces", cmd_report)):
         sub = command(name, help, fn)

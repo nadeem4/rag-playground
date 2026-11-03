@@ -21,6 +21,7 @@ pandion ask pipeline.yaml "What is chunking?" --documents report.pdf
 pandion eval pipeline.yaml questions.json --documents report.pdf
 pandion compare pipeline.yaml --vary chunk.chunk_size=200,400,800 report.pdf --questions questions.json
 pandion install pipeline.yaml --print
+pandion models pull pipeline.yaml
 pandion init my-project --index text --query balanced
 pandion questions report.pdf --model claude-haiku-4-5 --count 15 --out questions.json
 ```
@@ -185,6 +186,17 @@ cannot compare a search, rewrite or rerank step that way, because nothing is sea
 
 **`pandion install FILE [--print]`** installs the extras the file needs, as described in
 [Install what a file needs](install.md#install-what-a-file-needs).
+
+**`pandion models pull FILE [--cache-dir DIR]`** downloads the public model weights the file
+needs, ahead of time: the local embedder, each `cross_encoder` reranker at its pinned
+revision, and the Docling layout models when the file parses with `docling`. It prints one
+line per model, or `This pipeline uses no local model.`, and exits 0. When a download fails
+it prints one sentence naming the model and exits 1. It never prints a token. Models go into
+`--cache-dir`, else the file's `models.cache_dir`, else the Hugging Face default. Docling
+ignores `cache_dir` and `download: never`: it keeps its models, including the OCR models for
+images, under `HF_HOME`, so set the same `HF_HOME` at pull time and at run time. A pull
+fetches the whole model repository. Run it at Docker build time so the
+container starts with `models.download: never`. See [Models](install.md#models).
 
 **`pandion init FOLDER [--index NAME] [--query NAME] [--questions FILE] [--overwrite]`**
 writes a project folder from an index and a query template, as described in

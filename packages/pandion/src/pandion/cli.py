@@ -33,7 +33,7 @@ import yaml
 
 import pandion
 from pandion import ConfigError, Pipeline
-from pandion.extend import PluginError, load_plugins as load_modules, plugin_listing
+from pandion.extend import PluginError, get_conversation_store, load_plugins as load_modules, plugin_listing
 from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K
 
 #: Pandion's name for each key, and the environment variable it is read from.
@@ -193,6 +193,25 @@ def cmd_sync(args: argparse.Namespace) -> int:
     for document, reason in report.failed.items():
         print(f"failed: {document}: {reason}", file=sys.stderr)
     return 0 if report.complete else 1
+
+
+def cmd_forget_user(args: argparse.Namespace) -> int:
+    """Remove one user's conversations and memories from a conversation store.
+    It asks for `--yes` first, since the CLI has no prompts."""
+    if not args.yes:
+        print(
+            f"This would delete every conversation and memory kept for {args.user_id}. "
+            "Run it again with --yes to do it.", file=sys.stderr)
+        return 1
+    if args.store == "sql" and not args.url_env:
+        raise ValueError(
+            "forget-user with the sql store needs --url-env, the environment variable that holds the database url. "
+            "Without it the command would open a new, empty database and delete nothing.")
+    store = get_conversation_store(args.store, {"url_env": args.url_env} if args.url_env else {})
+    gone = store.delete_user(args.user_id)
+    print(f"Deleted {gone['conversations']} conversations and {gone['memories']} memories for {args.user_id}.")
+    print("Backups of the database and the retention of your model providers are out of its reach; clear those yourself.")
+    return 0
 
 
 def _documents(args: argparse.Namespace) -> list[str] | None:
@@ -547,6 +566,12 @@ def parser() -> argparse.ArgumentParser:
 
     sub = command("sync", "sync the source named in the pipeline file", cmd_sync)
     sub.add_argument("config")
+
+    sub = command("forget-user", "delete one user's conversations and memories", cmd_forget_user)
+    sub.add_argument("user_id")
+    sub.add_argument("--store", default="sql", help="the conversation store, sql by default")
+    sub.add_argument("--url-env", help="the environment variable that holds the store's database url")
+    sub.add_argument("--yes", action="store_true", help="do it; without this nothing is deleted")
 
     for name, help, fn in (("retrieve", "search the index for a question", cmd_retrieve), ("ask", "answer a question", cmd_ask)):
         sub = command(name, help, fn)

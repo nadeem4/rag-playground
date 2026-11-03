@@ -2116,6 +2116,7 @@ pandion validate pipeline.yaml
 pandion strategies --stage chunk
 pandion index pipeline.yaml report.pdf notes/
 pandion sync pipeline.yaml
+pandion forget-user alice --url-env PANDION_CONVERSATIONS_URL --yes
 pandion retrieve pipeline.yaml "What is chunking?" --documents report.pdf
 pandion ask pipeline.yaml "What is chunking?" --documents report.pdf
 pandion eval pipeline.yaml questions.json --documents report.pdf
@@ -2128,6 +2129,8 @@ pandion questions report.pdf --model claude-haiku-4-5 --count 15 --out questions
 **`pandion validate FILE`** reads the file and checks every step, with no run. It prints
 `pipeline.yaml is a valid pipeline.`, or the reason it is not, such as
 `pandion: The pipeline file has no index section.`
+
+**`pandion forget-user USER_ID [--store sql] [--url-env VAR] [--yes]`** deletes one user's conversations and memories from a conversation store and prints how many. See [Forget one user](#forget-one-user).
 
 **`pandion strategies [--stage STAGE] [--json]`** lists every strategy by stage, each with
 its summary, and a `route` group for the route checks. `--stage chunk` shows one stage.
@@ -2466,7 +2469,7 @@ To run the store tests against a real server, set `QDRANT_URL`, for example `QDR
 
 ## Conversations
 
-A conversation store keeps chats and what Pandion remembers about a user. It is separate from the index, so many servers can share one. The contract, `ConversationStore`, is **Stable**, and so is `register_conversation_store`. It has nine methods:
+A conversation store keeps chats and what Pandion remembers about a user. It is separate from the index, so many servers can share one. The contract, `ConversationStore`, is **Stable**, and so is `register_conversation_store`. It has ten methods:
 
 | Method | What it does |
 | --- | --- |
@@ -2478,6 +2481,7 @@ A conversation store keeps chats and what Pandion remembers about a user. It is 
 | `memories(user_id)` | The user's memories, oldest first |
 | `add_memory(user_id, memory)` | Keeps a memory; the store gives it an id |
 | `delete_memory(user_id, memory_id)` | Removes one memory |
+| `delete_user(user_id)` | Removes all of the user's conversations (with their turns) and memories, and returns `{"conversations": n, "memories": m}`. An unknown user gives zeros |
 | `expire(older_than_days)` | Deletes conversations whose newest turn is older than the limit and returns how many |
 
 A `Turn` holds the question, the answer, the standalone `rewrite` the turn was searched with, the `source_ids`, a `trace_id` and `created_at`. Times are UTC ISO 8601 strings, and a store fills `created_at` only when it is empty.
@@ -2496,9 +2500,22 @@ store = get_conversation_store("sql", {"url": "sqlite:///conversations.db"})
 
 The `url` is a secret: it never appears in a repr, and its password is hidden in the error raised when the database cannot be opened. The tables are made on first use. A `pandion_schema` row records the format, and a database written by a newer Pandion is refused with a message that says to upgrade. The next Pandion adds columns and tables and never removes any, so an older database keeps working. `store.check()` opens the database and raises the same error, which a server can use for a readiness check.
 
+To keep the url out of code and files, set `url_env` to the name of an environment variable instead of `url`: `get_conversation_store("sql", {"url_env": "PANDION_CONVERSATIONS_URL"})`. The url is read when the store opens. If the variable is not set, the error names the variable and never shows a value. Setting both `url` and `url_env` is refused.
+
+### Forget one user
+
+`store.delete_user(user_id)` is how a site answers "delete my data". The command line does the same:
+
+```bash
+pandion forget-user alice --url-env PANDION_CONVERSATIONS_URL --yes
+# Deleted 3 conversations and 2 memories for alice.
+```
+
+Without `--yes` the command deletes nothing and exits 1, since the command line has no prompts. `--store` names another registered store (the default is `sql`; use `--plugins` to load your own). An unknown user prints zeros and exits 0. Backups of the database and the retention of your model providers are out of its reach; clear those yourself.
+
 ### Your own conversation store
 
-Write a class with the nine methods, a `name` and a `settings_model`, and register it. [`dict_conversation_store.py`](../examples/pandion/extensions/dict_conversation_store.py) is a small store you can copy, with each rule of the contract in a comment. Prove it with the same suite the `sql` store passes, which includes the checks that one user can never read, list, append to or delete another user's conversation, or list or delete another user's memory.
+Write a class with the ten methods, a `name` and a `settings_model`, and register it. [`dict_conversation_store.py`](../examples/pandion/extensions/dict_conversation_store.py) is a small store you can copy, with each rule of the contract in a comment. Prove it with the same suite the `sql` store passes, which includes the checks that one user can never read, list, append to or delete another user's conversation, or list or delete another user's memory, and that `delete_user` removes one user's data and no one else's.
 
 ```python
 from pandion.extend import register_conversation_store

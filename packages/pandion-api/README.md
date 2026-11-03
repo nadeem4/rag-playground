@@ -65,6 +65,9 @@ only ever sees their own; anything else is a 404.
 
 [docs/pandion-api.md](../../docs/pandion-api.md#serve-mode) has the request, the events and `/ready`.
 
+Serve deletes conversations older than `ServeSettings(retention_days=90)` every day, and
+`pandion forget-user` removes one user's data. See [Your users' data](../../docs/pandion-api.md#your-users-data).
+
 Serve mode logs one JSON line per request, step and failure, and sets an `X-Trace-Id` header.
 For OpenTelemetry spans, install `pandion-api[otel]` and set `OTEL_EXPORTER_OTLP_ENDPOINT`.
 See [Logs and traces](../../docs/pandion-api.md#logs-and-traces).

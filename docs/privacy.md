@@ -30,7 +30,7 @@ with a run, and a question set while it is checked.
 
 | What | Where | How long |
 |---|---|---|
-| Memories (only when you turn memory on in code) | In the conversation store you chose | Until the user deletes one. When memory is on, the user's question is sent to the summary model to extract facts, and the memories are sent to the rewrite model. The playground does not turn memory on. |
+| Memories (only when you turn memory on in code) | In the conversation store you chose | Until the user deletes one, or the site runs `pandion forget-user`. When memory is on, the user's question is sent to the summary model to extract facts, and the memories are sent to the rewrite model. The playground does not turn memory on. |
 
 ## In a Pandion server (serve mode)
 
@@ -39,6 +39,16 @@ with a run, and a question set while it is checked.
 | Logs | Standard error, one JSON line per request, step and failure | As long as your log system keeps them. They hold the trace id and counts, and no question or answer text unless you set `PANDION_LOG_CONTENT=true`. |
 | Prometheus metrics | Served on the port you set in `ServeSettings.metrics_port`, to whoever scrapes it | Off unless you set the port. They hold counts, timings, step names, route templates and estimated cost. They never hold a question, an answer or a user id. |
 | OpenTelemetry spans | Sent to the endpoint you set in `OTEL_EXPORTER_OTLP_ENDPOINT`, and nowhere else | Off unless you set that variable. A span holds step names, timings, the model name and token counts, and the question only when `PANDION_LOG_CONTENT=true`. |
+
+Where a site's users' data goes (record the region for your own deployment). Retention and forgetting a user are in [pandion-api.md](pandion-api.md#your-users-data).
+
+| Where your users' data goes | What is sent or kept | Region (yours to record) |
+|---|---|---|
+| LLM provider | The rewritten question, the retrieved pieces and the history, for the rewrite and the answer |  |
+| Remote embedder (if you use one) | The text of your documents and each question |  |
+| Judge model (online checks, when used) | The question, the answer and its sources |  |
+| OpenTelemetry exporter (if you set an endpoint) | Step names, timings, model names and token counts; the question only when `PANDION_LOG_CONTENT=true` |  |
+| Conversation store | Conversations, turns and memories, under the user's id |  |
 
 ## On the demo server
 

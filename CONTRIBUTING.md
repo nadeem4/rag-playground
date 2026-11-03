@@ -31,7 +31,7 @@ cd playground/frontend && npm install && cd ../..
 
 Two extras of `pandion-api` are optional: `pandion-api[metrics]` (Prometheus) and `pandion-api[otel]` (OpenTelemetry). `--extra dev` installs both for the tests.
 
-The repository is a uv workspace with two packages besides the app: `packages/pandion` (the engine, published as `pandion`) and `packages/pandion-api` (the REST layer, not published). `uv sync` installs both from their folders, so an edit in either is live at once.
+The repository is a uv workspace with two packages besides the app: `packages/pandion` (the engine, published as `pandion`) and `packages/pandion-api` (the REST layer; it goes to PyPI as `pandion-api` from its own tag, not yet). `uv sync` installs both from their folders, so an edit in either is live at once.
 
 To work on the web app, run the server in one terminal and Vite in another:
 
@@ -241,5 +241,5 @@ uv run python scripts/make_samples.py
 
 ## Releasing
 
-Staging, releasing the app, publishing Pandion to PyPI and recording the Home clips are
+Staging, releasing the app, publishing Pandion and pandion-api to PyPI and recording the Home clips are
 in the [release runbook](docs/operations/release.md). Releases need the owner's yes.

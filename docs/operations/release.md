@@ -9,6 +9,7 @@ For development setup and tests, see [CONTRIBUTING.md](../../CONTRIBUTING.md).
 - [Staging](#staging)
 - [Releasing](#releasing)
 - [Publishing pandion](#publishing-pandion)
+- [Publishing pandion-api](#publishing-pandion-api)
 - [Recording the Home clips](#recording-the-home-clips)
 - [Regenerating the fixtures and the lesson recordings](#regenerating-the-fixtures-and-the-lesson-recordings)
 
@@ -97,14 +98,14 @@ published tag.
    ```bash
    gh workflow run Release -f go_to_1_0_0=true
    ```
-5. **After each `v*` or `pandion-v*` tag is published,** regenerate the changelogs in a
+5. **After each `v*`, `pandion-v*` or `pandion-api-v*` tag is published,** regenerate the changelogs in a
    `docs:` PR (see [Changelogs](#changelogs)).
 
 ### Changelogs
 
 Three changelogs are generated, not written by hand: `CHANGELOG.md` (the app, `v*` tags),
 `packages/pandion/CHANGELOG.md` (`pandion-v*` tags, commits that touch the package) and
-`packages/pandion-api/CHANGELOG.md` (no tags yet, so one Unreleased section). They use
+`packages/pandion-api/CHANGELOG.md` (`pandion-api-v*` tags; until the first one exists, one Unreleased section). They use
 one config, `cliff-changelog.toml`, with the tag pattern and path filter passed per file;
 `cliff.toml` is not used for them because it calculates the release version. Install
 `git-cliff` 2.14.2 (the version the Release workflow uses), then regenerate from the repo
@@ -118,8 +119,8 @@ git-cliff --config cliff-changelog.toml --tag-pattern "^pandion-api-v[0-9]+\.[0-
 ```
 
 The `printf` line re-adds the note about 0.1.0 at the end of the Pandion changelog.
-Regenerate the changelogs in a `docs:` PR after each `v*` or `pandion-v*` tag is
-published. A `docs:` title makes no release.
+Regenerate the changelogs in a `docs:` PR after each `v*`, `pandion-v*` or `pandion-api-v*`
+tag is published. A `docs:` title makes no release.
 
 ### Rolling back
 
@@ -161,6 +162,41 @@ PyPI trusts this workflow through trusted publishing, so no token is stored in t
 repo. The publisher on pypi.org names the repo, the file `publish-pandion.yml` and the
 `pypi` environment, so renaming either one breaks publishing. A `pandion-v` tag never
 counts as an app release, because the app's release tags must start with `v`.
+
+## Publishing pandion-api
+
+The pandion-api package goes to PyPI from its own tag, separate from Pandion and the
+app. Like Pandion, each version needs the owner's explicit yes.
+
+pandion-api declares the Pandion versions it works with (`pandion[pdfium,anthropic,openai]>=0.8.0,<0.9`
+in `packages/pandion-api/pyproject.toml`), so **publish Pandion first**: the Pandion
+version in that range must already be on PyPI. A test fails if the workspace's Pandion
+version falls outside the range, so change the range in the same PR as a Pandion minor.
+
+1. Set the version in `packages/pandion-api/pyproject.toml` and
+   `packages/pandion-api/src/pandion_api/version.py`, in a PR. A test fails if the two differ.
+2. Push a tag named `pandion-api-v` and that version, on a commit on main:
+
+   ```bash
+   git tag pandion-api-vX.Y.Z && git push origin pandion-api-vX.Y.Z
+   ```
+
+The **Publish pandion-api** workflow (`.github/workflows/publish-pandion-api.yml`) then:
+
+1. checks the tag names the package's version;
+2. builds the pandion-api wheel and source archive, and the Pandion wheel the check needs;
+3. installs the pandion-api wheel in a new environment, builds a serve-mode app from it and
+   calls `/health` (`checks/pandion-api-install/run_check.py --wheel ... --find-links dist --tag ...`;
+   it builds Pandion locally with `--find-links`, so it does not test the published Pandion);
+4. uploads the pandion-api files to PyPI. The Pandion files are removed first, so this workflow
+   never uploads Pandion.
+
+PyPI trusts this workflow through trusted publishing, so no token is stored in the repo.
+Before the first upload the owner creates the `pandion-api` project on pypi.org (a pending
+publisher works) naming this repo, the file `publish-pandion-api.yml` and the `pypi`
+environment; renaming either breaks publishing. A `pandion-api-v` tag starts neither the
+Pandion workflow (`pandion-v*`) nor an app release (`v*`). After the tag, regenerate the
+changelogs (see [Changelogs](#changelogs)).
 
 ## Recording the Home clips
 

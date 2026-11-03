@@ -7,13 +7,25 @@ authors = [{ name = "Nadeem Khan" }]
 requires-python = ">=3.13,<3.14"
 dependencies = [
     # anthropic and openai: the key check (keycheck.py) calls each SDK.
-    "pandion[pdfium,anthropic,openai]",
+    "pandion[pdfium,anthropic,openai]>=0.8.0,<0.9",
     "fastapi>=0.141.1",
     "pillow>=12.3.0",
     "python-multipart>=0.0.32",
 ]
-# Not published yet (spec section 8): PyPI refuses this classifier.
-classifiers = ["Private :: Do Not Upload"]
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["retrieval", "rag", "rest", "fastapi", "pandion"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Documentation = "https://github.com/nadeem4/rag-playground/blob/main/docs/pandion-api/index.md"
+Source = "https://github.com/nadeem4/rag-playground/tree/main/packages/pandion-api"
+Issues = "https://github.com/nadeem4/rag-playground/issues"
 
 [project.optional-dependencies]
 # OpenTelemetry spans in serve mode (docs/pandion-api/serve-mode.md, "Logs and traces").

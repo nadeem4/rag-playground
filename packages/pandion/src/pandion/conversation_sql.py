@@ -361,6 +361,8 @@ class SqlStore:
         with self._engine.begin() as conn:
             if conn.execute(sa.select(t.c.trace_id).where(t.c.trace_id == trace_id, t.c.user_id == user_id)).first() is None:
                 return False
+            # One feedback per (trace, user): a newer one replaces the older.
+            conn.execute(sa.delete(f).where(f.c.trace_id == trace_id, f.c.user_id == user_id))
             conn.execute(sa.insert(f).values(trace_id=trace_id, user_id=user_id, data=feedback.model_dump_json()))
         return True
 

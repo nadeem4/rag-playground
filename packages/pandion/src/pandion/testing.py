@@ -440,6 +440,14 @@ def check_feedback_is_kept_only_for_the_owner(store):
 
 
 @_trace_check
+def check_repeat_feedback_replaces_the_older(store):
+    store.save_trace(_record())
+    store.add_feedback("t1", "u1", Feedback(value="up"))
+    store.add_feedback("t1", "u1", Feedback(value="down"))
+    _expect([f.value for f in store.trace("t1", "u1").feedback] == ["down"], "a newer feedback must replace the older one")
+
+
+@_trace_check
 def check_traces_are_newest_first_and_filtered(store):
     store.save_trace(_record("old", created_at=_ago(5)))
     store.save_trace(_record("new", created_at=_ago(1), flags=["low_grounding"]))

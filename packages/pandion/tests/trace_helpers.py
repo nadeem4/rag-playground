@@ -15,8 +15,9 @@ def make_record(**kw) -> TraceRecord:
 class StubPipeline:
     """Asks return a fixed answer with two stages and a grounding count."""
 
-    def __init__(self, stats=None, ok=True):
+    def __init__(self, stats=None, ok=True, hits=None):
         self.stats, self.ok = stats if stats is not None else {"cited": 1}, ok
+        self.hits = [SimpleNamespace(chunk=SimpleNamespace(text="The notice period is 30 days."))] if hits is None else hits
 
     def ask(self, question, **kwargs):
         payload = {"answer": [{"text": "The notice period is 30 days."}], "citations": [{"chunk_id": "c1"}],
@@ -27,6 +28,6 @@ class StubPipeline:
                                   usage={"input_tokens": 1000, "output_tokens": 100, "model": "claude-haiku-4-5"}),
         }
         return SimpleNamespace(
-            ok=self.ok, text="The notice period is 30 days." if self.ok else "",
+            ok=self.ok, hits=self.hits, text="The notice period is 30 days." if self.ok else "",
             output=SimpleNamespace(payload=payload) if self.ok else None, stages=stages,
             cost=lambda: {"dollars": 0.0021})

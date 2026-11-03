@@ -19,7 +19,7 @@ import logging
 import threading
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections.abc import Sequence
 from typing import Any
 
@@ -30,6 +30,7 @@ from pandion.answer_safety import strip_unsourced_urls
 from pandion.events import event
 from pandion.conversation_store import Conversation, ConversationNotFound, ConversationStore, Memory, TraceStore, Turn
 from pandion.llm import CHAT_MODELS
+from pandion.flags import flags_for
 from pandion.trace_record import record_from_turn
 
 #: A rewrite longer than this is an answer or an essay, not a question.
@@ -97,6 +98,8 @@ class TurnResult:
     answer: Any
     #: The id of the turn's trace record (the one passed, or the one the turn made).
     trace_id: str = ""
+    #: Which turns to look at: `low_grounding`, `declined`, `not_in_documents` (`pandion.flags`).
+    flags: list[str] = field(default_factory=list)
 
 
 def _call(model_id: str, system: str, user: str, credentials: dict | None, max_tokens: int) -> str:
@@ -202,7 +205,7 @@ def chat_turn(
         conversation_id, user_id,
         Turn(question=question, answer=text, rewrite=standalone, source_ids=sources, trace_id=trace_id),
     )
-    result = TurnResult(conversation_id, question, standalone, text, sources, answer, trace_id)
+    result = TurnResult(conversation_id, question, standalone, text, sources, answer, trace_id, flags_for(answer))
     if isinstance(store, TraceStore):
         try:
             store.save_trace(record_from_turn(

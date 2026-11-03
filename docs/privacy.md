@@ -30,7 +30,7 @@ with a run, and a question set while it is checked.
 
 | What | Where | How long |
 |---|---|---|
-| Trace records (when the conversation store keeps them) | In the conversation store you chose, under the user's id | The question and the answer of each turn, with the standalone question, the sources, the timings and the estimated cost, and later any feedback. They follow the conversation's retention: `expire`, deleting the conversation and `pandion forget-user` remove them. They never hold a credential. |
+| Trace records (when the conversation store keeps them) | In the conversation store you chose, under the user's id | The question and the answer of each turn, with the standalone question, the sources, the timings and the estimated cost, the flags that mark a turn to look at, and any feedback the user gave (an up or down, a short category and a comment of up to 500 characters, which is the user's own text). They follow the conversation's retention: `expire`, deleting the conversation and `pandion forget-user` remove them. They never hold a credential. |
 | Memories (only when you turn memory on in code) | In the conversation store you chose | Until the user deletes one, or the site runs `pandion forget-user`. When memory is on, the user's question is sent to the summary model to extract facts, and the memories are sent to the rewrite model. The playground does not turn memory on. |
 
 ## In a Pandion server (serve mode)

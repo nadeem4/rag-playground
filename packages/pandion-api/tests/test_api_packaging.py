@@ -121,10 +121,8 @@ def test_the_publish_action_is_pinned_to_a_commit():
     assert checkout["with"]["persist-credentials"] is False
 
 
-def test_docs_do_not_claim_pandion_api_is_on_pypi_yet():
-    for name in ("README.md", "CONTRIBUTING.md"):
-        text = (ROOT / name).read_text(encoding="utf-8")
-        assert "pip install pandion-api" not in text, name
-        assert "published as `pandion-api`" not in text, name
-    index = (ROOT / "docs" / "pandion-api" / "index.md").read_text(encoding="utf-8")
-    assert "goes to\nPyPI from its own tag" in index
+def test_docs_say_pandion_api_installs_from_pypi():
+    for path in ("README.md", "CONTRIBUTING.md", "docs/pandion-api/index.md"):
+        text = (ROOT / path).read_text(encoding="utf-8")
+        assert "pip install pandion-api" in text, path
+        assert "until then" not in text and "not yet)" not in text and "once published" not in text, path

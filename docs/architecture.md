@@ -148,7 +148,7 @@ are in `plugins/answer/`.
 | `use_case` | What you finally get | `search`, `chat` (and `eval`, which scores a run and is not an answer step) |
 
 A stage whose input and output have the same type can be stacked, for example two cleaners in a
-row. [strategies.md](app/strategies.md) describes each strategy.
+row. [app/strategies.md](app/strategies.md) describes each strategy.
 
 A pipeline is written one way everywhere: as a config, the shape of the pipeline file. It can be
 a YAML file, a dict per stage, or step classes such as `pandion.parse.Docling`. Every way goes
@@ -448,9 +448,9 @@ as the browser holds it, and two tests pin that converting the app's Starter giv
 ## Where to read more
 
 - [pandion/index.md](pandion/index.md): the engine's manual, from install to writing your own strategy.
-- [pandion-api.md](pandion-api/index.md): every route, the `Policy`, serve mode and its defaults.
-- [guide.md](app/guide.md): using the playground.
-- [strategies.md](app/strategies.md): what each strategy does and when to pick it.
-- [deploy.md](operations/deploy.md): running the app, Docker and your own Hugging Face Space.
+- [pandion-api/index.md](pandion-api/index.md): every route, the `Policy`, serve mode and its defaults.
+- [app/guide.md](app/guide.md): using the playground.
+- [app/strategies.md](app/strategies.md): what each strategy does and when to pick it.
+- [operations/deploy.md](operations/deploy.md): running the app, Docker and your own Hugging Face Space.
 - [privacy.md](privacy.md): what is kept, where and for how long.
 - [CONTRIBUTING.md](../CONTRIBUTING.md): setup, tests, adding a strategy or an endpoint.

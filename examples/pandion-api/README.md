@@ -123,7 +123,7 @@ class SmallUploads(Policy):
 app = create_app(ApiSettings(data_dir=Path("./pandion-data"), prefix="/api/v2"), SmallUploads())
 ```
 
-Every hook is listed in [docs/pandion-api.md](../../docs/pandion-api/index.md#site-rules-the-policy).
+Every hook is listed in [docs/pandion-api/index.md](../../docs/pandion-api/index.md#site-rules-the-policy).
 Run the size-limited server with `uv run python examples/pandion-api/policy_example.py --max-mb 5`.
 For a full, real Policy, read
 [`playground/backend/policy.py`](../../playground/backend/policy.py), the rules of RAG

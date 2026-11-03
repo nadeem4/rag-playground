@@ -98,7 +98,7 @@ turns off what is unsafe to share.
 - Images inside Word, PowerPoint and HTML files may decode to at most 20 million pixels
   (Pillow's `MAX_IMAGE_PIXELS`), so a run that meets a larger one fails plainly instead
   of filling the shared memory.
-- An upload is deleted 24 hours after it was made. A sweep checks once an hour.
+- An upload is deleted on a timer, and a sweep checks once an hour. [Privacy](../privacy.md) says how long uploads and other data are kept.
 - The bundled samples stay public, and cannot be deleted. They are put back in the store
   each time the server starts, so a restart never loses one.
 - A question set uploaded for Evaluate is checked and not kept.

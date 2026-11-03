@@ -566,4 +566,4 @@ slower. `pandion.preload_reranker` and `pandion.preload_embedder` load them befo
 `pandion eval` and `pandion compare` print the cost as one line (see
 [The pandion command](cli.md#the-pandion-command)).
 pandion-api returns each step's `usage` and each report's `cost` in its JSON (see
-[pandion-api.md](../pandion-api/index.md#speed-and-cost)).
+[pandion-api reference](../pandion-api/index.md#speed-and-cost)).

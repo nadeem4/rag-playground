@@ -66,11 +66,12 @@ from pandion.registry import register as _register_transform
 from pandion.routing import route_check
 from pandion.sources import raw_file
 from pandion.trace_record import Feedback, TraceRecord
+from pandion.trace_report import Report as TraceReport, format_report as format_trace_report, format_trace, parse_since, report as summarise_traces
 from pandion.transform import Explanation, Transform
 
 __all__ = [
     "ALL_ROLES", "AccessDenied", "ChatSettings", "TurnResult", "chat_turn", "fold_summary", "remember", "get_conversation_store", "access_rule", "FORMATS", "And", "AnyOf", "ArtifactType", "Capabilities", "Chunk", "ChunkSet", "Conversation", "ConversationInfo", "ConversationNotFound", "ConversationStore", "DocumentInfo", "Element", "Embedder",
-    "EndpointRefused", "Eq", "Explanation", "FetchRefused", "Feedback", "TraceRecord", "TraceStore", "Hit", "In", "IndexMeta", "IndexRow", "Memory", "MissingExtra", "Output", "ParsedDoc",
+    "EndpointRefused", "Eq", "Explanation", "FetchRefused", "Feedback", "TraceRecord", "TraceStore", "TraceReport", "format_trace_report", "format_trace", "parse_since", "summarise_traces", "Hit", "In", "IndexMeta", "IndexRow", "Memory", "MissingExtra", "Output", "ParsedDoc",
     "PluginError", "PortSpec", "Query", "RetrievalResult", "RunContext", "Source", "SourceEntry", "Stage", "StoreHit", "Transform", "Turn", "UnreadableFormat",
     "check_contents", "document_info", "fetch_url", "format_of", "get_embedder", "guard_endpoint", "load_plugins",
     "openai_client_kwargs", "plugin_listing", "raw_file", "register", "register_conversation_store", "register_source", "register_store", "route_check", "set_note", "set_usage",

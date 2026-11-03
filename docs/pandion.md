@@ -2172,6 +2172,8 @@ pandion questions report.pdf --model claude-haiku-4-5 --count 15 --out questions
 
 **`pandion forget-user USER_ID [--store sql] [--url-env VAR] [--yes]`** deletes one user's conversations and memories from a conversation store and prints how many. See [Forget one user](#forget-one-user).
 
+**`pandion trace TRACE_ID [--store sql] [--url-env VAR] [--json]`** prints one stored chat trace, and **`pandion report [--since 7d] [--flagged] [--store sql] [--url-env VAR] [--json]`** summarises the stored traces. See [Read traces from the command line](#read-traces-from-the-command-line).
+
 **`pandion strategies [--stage STAGE] [--json]`** lists every strategy by stage, each with
 its summary, and a `route` group for the route checks. `--stage chunk` shows one stage.
 `--json` prints only the names, as JSON.
@@ -2634,6 +2636,42 @@ from pandion.testing import trace_store_conformance
 
 trace_store_conformance(lambda: MyStore(MySettings()))
 ```
+
+#### Read traces from the command line
+
+`pandion trace` and `pandion report` read the store you point at and change nothing. They print no more than the record or the summary shows. A trace holds the user's question and answer, so treat the output as you would the conversation.
+
+```
+pandion trace TRACE_ID [--store sql] --url-env VAR [--json]
+pandion report [--since 7d] [--flagged] [--store sql] --url-env VAR [--json]
+```
+
+`--url-env` names the environment variable that holds the database url; the sql store needs it, so the command never opens a new, empty database by mistake. `pandion trace` prints the question, the question it searched with, the answer, the label, the flags, the time and cost, a row for each stage and any feedback. It exits 1 with one sentence when there is no such trace, or when the store does not keep traces.
+
+```
+$ pandion trace 9f2c --url-env PANDION_CONVERSATIONS_URL
+Trace 9f2c (2026-11-02T09:14:03+00:00), user alice, conversation c1
+Question: What is chunking?
+Answer: Cutting text into pieces.
+Label: cited. Sources: s1.
+Flags: none.
+Took 812 ms and cost $0.0012.
+Stages:
+  retrieve       12 ms       none
+  answer        800 ms    $0.0012
+```
+
+`pandion report` summarises the stored traces (the newest 10,000): the number of turns, the median and 95th percentile time (linear interpolation between ranks), the cost in all and per turn, how many turns had each label, each flag and each feedback value, and the mean of every numeric evaluator score. Boolean and text scores are counted as `name: value`. `--flagged` keeps only turns with a flag. `--since` takes a duration (`24h` or `7d`) or an ISO 8601 date such as `2026-10-01` (UTC when it has no zone); anything else is refused with exit 2. With no traces it prints `0 turns.`
+
+```
+$ pandion report --since 7d --url-env PANDION_CONVERSATIONS_URL
+2 turns. Median 450 ms, 95th percentile 495 ms.
+Cost $0.0030 in all, $0.0015 a turn.
+Labels:
+  cited  2
+```
+
+`--json` prints the `Report` (or the `TraceRecord`) as JSON. The same functions are public in `pandion.extend` as `summarise_traces`, `parse_since`, `format_trace`, `format_trace_report` and `TraceReport`, **Provisional**.
 
 ### Memory across conversations
 

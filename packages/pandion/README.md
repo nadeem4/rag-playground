@@ -197,6 +197,7 @@ A registered store reaches `pipeline.yaml` only through an index step, because
   sync, search, ask, the three ways to write a pipeline, your own strategy for every
   stage, and a source, access rule and index store of your own.
 - [RAG Playground](https://rag.codewithnk.com): try the same pipelines in the browser.
+- [Changelog](https://github.com/nadeem4/rag-playground/blob/main/packages/pandion/CHANGELOG.md): what changed in each release.
 
 ## License
 

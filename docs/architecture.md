@@ -169,7 +169,7 @@ says what the settings will do.
   fails if a module exists but is not listed.
 - `pandion.plugins.load` is the one loader for built-ins, entry points (the group
   `pandion.strategies`) and listed modules. A failure stops the process. See
-  [Loading your strategies](pandion.md#loading-your-strategies).
+  [Loading your strategies](pandion/extend.md#loading-your-strategies).
 - `GET /api/v2/strategies` exports every strategy with its summary, its config's JSON schema and
   what it requires and prefers. The web app builds every settings form from that schema, so a new
   strategy needs no frontend change.
@@ -187,11 +187,11 @@ Index stores and conversation stores have a conformance test in `pandion.testing
 
 - **Index stores** (`index_store.py`): `index_memory.py` is the reference, `index_lance.py` backs
   the `lancedb` step, and `index_qdrant.py` backs the `qdrant` step. See
-  [Index stores](pandion.md#index-stores).
+  [Index stores](pandion/stores-and-access.md#index-stores).
 - **Conversation stores** (`conversation_store.py`): `conversation_sql.py` is the `sql` store, on
   SQLAlchemy. A store can also be a `TraceStore`, and then `chat_turn` saves one `TraceRecord`
   (`trace_record.py`) for each answered turn. Chats, memories, traces and feedback live there, so
-  servers keep no state. See [Conversations](pandion.md#conversations).
+  servers keep no state. See [Conversations](pandion/conversations.md#conversations).
 - **Sources** (`document_sources.py`): a place that lists documents, so `index.sync` can keep an
   index in step with it.
 
@@ -268,21 +268,21 @@ flowchart TB
    a later run with it. The gate counts newly missed questions per `category:<name>` tag, so one category's loss is never hidden by another's gain, and exits 1
    when a category is over `--allow`. `--judge` grades each answer with a model, and `--judge-gate`
    fails the comparison when mean correctness falls by more than 0.05. See
-   [Evaluate a pipeline](pandion.md#evaluate-a-pipeline) and
-   [Compare with a baseline](pandion.md#compare-with-a-baseline). `pandion questions` can write a
+   [Evaluate a pipeline](pandion/evaluate.md#evaluate-a-pipeline) and
+   [Compare with a baseline](pandion/evaluate.md#compare-with-a-baseline). `pandion questions` can write a
    first question set from a document.
 2. **Serve.** In serve mode each answered turn saves a trace. The server marks a turn that may
    have gone wrong with a flag (`low_grounding`, `declined`, `not_in_documents`) at no extra
    cost, and a user can say a trace was good or bad with `POST /feedback`. See
-   [Flags and feedback](pandion.md#flags-and-feedback).
+   [Flags and feedback](pandion/traces.md#flags-and-feedback).
 3. **Review.** `pandion review` lists the traces that need a look. `pandion review --evaluate`
    scores the stored traces with your online evaluators (functions marked `@online_evaluator`),
    and `--judge` adds the built-in relevance judge, which calls a model. The server never runs
    evaluators. `pandion trace` and `pandion report` show one trace or a summary. See
-   [Online evaluation](pandion.md#online-evaluation).
+   [Online evaluation](pandion/traces.md#online-evaluation).
 4. **Promote.** `pandion review --promote TRACE_ID --questions FILE` adds a trace to the question
    set as a case. Given the pipeline file, it also says whether the miss is in retrieval or in the
-   answer. See [Promote a trace to a test](pandion.md#promote-a-trace-to-a-test).
+   answer. See [Promote a trace to a test](pandion/traces.md#promote-a-trace-to-a-test).
 5. **Evaluate again.** The new case is now part of the gate.
 
 ## Sources and sync
@@ -308,7 +308,7 @@ refused).
   stays, so a server on the old image still works, and older ones are dropped after seven days.
   `index_status()` is the server's check that its collection exists and matches its recipe.
 
-The app does not use sync. Details: [Keep an index up to date](pandion.md#keep-an-index-up-to-date).
+The app does not use sync. Details: [Keep an index up to date](pandion/index-and-search.md#keep-an-index-up-to-date).
 
 ## Artifacts and the cache
 
@@ -330,7 +330,7 @@ three new chunk sets.
   that reads from one hashes that input as its id plus a hash of the files it wrote, so a new
   output gives new ids from there on and the same output is a cache hit.
 
-See [The cache](pandion.md#the-cache).
+See [The cache](pandion/index-and-search.md#the-cache).
 
 ## The run stream
 
@@ -447,7 +447,7 @@ as the browser holds it, and two tests pin that converting the app's Starter giv
 
 ## Where to read more
 
-- [pandion.md](pandion.md): the engine's manual, from install to writing your own strategy.
+- [pandion/index.md](pandion/index.md): the engine's manual, from install to writing your own strategy.
 - [pandion-api.md](pandion-api.md): every route, the `Policy`, serve mode and its defaults.
 - [guide.md](guide.md): using the playground.
 - [strategies.md](strategies.md): what each strategy does and when to pick it.

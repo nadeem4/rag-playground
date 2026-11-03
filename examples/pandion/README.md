@@ -34,7 +34,7 @@ templates.
   step already stored. It prints that the artifact ids match, then the classes pipeline
   written back as YAML.
 - `run_template.py`: joins an index template and a query template from
-  [Pandion's templates](../../docs/pandion.md#templates) into one pipeline,
+  [Pandion's templates](../../docs/pandion/templates-and-projects.md#templates) into one pipeline,
   indexes a PDF with it, asks one question and prints the hits. The Vague questions and
   Chat answer templates need `ANTHROPIC_API_KEY`.
 - [`own_strategies/`](own_strategies): writes your own strategy for every stage, from
@@ -95,7 +95,7 @@ script, `pandion-search-example/` for the search script, `pandion-ask-example/` 
 ask script, `pandion-styles-example/` for the three styles and `pandion-template-example/`
 for the template script) in the folder you run from. Use `--work` to
 choose another folder. The full format of the pipeline file is in
-[docs/pandion.md](../../docs/pandion.md).
+[docs/pandion/index.md](../../docs/pandion/index.md).
 
 ## From the command line
 
@@ -126,4 +126,4 @@ uv run pandion ask pipeline.yaml "What causes the tides?" --documents notes/bees
 
 Its file lists `plugins: [my_strategies]`. For a file that does not, `--plugins
 my_strategies` imports them from the current folder. See
-[the pandion command](../../docs/pandion.md#the-pandion-command).
+[the pandion command](../../docs/pandion/cli.md#the-pandion-command).

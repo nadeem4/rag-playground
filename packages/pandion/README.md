@@ -79,7 +79,7 @@ same file finds every step already stored and reuses it.
   index template (how a kind of document is indexed) and a query template (how a
   kind of question is searched and answered) into a pipeline, and
   `pandion.list_templates()` lists them. See
-  [Templates](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#templates).
+  [Templates](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion/templates-and-projects.md#templates).
 - **Write your own strategy** for any stage, register it with `@register` from
   `pandion.extend`, and use it by name, from code, from `plugins:` in a pipeline file, or
   with `--plugins` on the command line.
@@ -92,7 +92,7 @@ same file finds every step already stored and reuses it.
 folder you can run straight away: `pipeline.yaml`, `run.py`, `requirements.txt`, a
 README and an empty `docs/` for your documents. In code, `pandion.new_project(folder, pipeline)`
 writes the same folder for any pipeline. See
-[Start a project](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#start-a-project).
+[Start a project](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion/templates-and-projects.md#start-a-project).
 
 ## Use Pandion from the command line
 
@@ -106,7 +106,7 @@ first when a step can differ between runs). Before it searches, `pandion eval` e
 question whose expected passage is no longer in the parsed documents. `--judge` (off by default,
 costs model calls) also grades each answer against the question's expected `answer`, and
 `--judge-gate` fails a baseline comparison when the mean correctness fell more than 0.05. A question with a `history` (a follow-up) is rewritten first with `claude-haiku-4-5`, which needs `ANTHROPIC_API_KEY`; without it the question is searched as written and counted in `rewrites_failed`. Follow-ups are their own gated category, `follow-up`. See
-[the pandion command](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#the-pandion-command).
+[the pandion command](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion/cli.md#the-pandion-command).
 
 ## Chat turns
 
@@ -117,17 +117,17 @@ answer step is asked only that question, so history gives meaning and only the s
 facts. `fold_summary` folds older turns into the summary; run it after replying. With
 `ChatSettings(memory=True)` (off by default), `remember` keeps a user's short facts and they
 help the rewrite only, never the answer. All are
-Provisional. See [A chat turn](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#a-chat-turn)
+Provisional. See [A chat turn](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion/conversations.md#a-chat-turn)
 and [`chat_turn.py`](https://github.com/nadeem4/rag-playground/blob/main/examples/pandion/chat_turn.py).
 When the store is also a `TraceStore` (the `sql` store is), each answered turn leaves one
 trace record: question, answer, grounding label, flags, sources, stage times and cost, plus any
 feedback from the user (`give_feedback`). It follows
-the conversation's retention. See [Traces](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#traces).
+the conversation's retention. See [Traces](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion/traces.md#traces).
 
 Answers are made safer by default: sources are fenced in the prompt as untrusted data, and
 `chat_turn` removes links and images from a reply unless a source holds the same address
 (`ChatSettings(strip_urls=False)` turns that off). See
-[Answer safety](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md#answer-safety).
+[Answer safety](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion/conversations.md#answer-safety).
 
 ## Extend Pandion
 
@@ -191,7 +191,7 @@ A registered store reaches `pipeline.yaml` only through an index step, because
 
 ## Learn more
 
-- [The guide](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion.md): every
+- [The guide](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion/index.md): every
   step, setting and error.
 - [Examples](https://github.com/nadeem4/rag-playground/tree/main/examples/pandion): index,
   sync, search, ask, the three ways to write a pipeline, your own strategy for every

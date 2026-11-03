@@ -41,7 +41,7 @@ Then run the client in another:
 uv run python examples/pandion-api/run_pipeline.py --url http://127.0.0.1:8000
 ```
 
-To run a pair of [pipeline templates](../../docs/pandion.md#templates) instead, pass
+To run a pair of [pipeline templates](../../docs/pandion/templates-and-projects.md#templates) instead, pass
 an index template and a query template. The client then uploads the sample that suits
 the index template, asks that sample's first question and evaluates on its question
 set. The server downloads the models the templates use on the first run. A template that

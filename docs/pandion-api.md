@@ -210,7 +210,7 @@ ids, never a key or a path:
 ```
 
 Every report has `cost`, which is Pandion's `cost()` with its own price table (see
-"Speed and cost" in [pandion.md](pandion.md#speed-and-cost)). An index run, a question
+"Speed and cost" in [pandion/index.md](pandion/evaluate.md#speed-and-cost)). An index run, a question
 (searched or answered) and an evaluation have one `cost` for the whole result. A
 request cannot send its own prices.
 
@@ -286,7 +286,7 @@ questions, one that names no step, or one that stops before the varied step.
 A pipeline can sort its documents into categories, each with its own `parse`, `clean`
 and `chunk`, and a `route` that chooses between them. The pipeline you send and the
 pipeline `POST /pipelines/validate` gives back use the file's shape, as described in
-[Categories and routes](pandion.md#categories-and-routes) for Pandion. A pipeline sent in
+[Categories and routes](pandion/pipeline-file.md#categories-and-routes) for Pandion. A pipeline sent in
 the old shape comes back in the old shape. A route check that does not exist is a 422
 whose `details[0].step` is its place, such as `route.1.when.2`. A category id may use only
 lowercase letters, digits, underscore and dash, and a bad one is a 422 that names it.
@@ -514,7 +514,7 @@ The user comes from the Policy's `user_id`, so the route needs a Policy that say
 `Policy.anonymous()` gives every caller one identity, and an empty user id is no identity, so both answer 403. A trace
 that does not exist and a trace that is another user's are the same 404. A bad `value`, or a
 category or comment that is too long, is a 422 with one sentence that does not repeat the text.
-A conversation store that keeps no traces (see [Conversations](pandion.md#conversations)) answers
+A conversation store that keeps no traces (see [Conversations](pandion/conversations.md#conversations)) answers
 501 with "This server's conversation store does not keep traces." One user has one piece of
 feedback for each trace, and a newer one replaces the older. The question, the answer and the
 comment are never logged or used as a metric label.
@@ -540,7 +540,7 @@ nothing.
 The memory routes work even while `ServeSettings.chat.memory` is off, so a user can still
 see and delete memories kept while it was on.
 
-Answers are made safer by Pandion, not by the route: sources are fenced in the prompt, and a reply's links and images are removed unless a source holds the same address. The `token` event, the JSON reply and the stored turn all carry the cleaned text. Even so, a client should not load images or follow links in answers automatically. See [Answer safety](pandion.md#answer-safety).
+Answers are made safer by Pandion, not by the route: sources are fenced in the prompt, and a reply's links and images are removed unless a source holds the same address. The `token` event, the JSON reply and the stored turn all carry the cleaned text. Even so, a client should not load images or follow links in answers automatically. See [Answer safety](pandion/conversations.md#answer-safety).
 
 ### GET /health and GET /ready
 
@@ -589,7 +589,7 @@ Serve keeps each user's conversations and memories in the conversation store, un
 
 - **Where the store is.** Set `PANDION_CONVERSATIONS_URL` to a SQLAlchemy url. The store reads it itself, so the url never sits in your code or files. With no variable, serve uses a SQLite file in `data_dir`.
 - **Retention.** `ServeSettings(retention_days=90)` is how long a conversation is kept after its newest turn. The server deletes older ones at startup and then every 24 hours, and logs `retention sweep: removed N conversations older than D days`. A sweep that fails is logged and tried again the next day; it never stops the server. Memories are not removed by the sweep. The value must be at least 1.
-- **Forget one user.** `pandion forget-user USER_ID --url-env PANDION_CONVERSATIONS_URL --yes` deletes all of that user's conversations, memories, trace records and feedback. See [Forget one user](pandion.md#forget-one-user). Backups of the database and the retention of your model providers are out of its reach.
+- **Forget one user.** `pandion forget-user USER_ID --url-env PANDION_CONVERSATIONS_URL --yes` deletes all of that user's conversations, memories, trace records and feedback. See [Forget one user](pandion/conversations.md#forget-one-user). Backups of the database and the retention of your model providers are out of its reach.
 - **Where the data goes.** Fill in the region column for your deployment. The same table is in [privacy.md](privacy.md#in-a-pandion-server-serve-mode).
 
 | Where your users' data goes | What is sent or kept | Region (yours to record) |
@@ -631,7 +631,7 @@ scrape_configs:
 | `tokens_total` | `step`, `kind` | Model tokens. `kind` is `input` or `output`. |
 | `cost_estimated_usd_total` | none | Estimated dollars of answered turns. A model with no price adds nothing. |
 | `errors_total` | `step` | Steps that failed. |
-| `turns_flagged_total` | `category` | Answered turns by flag. `category` is `low_grounding`, `declined` or `not_in_documents`, and a turn with two flags counts in both. See [Traces](pandion.md#traces). |
+| `turns_flagged_total` | `category` | Answered turns by flag. `category` is `low_grounding`, `declined` or `not_in_documents`, and a turn with two flags counts in both. See [Traces](pandion/traces.md#traces). |
 | `feedback_total` | `value`, `category` | Feedback saved by `POST /feedback`. `value` is `up` or `down`. `category` is what the user sent when it is on `ServeSettings.feedback_categories` (empty by default), empty when none was sent, and `other` for anything else, so the number of series stays fixed. |
 
 No label ever holds a question, an answer, a user id, a conversation id or a chunk id, so the

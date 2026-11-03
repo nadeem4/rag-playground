@@ -29,4 +29,5 @@ Start with the group that matches what you are doing.
 - [Architecture](architecture.md): the three layers, the pipeline, the cache and the run stream.
 - [Lessons learned](lessons-learned.md): real pipeline problems, why each happened and what fixed it.
 - [Release runbook](operations/release.md): staging, releasing, publishing Pandion and recording clips.
+- Changelogs: [the app](../CHANGELOG.md), [Pandion](../packages/pandion/CHANGELOG.md) and [pandion-api](../packages/pandion-api/CHANGELOG.md).
 - [Security](../SECURITY.md) and [Code of conduct](../CODE_OF_CONDUCT.md).

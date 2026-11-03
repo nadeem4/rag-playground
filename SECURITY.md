@@ -15,7 +15,7 @@ We fix security problems in the latest release only:
 
 - the latest RAG Playground app release,
 - the latest `pandion` release on PyPI,
-- the latest `pandion-api` release on PyPI.
+- `pandion-api`, as shipped in the latest app release or from `main`, until it is published on PyPI.
 
 If you use an older version, please upgrade first and check that the problem is still there.
 

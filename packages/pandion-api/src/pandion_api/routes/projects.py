@@ -108,7 +108,8 @@ def _question_set(category: str, questions: Any) -> dict[str, Any]:
 
 def _exportable(body: ServeProjectIn, config: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
     """The question sets to write (by category) and the categories left out, each with its reason."""
-    known = config.get("categories") if isinstance(config.get("categories"), dict) else {}
+    # Pandion reads a plain pipeline (no categories) as one category called "default".
+    known = config["categories"] if isinstance(config.get("categories"), dict) else {"default": {}}
     kept: dict[str, Any] = {}
     left: list[dict[str, str]] = []
     for category, sent in body.categories.items():

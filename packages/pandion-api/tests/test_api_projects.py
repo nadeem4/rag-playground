@@ -74,6 +74,15 @@ def test_unknown_category_id_is_a_400_sentence(client):
     assert "nope" in r.json()["detail"] and "category" in r.json()["detail"]
 
 
+def test_plain_pipeline_accepts_the_default_category(client):
+    plain = {"index": {**PIPELINE["index"]}, "retrieve": PIPELINE["retrieve"], "answer": PIPELINE["answer"]}
+    r = preview(client, config=plain, categories={"default": {"questions": QUESTIONS}})
+    assert r.status_code == 200
+    assert "evals/questions.json" in r.json()["files"]
+    r = preview(client, config=plain, categories={"contracts": {"questions": QUESTIONS}})
+    assert r.status_code == 400 and "default" in r.json()["detail"]
+
+
 def test_where_settings_reach_pipeline_yaml(client):
     where = {"source": "gs://bucket/docs", "index_store": "qdrant", "index_url": "https://qdrant.example.com:6333"}
     data = preview(client, where=where).json()

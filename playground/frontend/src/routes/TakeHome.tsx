@@ -279,7 +279,7 @@ function Body({ working, navigate }: { working: WorkingPipeline; navigate: (href
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
                   {(r.docs.length ? r.docs : [{ filename: "No document tested yet", tag: "Empty" as const }]).map((d) => (
                     <span key={d.filename} className="inline-flex items-center gap-2 text-xs">
-                      <span className="font-mono break-all">{d.filename}</span>
+                      <span className={cn("font-mono", r.docs.length ? "break-all" : "break-words")}>{d.filename}</span>
                       <span className="rounded-control bg-surface px-2 text-fg-muted">{d.tag}</span>
                     </span>
                   ))}
@@ -465,7 +465,7 @@ function Body({ working, navigate }: { working: WorkingPipeline; navigate: (href
             </div>
           </div>
         ) : null}
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
           <Button disabled={!ready || busy} onClick={() => void download()}>
             Download {ready?.filename ?? "the project"}
           </Button>

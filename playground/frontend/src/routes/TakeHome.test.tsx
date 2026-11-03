@@ -5,7 +5,7 @@ import { resetAppSettingsForTests } from "@/api/useDemo"
 import type { PipelineConfig } from "@/state/config"
 import { resetDocumentForTests } from "@/state/document"
 import { storePreviousEvaluation } from "@/state/evaluate"
-import { LIST_KEY, resetPipelinesForTests, setCurrentId } from "@/state/pipelines"
+import { LIST_KEY, resetPipelinesForTests, setCurrentId, STARTER_ID } from "@/state/pipelines"
 import { readWorking, resetWorkingForTests, storeWorking } from "@/state/working"
 
 import { TakeHomePage } from "./TakeHome"
@@ -44,6 +44,7 @@ let own: unknown[] = []
 let oneDoc: unknown = null
 let samples: unknown[] = []
 let serveStatus = 200
+let samplesFail = false
 let posts: { url: string; body: Record<string, unknown> }[] = []
 
 function seed(documents = [{ sha: A, filename: "report.pdf", category: "reports" }, { sha: B, filename: "notes.pdf", category: "notes" }]) {
@@ -64,6 +65,7 @@ beforeEach(() => {
   resetAppSettingsForTests()
   demo = false
   serveStatus = 200
+  samplesFail = false
   own = [...some(10, A), ...some(4, B)]
   oneDoc = null
   samples = []
@@ -76,7 +78,7 @@ beforeEach(() => {
     vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === "POST") posts.push({ url, body: JSON.parse(String(init.body)) })
       if (url === "/api/settings/app") return ok(demo ? { demo: true, limits: { max_bytes: 1, max_pages: 1, max_files: 1, max_total_bytes: 1, ttl_hours: 24, max_evaluation_questions: 50 } } : { demo: false })
-      if (url === "/api/samples") return ok(samples)
+      if (url === "/api/samples") return samplesFail ? new Response("{}", { status: 500 }) : ok(samples)
       if (url === "/api/samples/primer/questions") return ok(sampleQuestions(12))
       if (url.startsWith("/api/v2/questions?")) return ok({ documents: [A, B], count: own.length, questions: own })
       if (url.startsWith("/api/v2/documents/") && url.endsWith("/questions")) return oneDoc ? ok(oneDoc) : ok(null)
@@ -226,6 +228,27 @@ describe("Take it home: step 1, check your questions", () => {
     expect(screen.getByText(/shown only for reference/)).toBeTruthy()
     expect(screen.getByText(/recorded later, on your server/)).toBeTruthy()
     expect(within(screen.getByTestId("row-reports")).queryByText(/found/)).toBeNull()
+  })
+
+  it("when the sample list cannot be read the page still loads", async () => {
+    samplesFail = true
+    seed()
+    await shown()
+    await screen.findByTestId("take-home-columns")
+    expect(within(screen.getByTestId("row-reports")).getByText(/✓ Ready\./)).toBeTruthy()
+  })
+
+  it("on the unedited Starter, shows the score saved under the Starter", async () => {
+    seed()
+    setCurrentId(STARTER_ID)
+    storePreviousEvaluation({
+      sourceSha: `${A},${B}`,
+      pipelineKey: STARTER_ID,
+      byId: {},
+      totals: { total: 9, scored: 9, found: 7, hit_rate: 0.8, mrr: null, recall: null, mean_rank: null, median_rank: null } as never,
+    })
+    await shown()
+    expect(screen.getAllByText(/found 7 of 9/)).toHaveLength(1)
   })
 
   it("questions that name no document are counted apart", async () => {

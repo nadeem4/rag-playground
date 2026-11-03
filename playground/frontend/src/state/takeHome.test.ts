@@ -17,6 +17,7 @@ const doc = (sha: string, category?: string): DocRef => ({ sha, filename: `${sha
 const q = (id: string, document: string): Question => ({ id, question: `Q ${id}?`, gold_answers: ["g"], tags: [], answer: "", document })
 const many = (n: number, document: string) => Array.from({ length: n }, (_, i) => q(`${document}-${i}`, document))
 const none: Sorted = {}
+const none_ = none
 
 describe("categoryRows", () => {
   it("a category with 10 own questions is ready", () => {
@@ -144,5 +145,16 @@ describe("laptopQuestions", () => {
   })
   it("is undefined when there is nothing to send", () => {
     expect(laptopQuestions(categoryRows(config, [doc("a", "reports")], none, []))).toBeUndefined()
+  })
+})
+
+describe("the default category's labels", () => {
+  it("say document, not default", () => {
+    const plain = { index: { parse: step, chunk: step, store: step } } as unknown as PipelineConfig
+    const [none] = categoryRows(plain, [], none_, [])
+    expect(none.action?.label).toBe("Test a document on Build")
+    const [sample] = categoryRows(plain, [doc("a")], none_, many(12, "a"), { sampleShas: ["a"] })
+    expect(sample.action?.label).toBe("Add a document")
+    expect(sample.text).toContain("Add a document of your own")
   })
 })

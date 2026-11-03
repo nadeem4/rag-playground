@@ -67,8 +67,11 @@ function oneOf(name: string): string {
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`
 
-function describe(status: RowStatus, name: string, count: number): { text: string; action: RowAction | null } {
-  const kind = oneOf(name)
+function describe(status: RowStatus, id: string, name: string, count: number): { text: string; action: RowAction | null } {
+  // The plain pipeline's one category is called "default", which says nothing about the documents.
+  const kind = id === "default" ? "" : oneOf(name)
+  const noun = kind || "document"
+  const own = kind ? `${kind} document` : "document"
   if (status === "ready") return { text: "Enough of your own questions for the quality check to catch a problem.", action: null }
   if (status === "weak")
     return {
@@ -77,12 +80,12 @@ function describe(status: RowStatus, name: string, count: number): { text: strin
     }
   if (status === "sample-only")
     return {
-      text: `These ${count} questions are about our sample, not your documents, so they stay out of the download. Add a ${kind} document of your own and write questions on it.`,
-      action: { kind: "add", label: `Add a ${kind} document` },
+      text: `These ${count} questions are about our sample, not your documents, so they stay out of the download. Add a ${own} of your own and write questions on it.`,
+      action: { kind: "add", label: `Add a ${own}` },
     }
   return {
-    text: `Documents in ${name} will still be read and indexed, but nothing checks how well. Try one ${kind} on Build first.`,
-    action: { kind: "test", label: `Test a ${kind} on Build` },
+    text: `Documents in ${name} will still be read and indexed, but nothing checks how well. Try one ${noun} on Build first.`,
+    action: { kind: "test", label: `Test a ${noun} on Build` },
   }
 }
 
@@ -111,7 +114,7 @@ export function categoryRows(
       count: mine.length,
       status,
       mark: MARK[status],
-      ...describe(status, name, mine.length),
+      ...describe(status, id, name, mine.length),
       sample,
       questions: mine,
       shas,

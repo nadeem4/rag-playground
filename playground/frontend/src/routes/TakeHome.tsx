@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useState, useSyncExternalStore, type ReactNo
 
 import { ApiError, api } from "@/api/client"
 import { useSamples } from "@/api/samples"
-import type { ProjectPreview, ServePreview, ServeWhere } from "@/api/types"
+import type { ProjectPreview, SampleCard, ServePreview, ServeWhere } from "@/api/types"
 import { useAppSettings } from "@/api/useDemo"
 import { useTakeHomeQuestions } from "@/api/useTakeHomeQuestions"
 import { v2 } from "@/api/v2"
@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils"
 import type { PipelineConfig, WorkingPipeline } from "@/state/config"
 import { chooseDocument } from "@/state/document"
 import { readPreviousEvaluation } from "@/state/evaluate"
-import { usePipelines } from "@/state/pipelines"
+import { STARTER_ID, usePipelines } from "@/state/pipelines"
 import { useSorting } from "@/state/sorting"
 import { categoryRows, defaultWhere, exportBody, laptopQuestions, summary, unnamedCount, type Row } from "@/state/takeHome"
 import { parseWorking, storedWorkingJson, subscribeWorking } from "@/state/working"
@@ -109,6 +109,8 @@ export function TakeHomePage({ navigate = goTo }: { navigate?: (href: string) =>
   )
 }
 
+const NO_SAMPLES: SampleCard[] = []
+
 const numbered = (n: number, title: string): ReactNode => (
   <>
     <span className="font-mono text-fg-muted">{n}</span> {title}
@@ -127,14 +129,16 @@ function Body({ working, navigate }: { working: WorkingPipeline; navigate: (href
   const cap = settings?.limits?.max_evaluation_questions
 
   const sorted = useSorting(config, docs)
-  const { samples } = useSamples()
+  // A sample list that cannot be read means no samples, not waiting for them.
+  const { samples: listed, error: samplesError } = useSamples()
+  const samples = samplesError ? NO_SAMPLES : listed
   const { questions, sampleShas } = useTakeHomeQuestions(docs, samples)
   const loaded = questions !== null
   const asked = questions ?? []
   // Evaluate keeps the last result under all the pipeline's documents, so there is one score for the whole.
   const docsKey = docs.map((d) => d.sha).join(",")
   const reference = (() => {
-    for (const k of new Set([pipelineKey ?? "working", "working"])) {
+    for (const k of new Set([pipelineKey ?? "working", ...(currentId === STARTER_ID ? [STARTER_ID] : []), "working"])) {
       const p = readPreviousEvaluation(docsKey, k)
       if (p) return `found ${p.totals.found} of ${p.totals.total}`
     }

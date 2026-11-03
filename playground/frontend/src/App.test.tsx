@@ -8,6 +8,7 @@ import { Library } from "@/routes/Library"
 import { Privacy } from "@/routes/Privacy"
 import { Read } from "@/routes/Read"
 import { Shell } from "@/routes/Shell"
+import { TakeHomePage } from "@/routes/TakeHome"
 import { LESSONS_ENABLED } from "@/state/lessons"
 
 describe("routes with the lessons on", () => {
@@ -58,6 +59,11 @@ describe("routes with the lessons off", () => {
   it("renders Library at /library", () => {
     expect(pageFor("/library", false)).toBe(Library)
     expect(pageFor("/library", true)).toBe(Library)
+  })
+
+  it("keeps /take-home and renders its page", () => {
+    expect(routeFor("/take-home", false)).toBe("/take-home")
+    expect(pageFor("/take-home", false)).toBe(TakeHomePage)
   })
 
   it("renders the privacy page at /privacy", () => {

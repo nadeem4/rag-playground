@@ -1287,6 +1287,7 @@ result records `history`, `rewrite` and `rewrite_reason` (`rewritten`, `failed` 
 `too long`) in `to_dict()`, and a follow-up with no `category:` tag counts as its own
 category, `follow-up`, in `by_category`. `reask_missed` takes the same `chat=`;
 `stale_check` searches nothing, so it needs no rewrite.
+`pandion eval` uses the default rewrite model, `claude-haiku-4-5`, and needs `ANTHROPIC_API_KEY` for it; without a key the follow-ups are searched as written and counted in `rewrites_failed` (on stderr too with `--json`). The rewrite model is listed in a recorded baseline's models when the set has follow-ups, so changing it gets a note, and the rewrite is listed as `chat rewrite` in `nondeterministic`, so a newly missed follow-up is asked once more. `follow-up` is its own category, so it is gated on its own. The rewrite's tokens and cost are not in `report.cost()`.
 
 **Tag your questions by category.** Put `category:<name>` in a question's `tags`, and keep
 one file per category as a habit, such as `evals/billing.json` and `evals/returns.json`

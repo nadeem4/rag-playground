@@ -557,10 +557,12 @@ def _step_models(stage: Stage, block: Any) -> list[str]:
     return out
 
 
-def environment(p: Pipeline) -> dict[str, Any]:
+def environment(p: Pipeline, questions: list[dict[str, Any]] | None = None, chat: ChatSettings | None = None) -> dict[str, Any]:
     """Where a baseline is made: the platform, the model ids the pipeline
     uses (the embedder and every chat model, a typed custom or OpenRouter
-    name in place of its key), and the Pandion version."""
+    name in place of its key), and the Pandion version. When `questions`
+    holds a follow-up, the chat rewrite model (`chat`'s, else the default) is
+    listed too, so a changed rewrite model is noted."""
     import platform
 
     import pandion
@@ -577,6 +579,8 @@ def environment(p: Pipeline) -> dict[str, Any]:
         block = (d.get(where, {}) if where else d).get(step)
         if block:
             models.update(_step_models(stage, block))
+    if any(q.get("history") for q in questions or []):
+        models.add((chat or ChatSettings()).rewrite_model)
     return {
         "platform": f"{platform.system()}-{platform.machine()}".lower(),
         "models": sorted(m for m in models if m),
@@ -783,7 +787,9 @@ def evaluate(
             ))
     return EvaluationReport(
         top_k=top_k, questions=results, cancelled=cancelled,
-        document_shas=_shas(p, resolved), nondeterministic=_nondeterministic(results),
+        document_shas=_shas(p, resolved),
+        # The follow-up rewrite is a model call, so it can differ between runs too.
+        nondeterministic=[*_nondeterministic(results), *(["chat rewrite"] if any(q.history for q in results) else [])],
     )
 
 

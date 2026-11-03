@@ -120,3 +120,30 @@ def test_followup_cases_are_their_own_category_in_by_category(p, monkeypatch):
     now = pandion.evaluate(p, cases)
     regression = now.against(now)
     assert sorted(regression.by_category) == ["facts", "follow-up", "uncategorized"]
+
+
+def test_a_followup_run_lists_the_rewrite_as_nondeterministic(p, monkeypatch):
+    monkeypatch.setattr("pandion.llm.complete", Fake())
+    assert "chat rewrite" in pandion.evaluate(p, [FOLLOWUP]).nondeterministic
+    assert "chat rewrite" not in pandion.evaluate(p, [PLAIN]).nondeterministic
+
+
+def test_a_newly_missed_followup_is_asked_again_with_the_same_chat_settings(p, monkeypatch):
+    fake = Fake()
+    monkeypatch.setattr("pandion.llm.complete", fake)
+    baseline = pandion.evaluate(p, [FOLLOWUP]).to_dict()
+    missed = {**FOLLOWUP, "gold_answer": "Madrid is the capital of Spain."}
+    chat = ChatSettings(rewrite_model="claude-sonnet-5")
+    report = pandion.evaluate(p, [missed], chat=chat)
+    fake.calls.clear()
+    report, again = pandion.evaluation.reask_missed(p, report, baseline, [missed], chat=chat)
+    assert again == ["followup"]
+    assert [c["model"].id for c in fake.calls] == ["claude-sonnet-5"]
+
+
+def test_the_baseline_records_the_rewrite_model_only_for_followups(p):
+    with_followup = pandion.evaluation.environment(p, [FOLLOWUP])
+    assert "claude-haiku-4-5" in with_followup["models"]
+    assert "claude-haiku-4-5" not in pandion.evaluation.environment(p, [PLAIN])["models"]
+    chosen = pandion.evaluation.environment(p, [FOLLOWUP], ChatSettings(rewrite_model="claude-sonnet-5"))
+    assert "claude-sonnet-5" in chosen["models"]

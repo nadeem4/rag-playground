@@ -79,7 +79,6 @@ def main(work: Path, wheel: Path | None = None, find_links: Path | None = None) 
     tests.mkdir()
     shutil.copy(HERE / "test_installed.py", tests)
     (tests / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
-    env["PANDION_API_WHEEL_VERSION"] = package_version()
     pytest = ["-m", "pytest", "-c", "pytest.ini", "-p", "no:cacheprovider", "--basetemp", str(work / "pytest")]
     code = subprocess.run([str(python), *pytest, "-v", "test_installed.py"], cwd=tests, env=env).returncode
     print("The install check passed." if code == 0 else "The install check failed.")

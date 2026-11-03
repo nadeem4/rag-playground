@@ -1,11 +1,9 @@
 """Checks the installed pandion-api wheel, run by run_check.py in a new environment.
-
-PANDION_API_WHEEL_VERSION is the version the wheel was built as.
 """
 
 from __future__ import annotations
 
-import os
+from importlib.metadata import version
 
 from fastapi.testclient import TestClient
 
@@ -25,8 +23,8 @@ answer: {use: search}
 """
 
 
-def test_the_installed_version_is_the_wheels():
-    assert pandion_api.__version__ == os.environ["PANDION_API_WHEEL_VERSION"]
+def test_the_module_version_is_the_wheels():
+    assert pandion_api.__version__ == version("pandion-api")
 
 
 def test_a_serve_app_builds_and_answers_health(tmp_path):

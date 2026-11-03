@@ -372,6 +372,11 @@ Prometheus counters are served when `ServeSettings.metrics_port` is set. See
 [Serve mode](pandion-api/serve-mode.md#serve-mode), [hardened defaults](pandion-api/serve-mode.md#serve-mode-hardened-defaults),
 [Logs and traces](pandion-api/serve-mode.md#logs-and-traces) and [Metrics](pandion-api/serve-mode.md#metrics).
 
+`pandion.new_project(kind="serve")` (`pandion init --serve`) generates a project that wires this
+up: `pandion/serve_project.py` renders `pipeline.yaml`, `pyproject.toml`, `.env.example`, the
+README and the question set, and copies the fixed `serve.py`, `policy.py`, `Dockerfile` and quality
+test from `pandion/templates/serve/`. See [A project to serve](pandion/templates-and-projects.md#a-project-to-serve).
+
 ## How the web app talks to the API
 
 The web app is React, built with Vite into `playground/frontend/dist`. FastAPI serves it, with a

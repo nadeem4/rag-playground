@@ -321,3 +321,44 @@ Without `--index` and `--query`, it lists each family's templates with their sum
 and asks for a number. When nothing can be typed in, as in a script, it needs both flags
 and says so. `--overwrite` writes into a folder that has files in it. Ctrl+C at the
 prompt stops it with exit code 130.
+
+### A project to serve
+
+`kind="serve"` (`pandion init --serve`) writes a project for a server instead of a laptop:
+a Docker image that answers `POST /chat` and `POST /ask` with
+[pandion-api in serve mode](../pandion-api/serve-mode.md).
+
+```python
+written = pandion.new_project(
+    "my-service", config, kind="serve",
+    categories_questions={"manuals": {"questions": [...]}},
+    source="./docs",            # a folder, or s3://, gs:// or az:// bucket path
+    index_store="lancedb",      # or "qdrant", with index_url="https://..."
+)
+```
+
+It writes `pipeline.yaml` (a `source:` block for `pandion sync`, `models: {download: never,
+cache_dir: /models}` and a commented `access:` example), `pyproject.toml`, `.env.example`,
+`README.md`, `serve.py`, `policy.py`, `Dockerfile`, `.dockerignore`, `.gitignore`,
+`tests/test_quality.py` and, when you give questions, one `evals/questions.json` whose
+questions are tagged `category:<name>`. The fixed files (`serve.py`, `policy.py`, `Dockerfile`,
+the ignore files and the test) are the same for every project.
+
+- The Dockerfile pins its base image and `uv` by digest, installs from `uv.lock` (run `uv lock`
+  once, then commit it), sets `HF_HOME=/models/hf`, runs `pandion models pull pipeline.yaml`
+  at build time and starts one worker as a non-root user.
+- `policy.py` reads the user from a header (`USER_ID_HEADER`, default `x-user-id`; a request
+  without it gets 401). Its `roles` returns an empty list, with a comment to fill it in from
+  your identity system. Until you do, a pipeline with an `access:` block shows nobody any
+  document. It has no token checking: put the server behind a gateway that sets the header.
+- A LanceDB index lives in the image's `index/` folder. For an index shared by several
+  servers use `index_store="qdrant"` with `index_url`; the key is read from `QDRANT_API_KEY`.
+  A remote LanceDB location is refused.
+- No key, secret or absolute path of your computer is written to any file. `.env.example`
+  lists names only.
+- `tests/test_quality.py` fails until you record `evals/baseline.json`; it then runs
+  `pandion eval` with the stale check first, so a changed document reads as a stale question
+  set and not as a retrieval regression.
+
+Fill the index with `pandion sync pipeline.yaml` before the server is ready: `GET /ready`
+answers 503 until the index has data.

@@ -23,6 +23,11 @@ from pandion.formats import declared_formats, listed, suffixes as format_suffixe
 #: (`file:`, `C:`), a root or share (`/`, `\\`) or a home folder (`~`).
 _OUTSIDE = re.compile(r"^(?:[A-Za-z][A-Za-z0-9+.-]*:|[\\/]|~)")
 
+#: The pandion-api range a serve project asks for. Pandion cannot import
+#: pandion-api, so tests/test_serve_pin.py keeps this in step with its version.
+SERVE_API_PIN = "~=0.1.0"
+
+
 def parse_suffixes(parser: str) -> tuple[str, ...] | None:
     """The file extensions the parser named `parser` reads, from the formats it
     declares. None for a parser that declares none: it reads every file, as far
@@ -315,10 +320,20 @@ def new_project(
     pipeline: Any,
     questions: str | Path | list[dict] | dict | None = None,
     *,
+    kind: str = "laptop",
     readme_extra: str = "",
     overwrite: bool = False,
+    categories_questions: dict[str, Any] | None = None,
+    source: str = "./docs",
+    index_store: str = "lancedb",
+    index_url: str = "./index",
 ) -> list[Path]:
     """Write a ready-to-run project for `pipeline` into `folder`, and return the paths written.
+
+    `kind="serve"` writes a project for a server instead (see `pandion.serve_project`):
+    `categories_questions` maps a category to its question set, `source` is where
+    its documents are (a folder or an s3://, gs:// or az:// address), and `index_store`
+    (`lancedb` or `qdrant`) keeps the index at `index_url`.
 
     `pipeline` is a `Pipeline` or a pipeline dict. `questions` is an optional
     question set (a path, or a list or dict, as `pandion.evaluate` takes).
@@ -332,6 +347,8 @@ def new_project(
     """
     from pandion.questions import load_questions
 
+    if kind not in ("laptop", "serve"):
+        raise ValueError(f"kind must be 'laptop' or 'serve', not '{kind}'.")
     folder = Path(folder)
     if folder.is_file():
         raise NotADirectoryError(f"{folder} is a file, not a folder. Choose a folder for the project.")
@@ -341,6 +358,13 @@ def new_project(
             "(--overwrite for pandion init) to replace the project files in it."
         )
     p, data = _pipeline_dict(pipeline)
+    if kind == "serve":
+        from pandion.serve_project import write_serve_project
+
+        return write_serve_project(
+            folder, p, data, questions=questions, categories_questions=categories_questions,
+            source=source, index_store=index_store, index_url=index_url, readme_extra=readme_extra,
+        )
     question_set = load_questions(questions) if questions is not None else None
     named: list[str] = []
     if question_set is not None:

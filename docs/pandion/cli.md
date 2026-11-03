@@ -198,9 +198,11 @@ images, under `HF_HOME`, so set the same `HF_HOME` at pull time and at run time.
 fetches the whole model repository. Run it at Docker build time so the
 container starts with `models.download: never`. See [Models](install.md#models).
 
-**`pandion init FOLDER [--index NAME] [--query NAME] [--questions FILE] [--overwrite]`**
+**`pandion init FOLDER [--index NAME] [--query NAME] [--questions FILE] [--overwrite] [--serve]`**
 writes a project folder from an index and a query template, as described in
 [Start a project](templates-and-projects.md#start-a-project), then prints the files it wrote and the next steps.
+With `--serve` it writes a project for a server (a Dockerfile, `serve.py`, `policy.py` and a
+quality test) instead of `run.py`; see [A project to serve](templates-and-projects.md#a-project-to-serve).
 
 **`pandion questions DOC --model ID [--count N] [--out FILE] [--model-name NAME] [--base-url URL] [--parser NAME] [--overwrite]`**
 parses DOC (with `pdfium` unless `--parser` names another), has the model write up to

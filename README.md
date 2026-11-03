@@ -69,8 +69,8 @@ pipeline from a shell.
 
 ## Serve a pipeline over HTTP
 
-pandion-api goes to PyPI from its own tag (see the [release runbook](docs/operations/release.md#publishing-pandion-api));
-until then, install it from this repository with `uv sync --extra dev`. A file `serve.py` with `create_app(ApiSettings(data_dir=...))` runs
+Install pandion-api from PyPI with `pip install pandion-api` (it is released from its own tag, see the
+[release runbook](docs/operations/release.md#publishing-pandion-api)). A file `serve.py` with `create_app(ApiSettings(data_dir=...))` runs
 with `uv run uvicorn serve:app`. The [pandion-api reference](docs/pandion-api/index.md#run-it)
 shows the file, and the [serve mode page](docs/pandion-api/serve-mode.md) covers running
 it for your site's users.

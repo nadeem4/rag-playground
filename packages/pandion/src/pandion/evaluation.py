@@ -891,7 +891,7 @@ def _judge_one(
     credentials: dict[str, str] | None,
     cancel: threading.Event | None,
     answer_steps: list[StageResult],
-    roles: Any = ALL_ROLES,
+    roles: Any,
 ) -> dict[str, Any]:
     """Answer one question through the pipeline and have the judge grade it.
 
@@ -924,6 +924,7 @@ def reask_missed(
     documents: Any = None,
     credentials: dict[str, str] | None = None,
     chat: ChatSettings | None = None,
+    roles: Any = ALL_ROLES,
 ) -> tuple[EvaluationReport, list[str]]:
     """Ask each question newly missed against `baseline` once more, when a
     retrieval step can differ between runs (`report.nondeterministic`).
@@ -942,7 +943,7 @@ def reask_missed(
     ]
     again = evaluate(
         p, [q for q in asked if q["id"] in missed], top_k, documents=documents, credentials=credentials,
-        chat=chat,
+        chat=chat, roles=roles,
     )
     passed = {q.id: q for q in again.questions if q.found}
     # The ask that is not kept still cost something.
@@ -1380,6 +1381,7 @@ def compare(
     on_event: Callable[[dict[str, Any]], None] | None = None,
     cancel: threading.Event | None = None,
     through: str | None = None,
+    roles: Any = ALL_ROLES,
 ) -> Comparisons:
     """Run `p` once per variant, with only `stage` changed, and evaluate each.
 
@@ -1453,7 +1455,7 @@ def compare(
         report = None
         if asked is not None and index.ok:
             report = evaluate(
-                pipeline, asked, top_k, credentials=credentials, on_event=emit, cancel=cancel
+                pipeline, asked, top_k, credentials=credentials, on_event=emit, cancel=cancel, roles=roles
             )
             results.cancelled = results.cancelled or report.cancelled
         results.append(Comparison(stage=stage, variant=variant, pipeline=pipeline, index=index, report=report))

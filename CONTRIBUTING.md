@@ -101,6 +101,14 @@ gh workflow run "Template parity" -f ref=feat/some-branch
 TEMPLATE_PARITY=all uv run pytest -m models tests/integration/test_template_parity.py
 ```
 
+Serve project goldens and the boot check: `pandion init --serve` output is pinned by goldens in
+`packages/pandion/tests/golden/serve_project/` (the version pins are hidden in them). After a
+change to a serve template, regenerate them with
+`PANDION_UPDATE_GOLDENS=1 uv run pytest packages/pandion/tests/test_serve_project.py` and read
+the diff. `packages/pandion/tests/test_serve_boot.py` generates a serve project, runs a real
+`pandion sync`, starts its app in process and checks `/ready`, `/chat`, the default policy and
+the project's own quality test (it takes about two minutes, with no network or model).
+
 The Home terminal test (`tests/integration/test_home_terminal.py`) replays the `pandion init`
 run shown on the Home page and checks its two result lines, so Linux confirms the figures.
 It runs under `-m models` in Release checks.

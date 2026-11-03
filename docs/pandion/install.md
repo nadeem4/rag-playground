@@ -62,6 +62,8 @@ Docling is the exception: it does not use `models.cache_dir` or `download: never
 its models under `HF_HOME` and fetches them again if they are missing. Set the same `HF_HOME`
 (for example `/models/hf`) when you run `pandion models pull` and when you run the server.
 From Python, `pandion.pull_models(pipeline, cache_dir=None)` does the same and returns the models it fetched.
+`pandion init --serve` writes a Dockerfile that does this for you; see
+[A project to serve](templates-and-projects.md#a-project-to-serve).
 
 To load the default embedder before the first run, so that run does not wait, call
 `pandion.preload_embedder("qwen3-embedding-0.6b")`. It takes the same settings as

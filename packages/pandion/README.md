@@ -93,6 +93,9 @@ folder you can run straight away: `pipeline.yaml`, `run.py`, `requirements.txt`,
 README and an empty `docs/` for your documents. In code, `pandion.new_project(folder, pipeline)`
 writes the same folder for any pipeline. See
 [Start a project](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion/templates-and-projects.md#start-a-project).
+`pandion init my-service --serve` writes a project for a server instead, with a Dockerfile,
+`serve.py`, `policy.py` and a quality test; see
+[A project to serve](https://github.com/nadeem4/rag-playground/blob/main/docs/pandion/templates-and-projects.md#a-project-to-serve).
 
 ## Use Pandion from the command line
 

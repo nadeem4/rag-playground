@@ -9,7 +9,7 @@
     pandion compare pipeline.yaml --vary chunk.chunk_size=200,400,800 notes/ [--questions questions.json] [--json]
     pandion install pipeline.yaml [--print]
     pandion models pull pipeline.yaml [--cache-dir DIR]
-    pandion init my-project [--index text --query balanced] [--questions questions.json] [--overwrite]
+    pandion init my-project [--index text --query balanced] [--questions questions.json] [--overwrite] [--serve]
     pandion trace TRACE_ID --url-env VAR [--json]
     pandion report [--since 7d] [--flagged] --url-env VAR [--json]
     pandion review [--evaluate [--only NAME ...] [--sample 1.0] [--rerun] [--judge [--judge-model ID]]] [--since 7d] --url-env VAR
@@ -609,11 +609,24 @@ def cmd_init(args: argparse.Namespace) -> int:
         print()
         return 130
     config = pandion.compose_template(index, query)
-    written = pandion.new_project(args.folder, config, args.questions, overwrite=args.overwrite)
+    kind = "serve" if args.serve else "laptop"
+    written = pandion.new_project(args.folder, config, args.questions, kind=kind, overwrite=args.overwrite)
     print(f"Wrote the project in {args.folder}:")
     for path in written:
         print(f"  {path.relative_to(args.folder).as_posix()}")
     folder = f'"{args.folder}"' if " " in args.folder else args.folder
+    if args.serve:
+        print(
+            "\nNext steps:\n"
+            f"  cd {folder}\n"
+            "  uv lock                       # once; commit uv.lock\n"
+            "  cp .env.example .env          # and fill it in\n"
+            "  docker build -t my-rag .\n"
+            "  docker run --rm --env-file .env my-rag pandion sync pipeline.yaml\n"
+            "  docker run --env-file .env -p 8000:8000 my-rag\n"
+            "README.md says the same, and how to record the quality baseline."
+        )
+        return 0
     print(
         "\nNext steps:\n"
         f"  cd {folder}\n"
@@ -782,6 +795,7 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--query", help="the query template, such as balanced; asked for when left out")
     sub.add_argument("--questions", help="a question set to add, JSON or CSV")
     sub.add_argument("--overwrite", action="store_true", help="write into a folder that already has files in it")
+    sub.add_argument("--serve", action="store_true", help="write a server project (Dockerfile, serve.py, policy.py) instead of a laptop project")
 
     sub = command("questions", "have a model write a question set from a document", cmd_questions)
     sub.add_argument("document", help="the document, such as report.pdf")

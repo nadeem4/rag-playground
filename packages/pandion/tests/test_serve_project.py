@@ -213,3 +213,102 @@ def test_no_secret_and_no_absolute_path_in_any_file(tmp_path):
 def test_plugins_are_refused_as_in_the_laptop_project(tmp_path):
     with pytest.raises(ValueError, match="plugins"):
         make(tmp_path, {**OFFLINE, "plugins": ["my_plugin"]})
+
+
+# --- fixed templates, init --serve and goldens ------------------------------------------
+
+
+def test_dockerfile_pins_base_by_digest_and_builds_frozen(tmp_path):
+    text = (make(tmp_path) / "Dockerfile").read_text(encoding="utf-8")
+    assert re.search(r"^FROM python:3\.13-slim@sha256:[0-9a-f]{64}$", text, re.M)
+    assert re.search(r"--from=ghcr\.io/astral-sh/uv:[\d.]+@sha256:[0-9a-f]{64} ", text)
+    assert "uv sync --frozen" in text and "COPY pyproject.toml uv.lock" in text
+    assert "HF_HOME=/models/hf" in text and text.index("HF_HOME=/models/hf") < text.index("RUN pandion models pull pipeline.yaml")
+    assert text.index("RUN pandion models pull") < text.index("USER app")
+    assert text.count("--workers") == 1 and '"1"' in text
+
+
+def test_dockerignore_excludes_secrets_and_index(tmp_path):
+    lines = (make(tmp_path) / ".dockerignore").read_text(encoding="utf-8").split()
+    assert {".env", "docs/", "index/", ".venv"} <= set(lines)
+
+
+def test_gitignore_excludes_env_index_sqlite(tmp_path):
+    lines = (make(tmp_path) / ".gitignore").read_text(encoding="utf-8").split()
+    assert {".env", "index/", "*.sqlite"} <= set(lines)
+
+
+def policy_module(folder: Path):
+    import importlib.util
+
+    pytest.importorskip("pandion_api")
+    spec = importlib.util.spec_from_file_location("generated_policy", folder / "policy.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class FakeRequest:
+    def __init__(self, **headers):
+        self.headers = {k.replace("_", "-"): v for k, v in headers.items()}
+
+
+def test_policy_user_id_reads_the_header_and_refuses_without_it(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+
+    policy = policy_module(make(tmp_path)).GatewayPolicy()
+    monkeypatch.delenv("USER_ID_HEADER", raising=False)
+    assert policy.user_id(FakeRequest(x_user_id="ann")) == "ann"
+    for request in (FakeRequest(), FakeRequest(x_user_id="  ")):
+        with pytest.raises(HTTPException) as refused:
+            policy.user_id(request)
+        assert refused.value.status_code == 401
+        with pytest.raises(HTTPException):
+            policy.limit(request)
+    monkeypatch.setenv("USER_ID_HEADER", "x-employee")
+    assert policy.user_id(FakeRequest(x_employee="bo")) == "bo"
+    monkeypatch.setenv("USER_ID_HEADER", "")  # an empty value in an env file means the default
+    assert policy.user_id(FakeRequest(x_user_id="ann")) == "ann"
+
+
+def test_policy_stub_has_the_fill_this_in_comment(tmp_path):
+    folder = make(tmp_path)
+    text = (folder / "policy.py").read_text(encoding="utf-8")
+    assert "Fill this in from your identity system" in text
+    assert "jwt" not in text.lower() and "jwks" not in text.lower()
+    assert policy_module(folder).GatewayPolicy().roles(FakeRequest(x_user_id="ann")) == []
+
+
+def test_cli_init_serve_writes_the_serve_project(tmp_path, capsys):
+    from pandion import cli
+
+    folder = tmp_path / "project"
+    assert cli.main(["init", str(folder), "--index", "text", "--query", "balanced", "--serve"]) == 0
+    assert (folder / "serve.py").is_file() and (folder / "Dockerfile").is_file()
+    assert not (folder / "run.py").exists()
+    out = capsys.readouterr().out
+    assert "uv lock" in out and "docker build" in out and "pandion sync" in out
+
+
+def pins_hidden(text: str) -> str:
+    return text.replace(pin(), "~=<pin>").replace(SERVE_API_PIN, "~=<api-pin>")
+
+
+def golden_text(folder: Path) -> str:
+    def part(name: str) -> str:
+        return f"=== {name}\n" + pins_hidden((folder / name).read_text(encoding="utf-8"))
+
+    readme = (folder / "README.md").read_text(encoding="utf-8").split("\n## ", 1)[0]
+    return "".join(part(n) for n in ("pipeline.yaml", "pyproject.toml", ".env.example", "Dockerfile")) + "=== README.md (head)\n" + readme + "\n"
+
+
+@pytest.mark.parametrize(("index", "query"), [("manuals", "chat"), ("text", "balanced")])
+def test_serve_goldens_match(tmp_path, index, query):
+    folder = tmp_path / "project"
+    pandion.new_project(folder, pandion.compose_template(index, query), kind="serve")
+    golden = GOLDEN / f"{index}-{query}.txt"
+    actual = golden_text(folder)
+    if UPDATE:
+        golden.parent.mkdir(parents=True, exist_ok=True)
+        golden.write_text(actual, encoding="utf-8", newline="\n")
+    assert actual == golden.read_text(encoding="utf-8")

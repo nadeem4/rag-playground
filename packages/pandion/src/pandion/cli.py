@@ -5,7 +5,7 @@
     pandion index pipeline.yaml report.pdf notes/ [--sync] [--through chunk]
     pandion retrieve pipeline.yaml "What is chunking?" [--k 5] [--documents report.pdf]
     pandion ask pipeline.yaml "What is chunking?" [--documents report.pdf]
-    pandion eval pipeline.yaml questions.json [--documents report.pdf] [--top-k 5] [--json] [--baseline base.json [--allow 0] | --record-baseline base.json]
+    pandion eval pipeline.yaml questions.json [--documents report.pdf] [--top-k 5] [--json] [--baseline base.json [--allow 0] | --record-baseline base.json] [--judge [--judge-model ID] [--judge-gate]]
     pandion compare pipeline.yaml --vary chunk.chunk_size=200,400,800 notes/ [--questions questions.json] [--json]
     pandion install pipeline.yaml [--print]
     pandion init my-project [--index text --query balanced] [--questions questions.json] [--overwrite]
@@ -34,7 +34,7 @@ import yaml
 import pandion
 from pandion import ConfigError, Pipeline
 from pandion.extend import PluginError, get_conversation_store, load_plugins as load_modules, plugin_listing
-from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K
+from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K, JudgeSettings
 
 #: Pandion's name for each key, and the environment variable it is read from.
 ENV_KEYS = {
@@ -351,6 +351,11 @@ def cmd_eval(args: argparse.Namespace) -> int:
         raise ValueError("--allow counts newly missed questions against a baseline: add --baseline base.json.")
     if args.record_baseline is not None and args.baseline is not None:
         raise ValueError("--record-baseline writes a new baseline and --baseline compares with an old one: use one of them.")
+    if (args.judge_model or args.judge_gate) and not args.judge:
+        raise ValueError("--judge-model and --judge-gate go with --judge, which turns the correctness judge on.")
+    if args.judge_gate and args.baseline is None:
+        raise ValueError("--judge-gate compares the mean correctness with a baseline's: add --baseline base.json.")
+    judge = JudgeSettings(on=args.judge, gate=args.judge_gate, **({"model": args.judge_model} if args.judge_model else {}))
     # Read the baseline before anything runs, so a wrong file costs nothing.
     baseline = pandion.evaluation.load_baseline(args.baseline) if args.baseline is not None else None
     p = _load(args)
@@ -364,7 +369,9 @@ def cmd_eval(args: argparse.Namespace) -> int:
         return 1
     for warning in stale.warnings:
         print(warning, file=sys.stderr)
-    report = pandion.evaluate(p, args.questions, args.top_k, documents=_documents(args), credentials=credentials_from_env())
+    report = pandion.evaluate(
+        p, args.questions, args.top_k, documents=_documents(args), credentials=credentials_from_env(), judge=judge
+    )
     reasked: list[str] = []
     if baseline is not None:
         # A step that can differ between runs gets one more ask for each newly missed question.
@@ -379,7 +386,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
     if args.json:
         data = {**report.to_dict(), "cost": report.cost(), "environment": env}
         if regression is not None:
-            data["regression"] = {**regression.to_dict(), "gate_ok": regression.gate_ok(args.allow or 0)}
+            data["regression"] = {**regression.to_dict(), "gate_ok": regression.gate_ok(args.allow or 0, args.judge_gate)}
             data["reasked"] = [{"id": i, "found": found_again[i]} for i in reasked]
         print(json.dumps(data, indent=2))
     else:
@@ -393,6 +400,8 @@ def cmd_eval(args: argparse.Namespace) -> int:
             allow = args.allow or 0
             for name in regression.failed_categories(allow):
                 print(f'Category "{name}" newly missed: {", ".join(regression.by_category[name]["newly_missed"])}.')
+            if args.judge_gate and not regression.judge_ok():
+                print(f"Mean correctness fell by more than {pandion.evaluation.JUDGE_DROP} from the baseline's.")
     if not all(q.error is None for q in report.questions):
         return 1
     if args.record_baseline is not None:
@@ -404,7 +413,7 @@ def cmd_eval(args: argparse.Namespace) -> int:
             f"Baseline recorded at {args.record_baseline} (platform {env['platform']}, {len(report.questions)} questions).",
             file=sys.stderr if args.json else sys.stdout,
         )
-    return 0 if regression is None or regression.gate_ok(args.allow or 0) else 1
+    return 0 if regression is None or regression.gate_ok(args.allow or 0, args.judge_gate) else 1
 
 
 def cmd_compare(args: argparse.Namespace) -> int:
@@ -592,6 +601,9 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--baseline", help="a report saved with --record-baseline: say which questions this run newly missed or newly found (each is asked once more first when a step can differ between runs)")
     sub.add_argument("--allow", type=int, help="with --baseline, how many newly missed questions per category still exit 0 (default 0)")
     sub.add_argument("--record-baseline", dest="record_baseline", metavar="PATH", help="write this run as a baseline, with its platform and models, to PATH")
+    sub.add_argument("--judge", action="store_true", help="also grade each answer against the question's expected answer with a model (off by default; costs model calls; report only)")
+    sub.add_argument("--judge-model", dest="judge_model", help="the judge's chat model (default claude-haiku-4-5)")
+    sub.add_argument("--judge-gate", dest="judge_gate", action="store_true", help="with --judge and --baseline, exit 1 when the mean correctness fell more than 0.05 below the baseline's")
 
     sub = command("compare", "run a pipeline once per value of one setting", cmd_compare)
     sub.add_argument("config")

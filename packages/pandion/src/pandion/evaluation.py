@@ -34,6 +34,7 @@ from pandion.config import ConfigError, _block, from_dict, to_dict
 from pandion.cost import STAGE_ORDER, total_cost
 from pandion.cost import cost as _cost
 from pandion.events import event
+from pandion.judge import JudgeSettings, JudgeTally, judge_answer
 from pandion.payloads import ChunkSet, Query, RetrievalResult
 from pandion.pipeline import IndexReport, Pipeline, Retrieval
 from pandion.plugins import discover
@@ -62,6 +63,7 @@ __all__ = [
     "EvaluationReport",
     "GOLD_SEPARATOR",
     "GoldFound",
+    "JudgeSettings",
     "QuestionResult",
     "QuestionSetError",
     "Regression",
@@ -164,6 +166,10 @@ class QuestionResult:
     error: str | None = None
     retrieval: Retrieval | None = field(default=None, repr=False)
     document: str | None = None
+    #: The expected answer the set gave (`answer`), or "". Only the judge reads it.
+    expected: str = ""
+    #: The judge's `{"score", "reason"}`, or `{"skipped": True}`; None when not judged.
+    judge: dict[str, Any] | None = None
 
     @property
     def result_id(self) -> str | None:
@@ -175,7 +181,9 @@ class QuestionResult:
 
     def to_dict(self) -> dict[str, Any]:
         """Plain JSON, without the retrieval, but with its final result's id
-        (`result_id`), so the hit rows can be fetched by id."""
+        (`result_id`), so the hit rows can be fetched by id. A judged question
+        also has its `judge` verdict."""
+        extra = {"judge": dict(self.judge)} if self.judge is not None else {}
         return {
             "id": self.id,
             "question": self.question,
@@ -189,6 +197,7 @@ class QuestionResult:
             "error": self.error,
             "result_id": self.result_id,
             "document": self.document,
+            **extra,
         }
 
 
@@ -209,10 +218,35 @@ class EvaluationReport:
     spent_again: list[StageResult] = field(default_factory=list, repr=False)
     #: The ids of questions asked a second time (`reask_missed`).
     asked_again: list[str] = field(default_factory=list)
+    #: What the correctness judge cost and skipped; None when it did not run.
+    judge: JudgeTally | None = None
+    #: The score below which a judged answer is listed as wrong.
+    judge_threshold: float = 0.7
 
     @property
     def total(self) -> int:
         return len(self.questions)
+
+    def _judge_scores(self) -> list[float]:
+        return [q.judge["score"] for q in self.questions if q.judge and "score" in q.judge]
+
+    def judge_summary(self) -> dict[str, Any]:
+        """Mean correctness (None when nothing was judged), how many answers were
+        judged and skipped, what the judge cost, and the ids scored below the
+        threshold. Empty when the judge did not run."""
+        if self.judge is None:
+            return {}
+        scores = self._judge_scores()
+        return {
+            "correctness_mean": sum(scores) / len(scores) if scores else None,
+            "judged": len(scores),
+            "judge_skipped": self.judge.skipped,
+            "judge_cost": None if self.judge.unpriced else self.judge.dollars,
+            "judge_below": [
+                q.id for q in self.questions
+                if q.judge and "score" in q.judge and q.judge["score"] < self.judge_threshold
+            ],
+        }
 
     @property
     def found(self) -> int:
@@ -272,6 +306,14 @@ class EvaluationReport:
         if failed:
             total += f" {failed} question{'' if failed == 1 else 's'} could not be scored."
         out = [*lines, total]
+        if self.judge is not None:
+            j = self.judge_summary()
+            line = "Judged correctness"
+            line += f": mean {j['correctness_mean']:.2f} over {j['judged']} answers" if j["judged"] else ": no answer was judged"
+            line += f" ({j['judge_skipped']} skipped)." if j["judge_skipped"] else "."
+            if j["judge_below"]:
+                line += " Below the threshold: " + ", ".join(j["judge_below"]) + "."
+            out.append(line)
         if self.cancelled:
             out.append("Stopped before every question was asked.")
         return "\n".join(out)
@@ -288,6 +330,7 @@ class EvaluationReport:
             "nondeterministic": list(self.nondeterministic),
             "asked_again": list(self.asked_again),
             **self.totals(),
+            **self.judge_summary(),
             "by_tag": self.by_tag(),
             "by_document": self.by_document(),
             "questions": [q.to_dict() for q in self.questions],
@@ -323,6 +366,15 @@ class Regression:
     #: Per category (the `category:<name>` tag): `compared`, `found_before`,
     #: `found_now`, `newly_missed` and `newly_found`.
     by_category: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: The judge's mean correctness in the baseline and now; None when a run was not judged.
+    correctness_before: float | None = None
+    correctness_now: float | None = None
+
+    def judge_ok(self) -> bool:
+        """The mean correctness fell by no more than `JUDGE_DROP`, or one run was not judged."""
+        if self.correctness_before is None or self.correctness_now is None:
+            return True
+        return self.correctness_before - self.correctness_now <= JUDGE_DROP + 1e-9
 
     def ok(self, allow: int = 0) -> bool:
         """At most `allow` questions were newly missed, over the whole set."""
@@ -332,10 +384,11 @@ class Regression:
         """The categories with more than `allow` newly missed questions."""
         return [c for c, r in self.by_category.items() if len(r["newly_missed"]) > allow]
 
-    def gate_ok(self, allow: int = 0) -> bool:
+    def gate_ok(self, allow: int = 0, judge_gate: bool = False) -> bool:
         """Every category has at most `allow` newly missed questions, so one
-        category's loss is not hidden by another's gain."""
-        return not self.failed_categories(allow)
+        category's loss is not hidden by another's gain. With `judge_gate`, the
+        judge's mean correctness must also not fall by more than `JUDGE_DROP`."""
+        return not self.failed_categories(allow) and (not judge_gate or self.judge_ok())
 
     def to_dict(self) -> dict[str, Any]:
         return {**asdict(self), "ok": self.ok(), "gate_ok": self.gate_ok()}
@@ -346,8 +399,13 @@ class Regression:
             line += " Newly missed: " + ", ".join(self.newly_missed) + "."
         if self.newly_found:
             line += " Newly found: " + ", ".join(self.newly_found) + "."
+        if self.correctness_before is not None and self.correctness_now is not None:
+            line += f" Mean correctness {self.correctness_now:.2f}; the baseline's was {self.correctness_before:.2f}."
         return "\n".join([line, *self.notes])
 
+
+#: With the judge gate on, the mean correctness may fall this far below the baseline's.
+JUDGE_DROP = 0.05
 
 #: A question with no id in its set is named by its place, which moves when the set is reordered.
 _POSITIONAL = re.compile(r"question \d+")
@@ -501,6 +559,8 @@ def _regression(now: dict[str, Any], before: dict[str, Any]) -> Regression:
         partial=partial,
         notes=notes,
         by_category=by_category,
+        correctness_before=before.get("correctness_mean"),
+        correctness_now=now.get("correctness_mean"),
     )
 
 
@@ -637,8 +697,15 @@ def evaluate(
     credentials: dict[str, str] | None = None,
     on_event: Callable[[dict[str, Any]], None] | None = None,
     cancel: threading.Event | None = None,
+    judge: JudgeSettings | None = None,
 ) -> EvaluationReport:
     """Search for every question in `questions` and say whether the answer came back.
+
+    With `judge` on (`JudgeSettings(on=True)`), each question that has an expected
+    `answer` is also answered through the pipeline's answer section and graded
+    by a model, and the report adds the mean correctness. It is off by default,
+    costs model calls, and a judge that fails never fails the evaluation
+    (`pandion.judge`).
 
     `questions` is a question set: a path to a JSON or CSV file in the format
     the bundled samples use, or the same list (or dict) in code. It is checked
@@ -684,6 +751,9 @@ def evaluate(
     index: IndexReport | None = None
     results: list[QuestionResult] = []
     cancelled = False
+    judging = judge is not None and judge.on
+    tally = JudgeTally() if judging else None
+    answer_steps: list[StageResult] = []
     for n, (q, owner) in enumerate(zip(asked, owners), start=1):
         if cancel is not None and cancel.is_set():
             cancelled = True
@@ -730,6 +800,11 @@ def evaluate(
                 lost_at=miss["lost_at"] if miss else None, trace=miss, score=score,
                 retrieval=retrieval,
             )
+        result.expected = q.get("answer") or ""
+        if judging and result.error is None and result.expected:
+            result.judge = _judge_one(
+                p, q, result.expected, top_k, resolved, judge, tally, credentials, cancel, answer_steps
+            )
         results.append(result)
         if on_event is not None:
             on_event(event(
@@ -739,7 +814,40 @@ def evaluate(
     return EvaluationReport(
         top_k=top_k, questions=results, cancelled=cancelled,
         document_shas=_shas(p, resolved), nondeterministic=_nondeterministic(results),
+        spent_again=answer_steps, judge=tally, judge_threshold=judge.threshold if judging else 0.7,
     )
+
+
+def _judge_one(
+    p: Pipeline,
+    q: dict[str, Any],
+    expected: str,
+    top_k: int,
+    documents: Any,
+    judge: JudgeSettings,
+    tally: JudgeTally,
+    credentials: dict[str, str] | None,
+    cancel: threading.Event | None,
+    answer_steps: list[StageResult],
+) -> dict[str, Any]:
+    """Answer one question through the pipeline and have the judge grade it.
+
+    The search is read from the cache the retrieval just filled. Whatever goes
+    wrong (no answer section, a failed answer, a bad reply) is a skip, counted.
+    """
+    skipped = {"skipped": True}
+    try:
+        answer = p.ask(q["question"], top_k, documents=documents, credentials=credentials, cancel=cancel)
+    except Exception:
+        tally.skipped += 1
+        return skipped
+    answer_steps.append(answer.answer)
+    if not answer.ok:
+        tally.skipped += 1
+        return skipped
+    sources = [hit.chunk.text for hit in answer.hits[:top_k]]
+    verdict = judge_answer(q["question"], answer.text, expected, sources, judge, credentials, tally)
+    return skipped if verdict is None else {"score": verdict.score, "reason": verdict.reason}
 
 
 def reask_missed(

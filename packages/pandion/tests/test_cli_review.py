@@ -104,3 +104,10 @@ def test_review_says_when_it_read_only_the_newest_traces(store, monkeypatch, cap
     monkeypatch.setattr(cli, "TRACE_LIMIT", 2)
     cli.main(["review", "--url-env", VAR])
     assert "Only the newest" in capsys.readouterr().err
+
+
+def test_review_evaluate_says_when_it_read_only_the_newest_traces(store, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "TRACE_LIMIT", 2)
+    online_evaluator("len", version="1", outputs={"n": "float"})(lambda t: {"n": float(len(t.answer))})
+    assert cli.main(["review", "--evaluate", "--url-env", VAR]) == 0
+    assert "Only the newest" in capsys.readouterr().err

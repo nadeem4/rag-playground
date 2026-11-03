@@ -278,6 +278,8 @@ def cmd_review(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(exc, file=sys.stderr)
         return 1
+    if result.traces >= TRACE_LIMIT:
+        print(f"Only the newest {TRACE_LIMIT:,} traces were read; narrow with --since.", file=sys.stderr)
     out, err = format_review_result(result)
     print(out)
     if err:

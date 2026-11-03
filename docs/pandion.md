@@ -1336,21 +1336,25 @@ question (plus one call to answer it), and it only adds numbers to the report un
 turn its gate on.
 
 ```python
-from pandion.judge import JudgeSettings
+from pandion.evaluation import JudgeSettings
 
 report = pandion.evaluate(p, "questions.json", judge=JudgeSettings(on=True))
 report.to_dict()["correctness_mean"]    # 0.0 to 1.0, None when nothing was judged
 ```
 
 - **Which questions.** Only a question that has an expected `answer` in the set, and whose
-  pipeline has an `answer:` section. Each is answered through the pipeline (its search is
-  read from the cache), then graded from 0 to 1 against the expected answer, with the
+  pipeline has an `answer:` section (`--judge` exits 2 without one). Each is answered through
+  the pipeline, so a model-backed rewrite or rerank step runs again for it and is counted
+  in the cost, then graded from 0 to 1 against the expected answer, with the
   sources the answer was built from. A question without an expected `answer` is not judged
   and keeps the plain found or missed verdict.
 - **What the report gets.** `correctness_mean`, `judged`, `judge_skipped`, `judge_cost`
   (dollars, an estimate) and `judge_below` (the ids scored under the threshold, 0.7 unless
   `JudgeSettings(threshold=...)` says otherwise). Each judged question carries its
-  `judge` score and a one-sentence reason. The cost of answering is part of `report.cost()`.
+  `judge` score and a one-sentence reason. The cost of answering is part of `report.cost()`;
+  the text report also prints the judge's own cost. The judge model must be a Claude or OpenAI
+  model: OpenRouter and custom endpoints are refused, because they need a model name or URL.
+  A question found again by a re-ask keeps the verdict of its first ask.
 - **A judge never fails an evaluation.** If the call fails or the reply is not the asked-for
   JSON, the question is skipped and counted in `judge_skipped`.
 - **The prompt.** The question, the expected answer, the answer and the sources go in

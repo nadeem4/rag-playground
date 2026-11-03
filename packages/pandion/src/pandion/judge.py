@@ -24,7 +24,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 from pandion import llm
-from pandion.llm import CHAT_MODELS, PRICES
+from pandion.llm import ADAPTIVE_THINKING, CHAT_MODELS, PRICES
 
 __all__ = ["JUDGE_SYSTEM", "JudgeSettings", "JudgeTally", "JudgeVerdict", "judge_answer"]
 
@@ -57,6 +57,8 @@ class JudgeSettings(BaseModel):
     def _known_model(cls, value: str) -> str:
         if value not in CHAT_MODELS:
             raise ValueError(f"'{value}' is not a chat model. The models are: {', '.join(CHAT_MODELS)}.")
+        if CHAT_MODELS[value].provider in ("openrouter", "openai_compatible"):
+            raise ValueError(f"'{value}' needs a model name or URL, which the judge does not take. Pick a Claude or OpenAI model.")
         return value
 
 
@@ -140,7 +142,8 @@ def judge_answer(
             system=JUDGE_SYSTEM,
             user=_prompt(question, answer, expected, sources),
             api_key=llm.key_for(model, credentials),
-            max_tokens=300,
+            # Adaptive thinking spends output tokens before the reply.
+            max_tokens=4000 if settings.model in ADAPTIVE_THINKING else 300,
             temperature=0,
         )
     except Exception:

@@ -310,7 +310,10 @@ class EvaluationReport:
             j = self.judge_summary()
             line = "Judged correctness"
             line += f": mean {j['correctness_mean']:.2f} over {j['judged']} answers" if j["judged"] else ": no answer was judged"
-            line += f" ({j['judge_skipped']} skipped)." if j["judge_skipped"] else "."
+            line += f" ({j['judge_skipped']} skipped)" if j["judge_skipped"] else ""
+            if j["judge_cost"] is not None:
+                line += f", about ${j['judge_cost']:.4f} for the judge"
+            line += "."
             if j["judge_below"]:
                 line += " Below the threshold: " + ", ".join(j["judge_below"]) + "."
             out.append(line)
@@ -391,7 +394,10 @@ class Regression:
         return not self.failed_categories(allow) and (not judge_gate or self.judge_ok())
 
     def to_dict(self) -> dict[str, Any]:
-        return {**asdict(self), "ok": self.ok(), "gate_ok": self.gate_ok()}
+        data = {**asdict(self), "ok": self.ok(), "gate_ok": self.gate_ok()}
+        if self.correctness_before is None and self.correctness_now is None:
+            del data["correctness_before"], data["correctness_now"]
+        return data
 
     def __str__(self) -> str:
         line = f"Found {self.found_now} of {self.compared}; the baseline found {self.found_before} of {self.compared}."
@@ -841,7 +847,8 @@ def _judge_one(
     except Exception:
         tally.skipped += 1
         return skipped
-    answer_steps.append(answer.answer)
+    # A rewrite or rerank model call re-runs here; count every step that ran.
+    answer_steps.extend(s for s in answer._costed() if s.status == "executed")
     if not answer.ok:
         tally.skipped += 1
         return skipped
@@ -882,7 +889,8 @@ def reask_missed(
     # The ask that is not kept still cost something.
     dropped = [s for q in report.questions if q.id in passed and q.retrieval for s in q.retrieval._costed()]
     dropped += [s for q in again.questions if q.id not in passed and q.retrieval for s in q.retrieval._costed()]
-    merged = [passed.get(q.id, q) for q in report.questions]
+    # The re-ask is not judged: the first ask's verdict stays with the question.
+    merged = [replace(passed[q.id], judge=q.judge, expected=q.expected) if q.id in passed else q for q in report.questions]
     return replace(report, questions=merged, spent_again=[*report.spent_again, *dropped], asked_again=missed), missed
 
 

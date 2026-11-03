@@ -85,6 +85,17 @@ def test_a_drop_does_not_fail_without_the_gate(run):
     assert "Mean correctness 0.60; the baseline's was 0.80." in out
 
 
+def test_judge_on_a_pipeline_without_an_answer_section_is_refused(run):
+    import yaml
+    from test_cli_commands import PIPELINE
+
+    plain = {k: v for k, v in PIPELINE.items() if k != "answer"}
+    (run.tmp / "pipeline.yaml").write_text(yaml.safe_dump(plain, sort_keys=False), encoding="utf-8")
+    code, _, err = run("--judge")
+    assert code == 2 and "answer" in err
+    assert run.state["searches"] == 0
+
+
 def test_json_carries_the_judge_numbers(run):
     run.state["report"] = judged(0.9)
     code, out, _ = run("--judge", "--json")

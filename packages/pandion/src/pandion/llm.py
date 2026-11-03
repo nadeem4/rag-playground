@@ -311,7 +311,8 @@ def complete(
 
     `temperature` is sent only when given, and not to a model that rejects it
     (Claude with adaptive thinking, and OpenAI's own models, which are
-    reasoning models). The default request is unchanged.
+    reasoning models). OpenRouter and custom endpoints get it as sent. The
+    default request is unchanged.
 
     `public_only` is for a server that strangers share: a custom endpoint must
     then be a public https address (`pandion.endpoints`).

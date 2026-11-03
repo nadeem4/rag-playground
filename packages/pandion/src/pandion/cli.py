@@ -359,6 +359,8 @@ def cmd_eval(args: argparse.Namespace) -> int:
     # Read the baseline before anything runs, so a wrong file costs nothing.
     baseline = pandion.evaluation.load_baseline(args.baseline) if args.baseline is not None else None
     p = _load(args)
+    if judge.on and p.query is None:
+        raise ValueError("--judge answers each question, so the pipeline file needs an answer: section.")
     env = pandion.evaluation.environment(p)
     # A baseline from another platform or with other models is refused before any search is paid for.
     env_notes = pandion.evaluation.check_environment(baseline, env) if baseline is not None else []

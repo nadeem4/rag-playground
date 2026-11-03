@@ -189,6 +189,59 @@ def test_gate_off_never_fails_on_the_judge():
     assert scored(0.1).against(scored(0.9).to_dict()).gate_ok()
 
 
+def test_every_executed_step_of_the_judged_answer_is_counted(fake):
+    from types import SimpleNamespace as NS
+
+    from pandion.evaluation import _judge_one
+
+    steps = [NS(status="executed", name="rerank"), NS(status="cached", name="search"), NS(status="executed", name="answer")]
+    answer = NS(ok=True, text="Paris.", hits=[], _costed=lambda: steps)
+    p = NS(ask=lambda *a, **kw: answer)
+    spent: list = []
+    _judge_one(p, {"question": "Q?"}, "Paris", 5, None, ON, JudgeTally(), None, None, spent)
+    assert [s.name for s in spent] == ["rerank", "answer"]
+
+
+def test_a_reasked_question_keeps_its_judge_verdict(fake, pipe, monkeypatch):
+    from pandion import evaluation
+
+    first = pandion.evaluate(pipe, [FRANCE], judge=ON)
+    first.nondeterministic = ["llm_rerank"]
+    again = pandion.evaluate(pipe, [FRANCE])  # the re-ask runs without the judge
+    assert again.questions[0].judge is None
+    monkeypatch.setattr(evaluation, "evaluate", lambda *a, **kw: again)
+    entry = {**first.to_dict()["questions"][0]}
+    first.questions[0].found = False  # newly missed against a baseline that found it
+    baseline = {**first.to_dict(), "questions": [{**entry, "found": True}]}
+    report, asked = evaluation.reask_missed(pipe, first, baseline, [FRANCE])
+    assert asked == ["capital"]
+    assert report.questions[0].judge == {"score": 0.9, "reason": "Same fact."}
+    assert report.questions[0].expected == "Paris"
+
+
+@pytest.mark.parametrize("model", ["openrouter", "custom"])
+def test_judge_refuses_models_that_need_an_endpoint(model):
+    with pytest.raises(ValueError, match="model name or URL"):
+        JudgeSettings(model=model)
+
+
+def test_judge_gives_thinking_models_room_to_answer(fake):
+    judge(JudgeSettings(on=True, model="claude-sonnet-5"))
+    assert fake.calls[0]["max_tokens"] >= 2000
+    judge()
+    assert fake.calls[1]["max_tokens"] == 300
+
+
+def test_the_text_report_shows_the_judge_cost(fake, pipe):
+    assert "$0.0015" in str(pandion.evaluate(pipe, [FRANCE], judge=ON))
+
+
+def test_regression_dict_leaves_out_correctness_when_not_judged():
+    plain = EvaluationReport(top_k=5, questions=[])
+    d = plain.against(plain.to_dict()).to_dict()
+    assert "correctness_before" not in d and "correctness_now" not in d
+
+
 def test_gate_ignores_a_baseline_that_was_not_judged():
     plain = EvaluationReport(top_k=5, questions=scored(0.9).questions[:0])
     assert scored(0.1).against(plain.to_dict()).gate_ok(judge_gate=True)

@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from collections.abc import Sequence
@@ -27,8 +28,9 @@ from pydantic import BaseModel, Field, field_validator
 from pandion import llm
 from pandion.answer_safety import strip_unsourced_urls
 from pandion.events import event
-from pandion.conversation_store import Conversation, ConversationNotFound, ConversationStore, Memory, Turn
+from pandion.conversation_store import Conversation, ConversationNotFound, ConversationStore, Memory, TraceStore, Turn
 from pandion.llm import CHAT_MODELS
+from pandion.trace_record import record_from_turn
 
 #: A rewrite longer than this is an answer or an essay, not a question.
 MAX_REWRITE = 300
@@ -171,6 +173,8 @@ def chat_turn(
     `cancel` is handed to the pipeline as it is.
     """
     settings = settings or ChatSettings()
+    started = time.monotonic()
+    trace_id = trace_id or uuid.uuid4().hex
     conversation = None
     if conversation_id is not None:
         conversation = store.load(conversation_id, user_id)
@@ -180,8 +184,7 @@ def chat_turn(
     memories = [m.text for m in store.memories(user_id)[-MAX_MEMORIES:]] if settings.memory else []
     standalone, reason = standalone_question(conversation, question, settings, credentials, memories)
     if on_event is not None:
-        extra = {"trace_id": trace_id} if trace_id is not None else {}
-        on_event(event("chat_rewrite", standalone=standalone, reason=reason, **extra))
+        on_event(event("chat_rewrite", standalone=standalone, reason=reason, trace_id=trace_id))
     answer = p.ask(
         standalone, roles=roles, credentials=credentials, on_event=on_event, cancel=cancel,
         trace_id=trace_id,
@@ -195,9 +198,17 @@ def chat_turn(
         text = strip_unsourced_urls(text, [hit.chunk.text for hit in getattr(answer, "hits", [])])
     store.append(
         conversation_id, user_id,
-        Turn(question=question, answer=text, rewrite=standalone, source_ids=sources, trace_id=trace_id or ""),
+        Turn(question=question, answer=text, rewrite=standalone, source_ids=sources, trace_id=trace_id),
     )
-    return TurnResult(conversation_id, question, standalone, text, sources, answer)
+    result = TurnResult(conversation_id, question, standalone, text, sources, answer)
+    if isinstance(store, TraceStore):
+        try:
+            store.save_trace(record_from_turn(
+                result, user_id=user_id, conversation_id=conversation_id, question=question,
+                started=started, trace_id=trace_id))
+        except Exception as exc:  # noqa: BLE001  (a trace is a record of the turn, never a reason to lose it)
+            logger.warning("Trace %s was not saved (%s: %s).", trace_id, type(exc).__name__, exc)
+    return result
 
 
 def _cap(summary: str) -> str:

@@ -104,12 +104,12 @@ def test_a_failed_follow_up_keeps_the_conversation_id(store, rewrites):
     assert len(store.load(first.conversation_id, "u").turns) == 1
 
 
-def test_the_event_carries_the_trace_id_when_given(store, rewrites):
+def test_the_event_carries_the_trace_id_given_or_made(store, rewrites):
     events = []
     chat_turn(StubPipeline(), store, user_id="u", question="Q?", trace_id="t5", on_event=events.append)
     chat_turn(StubPipeline(), store, user_id="u", question="Q?", on_event=events.append)
     rewrite = [e for e in events if e.get("event") == "chat_rewrite"]
-    assert rewrite[0]["trace_id"] == "t5" and "trace_id" not in rewrite[1]
+    assert rewrite[0]["trace_id"] == "t5" and len(rewrite[1]["trace_id"]) == 32
 
 
 def test_the_chat_rewrite_event_is_json(store, rewrites):

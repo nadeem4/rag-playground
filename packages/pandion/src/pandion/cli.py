@@ -9,6 +9,8 @@
     pandion compare pipeline.yaml --vary chunk.chunk_size=200,400,800 notes/ [--questions questions.json] [--json]
     pandion install pipeline.yaml [--print]
     pandion init my-project [--index text --query balanced] [--questions questions.json] [--overwrite]
+    pandion trace TRACE_ID --url-env VAR [--json]
+    pandion report [--since 7d] [--flagged] --url-env VAR [--json]
     pandion questions report.pdf --model claude-haiku-4-5 [--count 15] [--out questions.json] [--parser pdfium] [--overwrite]
 
 Every command takes --plugins a,b: modules imported before the file is read,
@@ -33,7 +35,7 @@ import yaml
 
 import pandion
 from pandion import ConfigError, Pipeline
-from pandion.extend import PluginError, get_conversation_store, load_plugins as load_modules, plugin_listing
+from pandion.extend import PluginError, TRACE_LIMIT, TraceStore, format_trace, format_trace_report, parse_since, summarise_traces, get_conversation_store, load_plugins as load_modules, plugin_listing
 from pandion.evaluation import COMPARE_STAGES, DEFAULT_TOP_K, JudgeSettings, QuestionSetError, load_questions
 
 #: Pandion's name for each key, and the environment variable it is read from.
@@ -211,6 +213,45 @@ def cmd_forget_user(args: argparse.Namespace) -> int:
     gone = store.delete_user(args.user_id)
     print(f"Deleted {gone['conversations']} conversations and {gone['memories']} memories for {args.user_id}.")
     print("Backups of the database and the retention of your model providers are out of its reach; clear those yourself.")
+    return 0
+
+
+def _trace_store(args: argparse.Namespace) -> TraceStore | None:
+    """The store the user points at, or None (after saying so) when it keeps no traces."""
+    if args.store == "sql" and not args.url_env:
+        raise ValueError(
+            f"{args.command} with the sql store needs --url-env, the environment variable that holds the database url. "
+            "Without it the command would open a new, empty database and show nothing.")
+    store = get_conversation_store(args.store, {"url_env": args.url_env} if args.url_env else {})
+    if not isinstance(store, TraceStore):
+        print(f"The {args.store} store does not keep traces.", file=sys.stderr)
+        return None
+    return store
+
+
+def cmd_trace(args: argparse.Namespace) -> int:
+    """Print one trace. 1 when the store keeps no traces or has no such trace."""
+    store = _trace_store(args)
+    if store is None:
+        return 1
+    record = store.trace(args.trace_id)
+    if record is None:
+        print(f"There is no trace {args.trace_id} in this store.", file=sys.stderr)
+        return 1
+    print(json.dumps(record.model_dump(), indent=2) if args.json else format_trace(record))
+    return 0
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    """Summarise the stored traces, newest 10,000 at most."""
+    store = _trace_store(args)
+    if store is None:
+        return 1
+    since = parse_since(args.since) if args.since else None
+    summary = summarise_traces(store.traces(since=since, flagged_only=args.flagged, limit=TRACE_LIMIT))
+    if summary.capped:
+        print("Only the newest 10,000 traces are counted; narrow with --since.", file=sys.stderr)
+    print(json.dumps(summary.model_dump(), indent=2) if args.json else format_trace_report(summary))
     return 0
 
 
@@ -589,6 +630,17 @@ def parser() -> argparse.ArgumentParser:
     sub.add_argument("--store", default="sql", help="the conversation store, sql by default")
     sub.add_argument("--url-env", help="the environment variable that holds the store's database url")
     sub.add_argument("--yes", action="store_true", help="do it; without this nothing is deleted")
+
+    for name, help, fn in (("trace", "show one stored chat trace", cmd_trace), ("report", "summarise the stored chat traces", cmd_report)):
+        sub = command(name, help, fn)
+        if name == "trace":
+            sub.add_argument("trace_id")
+        else:
+            sub.add_argument("--since", help="only traces since a duration like 24h or 7d, or an ISO 8601 date")
+            sub.add_argument("--flagged", action="store_true", help="only traces that have a flag")
+        sub.add_argument("--store", default="sql", help="the conversation store, sql by default")
+        sub.add_argument("--url-env", help="the environment variable that holds the store's database url")
+        sub.add_argument("--json", action="store_true", help="print JSON")
 
     for name, help, fn in (("retrieve", "search the index for a question", cmd_retrieve), ("ask", "answer a question", cmd_ask)):
         sub = command(name, help, fn)

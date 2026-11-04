@@ -7,6 +7,7 @@ in the `pypi` environment. A rename of either breaks publishing, so both are pin
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 
 import yaml
@@ -81,3 +82,12 @@ def test_the_check_fails_when_the_own_strategies_example_fails(tmp_path, monkeyp
     monkeypatch.setattr(module, "check", lambda *args: 0)
     monkeypatch.setattr(module, "run_own_strategies", lambda work, venv: 1)
     assert module.main(tmp_path / "work", with_models=False, wheel=wheel) == 1
+
+
+def test_every_action_in_both_publish_workflows_is_pinned_to_a_commit():
+    for name in ("publish-pandion.yml", "publish-pandion-api.yml"):
+        wf = yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8"))
+        for job in wf["jobs"].values():
+            for step in job["steps"]:
+                if "uses" in step:
+                    assert re.fullmatch(r"[\w./-]+@[0-9a-f]{40}", step["uses"]), (name, step["uses"])

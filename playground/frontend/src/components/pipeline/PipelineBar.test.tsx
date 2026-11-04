@@ -119,13 +119,17 @@ describe("PipelineBar: Start from a template", () => {
 })
 
 describe("PipelineBar: Take it home", () => {
-  it("has no Copy as YAML button, and Take it home opens its sheet", async () => {
+  it("has no Copy as YAML button, and Take it home is a link to the page", () => {
     render(<Bar onLoad={() => {}} />)
     expect(screen.queryByRole("button", { name: "Copy as YAML" })).toBeNull()
-    const home = screen.getByRole("button", { name: "Take it home" })
+    const home = screen.getByRole("link", { name: "Take it home" })
+    expect(home.getAttribute("href")).toBe("/take-home")
+    expect(screen.queryByRole("button", { name: "Take it home" })).toBeNull()
+    expect(home.className).toContain("min-h-[2.75rem]")
+  })
 
-    fireEvent.click(home)
-
-    expect(await screen.findByRole("dialog", { name: "Take this pipeline home" })).toBeTruthy()
+  it("no Take it home link when the pipeline is not usable", () => {
+    render(<PipelineBar graph={{ ...before, nodes: [] }} registry={registry} starter={null} onLoad={() => {}} />)
+    expect(screen.queryByRole("link", { name: "Take it home" })).toBeNull()
   })
 })

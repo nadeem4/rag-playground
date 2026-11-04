@@ -2,9 +2,8 @@ import { useEffect, useId, useState } from "react"
 
 import type { Registry } from "@/api/types"
 import { CONTROL } from "@/components/fields/types"
-import { TakeHome } from "@/components/pipeline/TakeHome"
 import { TemplatePicker, type UsedTemplate } from "@/components/pipeline/TemplatePicker"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Picker, type PickerOption } from "@/components/ui/Picker"
 import { documentsOf, withDocuments } from "@/state/document"
 import { pipelineLine } from "@/state/evaluate"
@@ -44,7 +43,7 @@ function samePipeline(a: WorkingPipeline, b: WorkingPipeline): boolean {
  * there with the pipeline selected (`onSaved`).
  *
  * Take it home opens a sheet that downloads the
- * pipeline as a ready-to-run project zip (`TakeHome`).
+ * pipeline as a ready-to-run project zip (a link to the Take it home page).
  *
  * Start from a template opens the template picker, and so does opening Build
  * at /build?templates=1 (the query is then dropped). Using a template replaces
@@ -324,7 +323,11 @@ export function PipelineBar({
               </Button>
             </>
           ) : null}
-          {working.ok ? <TakeHome graph={graph} name={current?.name ?? ""} pipelineKey={current ? currentId : null} registry={registry} /> : null}
+          {working.ok ? (
+            <a href="/take-home" className={`${buttonVariants({ size: "sm", variant: "outline" })} min-h-[2.75rem]`}>
+              Take it home
+            </a>
+          ) : null}
           {flash ? (
             <span role="status" className="text-xs text-fg-muted">
               {flash}

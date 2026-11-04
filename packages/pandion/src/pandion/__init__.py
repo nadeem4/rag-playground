@@ -44,7 +44,7 @@ from pandion.project import new_project
 from pandion.routing import built_in_checks
 from pandion import answer, chunk, clean, evaluation, parse, rerank, retrieve, rewrite
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"
 
 __all__ = [
     "Answer",

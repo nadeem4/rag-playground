@@ -1,13 +1,13 @@
 [project]
 name = "pandion-api"
-version = "0.1.0"
+version = "0.1.1"
 description = "Pandion's public API over HTTP, with one Policy object for a site's rules"
 readme = "README.md"
 authors = [{ name = "Nadeem Khan" }]
 requires-python = ">=3.13,<3.14"
 dependencies = [
     # anthropic and openai: the key check (keycheck.py) calls each SDK.
-    "pandion[pdfium,anthropic,openai]>=0.8.0,<0.9",
+    "pandion[pdfium,anthropic,openai]>=0.8.1,<0.9",
     "fastapi>=0.141.1",
     "pillow>=12.3.0",
     "python-multipart>=0.0.32",

@@ -168,7 +168,7 @@ counts as an app release, because the app's release tags must start with `v`.
 The pandion-api package goes to PyPI from its own tag, separate from Pandion and the
 app. Like Pandion, each version needs the owner's explicit yes.
 
-pandion-api declares the Pandion versions it works with (`pandion[pdfium,anthropic,openai]>=0.8.0,<0.9`
+pandion-api declares the Pandion versions it works with (`pandion[pdfium,anthropic,openai]>=0.8.1,<0.9`
 in `packages/pandion-api/pyproject.toml`), so **publish Pandion first**: the Pandion
 version in that range must already be on PyPI. A test fails if the workspace's Pandion
 version falls outside the range, so change the range in the same PR as a Pandion minor.

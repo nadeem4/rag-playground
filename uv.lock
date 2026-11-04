@@ -1284,7 +1284,7 @@ wheels = [
 
 [[package]]
 name = "pandion"
-version = "0.8.0"
+version = "0.8.1"
 source = { editable = "packages/pandion" }
 dependencies = [
     { name = "pydantic" },
@@ -1346,7 +1346,7 @@ provides-extras = ["pdfium", "docling", "local", "lancedb", "qdrant", "sql", "op
 
 [[package]]
 name = "pandion-api"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/pandion-api" }
 dependencies = [
     { name = "fastapi" },

@@ -10,7 +10,7 @@ everything.
 It lives in this repository as a workspace package (`packages/pandion-api/`) and is on
 PyPI (`pip install pandion-api`), released from its own tag (see the [release runbook](../operations/release.md#publishing-pandion-api)).
 In this repository, `uv sync --extra dev` installs it from its folder. It works with the Pandion versions its
-`pyproject.toml` declares (`>=0.8.0,<0.9` today). The pipeline's store needs its extra,
+`pyproject.toml` declares (`>=0.8.1,<0.9` today). The pipeline's store needs its extra,
 for example `pip install pandion-api "pandion[lancedb]"`. RAG Playground's server is pandion-api with the playground's own `Policy`,
 plus the playground's teaching routes.
 

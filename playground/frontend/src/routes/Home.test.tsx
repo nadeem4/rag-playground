@@ -124,17 +124,39 @@ describe("Home's hero", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Tune a RAG pipeline on your own knowledge, then take it home." })).toBeTruthy()
     expect(screen.getByText(/^Bring your documents, web pages or photos of pages\./)).toBeTruthy()
     const outcome = screen.getByText("You leave with").parentElement!
-    expect(outcome.textContent).toContain("a Python project that runs the winning pipeline on your computer")
+    expect(outcome.textContent).toContain("A small Python project that runs your winning pipeline on your computer, with your questions and the scores to beat.")
     expect(within(outcome).getByText("Pandion")).toBeTruthy()
+  })
+
+  it("names two ways to take it home", () => {
+    render(<Home navigate={vi.fn()} />)
+    const outcome = screen.getByText("You leave with").parentElement!
+    const items = within(outcome).getAllByRole("listitem")
+    expect(items.map((li) => li.textContent)).toEqual([
+      "Try it on your laptop. A small Python project that runs your winning pipeline on your computer, with your questions and the scores to beat.",
+      "Serve it for your team. A chat API that syncs from your documents and checks its own quality before each deploy.",
+    ])
+  })
+
+  it("See what you take home opens tour step 4 and focuses it", () => {
+    render(<Home navigate={vi.fn()} />)
+    const scroll = vi.fn()
+    document.getElementById("loop")!.scrollIntoView = scroll
+    const tabScroll = vi.fn()
+    document.getElementById("home-tab-home")!.scrollIntoView = tabScroll
+    fireEvent.click(screen.getByRole("button", { name: "See what you take home" }))
+    expect(screen.getAllByRole("tab")[3].getAttribute("aria-selected")).toBe("true")
+    expect(document.activeElement).toBe(screen.getAllByRole("tab")[3])
+    expect(scroll).toHaveBeenCalled()
+    expect(tabScroll).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" })
+    expect(within(screen.getByRole("tabpanel")).getByRole("list", { name: "The files in the zip" })).toBeTruthy()
   })
 
   it("has the three actions with their targets, each 44 px tall", () => {
     render(<Home navigate={vi.fn()} />)
     const sample = screen.getByRole("button", { name: "Try a sample" })
     const own = screen.getByRole("button", { name: "Use your own files" })
-    const home = screen.getByRole("link", { name: "See what you take home" })
-    expect(home.getAttribute("href")).toBe("#pandion")
-    expect(document.getElementById("pandion")).toBeTruthy()
+    const home = screen.getByRole("button", { name: "See what you take home" })
     for (const el of [sample, own, home]) expect(el.className.split(/\s+/)).toContain("min-h-[44px]")
   })
 
@@ -253,25 +275,68 @@ describe("Home's four steps", () => {
     expect(tabs()[0].getAttribute("aria-selected")).toBe("true")
   })
 
-  it("Take it home shows the zip's commands and its files, and no clip", () => {
+  const TEAM_FILES = [
+    "pipeline.yaml",
+    "serve.py",
+    "policy.py",
+    "evals/questions.json",
+    "tests/test_quality.py",
+    "Dockerfile",
+    "pyproject.toml",
+    ".env.example",
+    ".dockerignore",
+    ".gitignore",
+    "README.md",
+  ]
+  const LAPTOP_FILES = ["pipeline.yaml", "run.py", "questions.json", "requirements.txt", "README.md", "docs/"]
+  const zipFiles = () =>
+    within(within(panel()).getByRole("list", { name: "The files in the zip" })).getAllByRole("listitem").map((li) => li.textContent)
+
+  it("Take it home shows the three steps and no clip", () => {
     render(<Home navigate={vi.fn()} />)
     fireEvent.click(tabs()[3])
     expect(panel().querySelector("video")).toBeNull()
-    const term = within(panel()).getByLabelText("What the zip holds")
-    expect(term.tabIndex).toBe(0)
-    expect(term.textContent).toContain("unzip starter.zip && cd starter")
-    expect(term.textContent).toContain("pip install -r requirements.txt")
-    expect(term.textContent).toContain("python run.py")
-    const files = within(panel()).getByRole("list", { name: "The files in the zip" })
-    expect(within(files).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
-      "pipeline.yaml",
-      "run.py",
-      "questions.json",
-      "requirements.txt",
-      "README.md",
-      "docs/",
+    const steps = within(panel()).getByRole("list", { name: "The three steps on the Take it home page" })
+    expect(within(steps).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Check your questions",
+      "Say where it will run",
+      "Download",
     ])
   })
+
+  it("opens on the team zip and switches to the laptop zip", () => {
+    render(<Home navigate={vi.fn()} />)
+    fireEvent.click(tabs()[3])
+    const team = within(panel()).getByRole("button", { name: "Serve it for your team" })
+    const laptop = within(panel()).getByRole("button", { name: "Try it on your laptop" })
+    expect(team.getAttribute("aria-pressed")).toBe("true")
+    expect(laptop.getAttribute("aria-pressed")).toBe("false")
+    expect(zipFiles()).toEqual(TEAM_FILES)
+    fireEvent.click(laptop)
+    expect(laptop.getAttribute("aria-pressed")).toBe("true")
+    expect(team.getAttribute("aria-pressed")).toBe("false")
+    expect(zipFiles()).toEqual(LAPTOP_FILES)
+  })
+
+  it("the zip switch is two real buttons in the tab order", () => {
+    render(<Home navigate={vi.fn()} />)
+    fireEvent.click(tabs()[3])
+    for (const name of ["Serve it for your team", "Try it on your laptop"]) {
+      const b = within(panel()).getByRole("button", { name }) as HTMLButtonElement
+      expect(b.tagName).toBe("BUTTON")
+      expect(b.type).toBe("button")
+      expect(b.tabIndex).toBe(0)
+    }
+  })
+
+  it("each choice says how its zip runs", () => {
+    render(<Home navigate={vi.fn()} />)
+    fireEvent.click(tabs()[3])
+    expect(panel().textContent).toContain("Build the image with the Dockerfile and point it at your documents, then follow its README.")
+    fireEvent.click(within(panel()).getByRole("button", { name: "Try it on your laptop" }))
+    expect(panel().textContent).toMatch(/python run\.py/)
+  })
+
 })
 
 describe("Home's starts", () => {
@@ -375,12 +440,31 @@ describe("Home's lessons and Pandion", () => {
     expect(within(pkg).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
       "Start a project from a template with pandion init.",
       "Have a model write test questions with pandion questions.",
-      "Fail a CI run when a change loses questions, with --baseline.",
+      "Serve a chat API for your team with pandion-api, which the team download uses.",
+      "Fail a deploy when a change loses questions, with pandion eval --baseline.",
     ])
     expect(within(pkg).getByRole("link", { name: "Pandion on PyPI" }).getAttribute("href")).toBe("https://pypi.org/project/pandion/")
     expect(within(pkg).getByRole("link", { name: "Pandion on GitHub" }).getAttribute("href")).toBe(
       "https://github.com/nadeem4/rag-playground/tree/main/packages/pandion",
     )
+  })
+
+  it("names pandion-api and links its PyPI page and source", () => {
+    render(<Home navigate={vi.fn()} />)
+    const pkg = region("The engine is a Python package")
+    expect(pkg.textContent).toContain("pandion-api")
+    expect(within(pkg).getByRole("link", { name: "pandion-api on PyPI" }).getAttribute("href")).toBe("https://pypi.org/project/pandion-api/")
+    expect(within(pkg).getByRole("link", { name: "pandion-api on GitHub" }).getAttribute("href")).toBe(
+      "https://github.com/nadeem4/rag-playground/tree/main/packages/pandion-api",
+    )
+    expect(pkg.textContent).toContain("pandion eval --baseline")
+    expect(pkg.textContent).not.toContain("--gate")
+  })
+
+  it("the footer links both packages", () => {
+    render(<Home navigate={vi.fn()} />)
+    const footer = screen.getByRole("contentinfo")
+    expect(within(footer).getByRole("link", { name: "pandion-api on PyPI" }).getAttribute("href")).toBe("https://pypi.org/project/pandion-api/")
   })
 
   it("ends with the footer, outside main", () => {
@@ -404,6 +488,33 @@ describe("Home's lessons and Pandion", () => {
 })
 
 const pdf = (name = "mine.pdf", type = "application/pdf") => new File(["%PDF-1.4"], name, { type })
+
+describe("Home's team section", () => {
+  it("lists what the download has and what you bring", () => {
+    render(<Home navigate={vi.fn()} />)
+    const team = region("What your team gets, and what you bring")
+    expect(within(team).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual(["In the download", "What you bring"])
+    const [gets, bring] = within(team).getAllByRole("list")
+    expect(within(gets).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "A chat API that streams answers with their sources.",
+      "Sync from a folder or a bucket.",
+      "Roles on documents, ready to switch on in pipeline.yaml.",
+      "A quality check before each deploy.",
+      "Logs, metrics and a review command for flagged answers.",
+    ])
+    expect(within(bring).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Sign-in through your own gateway.",
+      "Hosting.",
+      "A database for conversations and a shared index store.",
+      "Your own chat screen.",
+    ])
+  })
+
+  it("promises nothing beyond release 1", () => {
+    render(<Home navigate={vi.fn()} />)
+    expect(region("What your team gets, and what you bring").textContent).not.toMatch(/jwt|jwks|kubernetes|helm|terraform|hosted for you/i)
+  })
+})
 
 describe("Home's own files", () => {
   it("Use your own files opens the file picker straight away, and it takes every format a parser reads", async () => {

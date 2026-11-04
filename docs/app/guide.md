@@ -128,27 +128,35 @@ filename.
 Home (`/`) is the first page, written for developers building search over their own
 knowledge. It has:
 
-- a hero with what you leave with (a Python project built on Pandion), and three actions:
+- a hero with the two ways you can take a pipeline home, **Try it on your laptop** (a small
+  Python project) and **Serve it for your team** (a chat API project), both built on Pandion,
+  and three actions:
   - **Try a sample** opens Build on the Starter pipeline with the default sample. An unsaved
     pipeline on Build is kept rather than replaced, and the Starter waits in its picker;
   - **Use your own files** opens a file picker that offers every kind of file a parser on the
     server reads, and opens Build once the upload is done. If the upload is refused, it says
     why under the buttons. One line under the buttons names each kind of file and, on the
     demo, its limit, as the Document menu does;
-  - **See what you take home** jumps to the Pandion section;
+  - **See what you take home** opens the last tab of the tour below and moves focus to it;
 - three facts: no sign in, where your files stay (private to your browser on the demo, on
   your machine when running locally), and a key only for model steps;
 - a real finding from the scanned notes sample: 0 of 8 questions found with Docling's OCR
   off, 8 of 8 with it on (from [Lessons learned](../lessons-learned.md));
 - **From your files to a project you own**: four tabs, Build, Evaluate, Compare and Take it
-  home. The first three play a short clip of the page, with a chip for each scene to jump to it; Take it home shows what the zip holds.
+  home. The first three play a short clip of the page, with a chip for each scene to jump to it; Take it home shows the three steps of the
+  Take it home page and the files of each zip, with a switch between the team zip and the laptop zip.
   The arrow keys, Home and End move between the tabs;
+- **What your team gets, and what you bring**: what the team download has (a chat API that
+  streams answers with their sources, sync from a folder or a bucket, roles on documents,
+  a quality check before each deploy, logs, metrics and a review command) and what you bring
+  (sign-in through your own gateway, hosting, a database for conversations and a shared
+  index store, your own chat screen);
 - **Start from what you have**: a sample, your own files, or a template. Your own files
   also takes a link: paste it and press **Add**, and Build opens on the page it fetched. A
   refused link says why under the box;
 - three lessons from building it, each linking its entry in [Lessons learned](../lessons-learned.md);
 - Pandion: the commands and the output of a real `pandion init` project, with links to
-  PyPI and GitHub.
+  Pandion and `pandion-api` on PyPI and GitHub.
 
 The clips are muted and loop. Each has a Pause and Play button. With reduced motion turned
 on, they hold still on their poster until you press Play. Any path the app does not know

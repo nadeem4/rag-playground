@@ -344,7 +344,7 @@ cache_dir: /models}` and a commented `access:` example), `pyproject.toml`, `.env
 questions are tagged `category:<name>`. The fixed files (`serve.py`, `policy.py`, `Dockerfile`,
 the ignore files and the test) are the same for every project.
 
-- When the pipeline uses a local model, `pyproject.toml` takes CPU-only torch on Linux, so `uv lock` does not pull the multi-GB CUDA build. An address with a user name, a password or a query string is refused, because it would be written into the project.
+- When the pipeline uses a local model or Docling, `pyproject.toml` lists `torch` (and `torchvision` for Docling) as a direct dependency and takes it from the CPU-only index on Linux, so `uv lock` does not pull the multi-GB CUDA build. (uv applies a source only to direct dependencies, which is why torch is listed.) An address with a user name, a password or a query string is refused, because it would be written into the project.
 - The Dockerfile pins its base image and `uv` by digest, installs from `uv.lock` (run `uv lock`
   once, then commit it), sets `HF_HOME=/models/hf`, runs `pandion models pull pipeline.yaml`
   at build time and starts one worker as a non-root user.

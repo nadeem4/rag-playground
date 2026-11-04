@@ -68,8 +68,12 @@ def _stages(answer: Any) -> list[dict[str, Any]]:
     from pandion.cost import cost
 
     rows = []
-    for name, step in (getattr(answer, "stages", None) or {}).items():
-        rows.append({"name": name, "ms": round(step.duration_ms), "dollars": cost([step])["dollars"]})
+    for name, value in (getattr(answer, "stages", None) or {}).items():
+        # `rerank` holds a list of steps (one per reranker); every other stage is one step.
+        steps = value if isinstance(value, list) else [value]
+        for n, step in enumerate(steps, 1):
+            label = f"{name}.{n}" if isinstance(value, list) else name
+            rows.append({"name": label, "ms": round(step.duration_ms), "dollars": cost([step])["dollars"]})
     return rows
 
 

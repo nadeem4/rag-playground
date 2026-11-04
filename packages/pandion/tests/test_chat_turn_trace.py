@@ -4,6 +4,9 @@ import pytest
 
 from pandion.chat_turn import chat_turn
 from pandion.conversation_store import get_conversation_store
+from pandion.pipeline import Answer, Retrieval
+from pandion.results import StageResult
+from pandion.trace_record import _stages
 from trace_helpers import StubPipeline
 
 
@@ -80,3 +83,25 @@ def test_a_failing_trace_save_does_not_log_the_question(store, monkeypatch, capl
 def test_the_result_carries_the_trace_id(store):
     assert chat_turn(StubPipeline(), store, user_id="u", question="q", trace_id="abc").trace_id == "abc"
     assert len(chat_turn(StubPipeline(), store, user_id="u", question="q").trace_id) == 32
+
+
+def _answer(rerank):
+    """A real Answer, built the way the pipeline builds one."""
+    step = lambda name, ms: StageResult(name, "x", None, duration_ms=ms)  # noqa: E731
+    retrieval = Retrieval(stages={"rewrite": step("rewrite", 5.0), "search": step("search", 12.0), "rerank": rerank},
+                          index=step("index", 1.0))
+    return Answer(retrieval=retrieval, answer=step("answer", 30.0))
+
+
+def test_trace_stages_follow_the_real_answer_order_with_numbered_rerankers():
+    rows = _stages(_answer([StageResult("rerank", "cross_encoder", None, duration_ms=7.0),
+                            StageResult("rerank", "mmr", None, duration_ms=3.0)]))
+    assert [(r["name"], r["ms"]) for r in rows] == [
+        ("rewrite", 5), ("search", 12), ("rerank.1", 7), ("rerank.2", 3), ("answer", 30)]
+
+
+def test_trace_stages_number_a_single_reranker_and_skip_an_empty_list():
+    one = _stages(_answer([StageResult("rerank", "mmr", None, duration_ms=3.0)]))
+    assert [r["name"] for r in one] == ["rewrite", "search", "rerank.1", "answer"]
+    none = _stages(_answer([]))
+    assert [r["name"] for r in none] == ["rewrite", "search", "answer"]

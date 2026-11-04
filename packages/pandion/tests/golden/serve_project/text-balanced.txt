@@ -61,6 +61,7 @@ dependencies = [
     "pandion[files,lancedb,local,pdfium,sql]~=<pin>",
     "pandion-api~=<api-pin>",
     "uvicorn>=0.30,<1",
+    "torch>=2.14.0",
 ]
 
 [dependency-groups]

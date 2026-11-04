@@ -18,7 +18,7 @@ import chapterTimes from "./clipChapters.json"
  * knowledge. The hero says what they leave with (a Pandion project) beside a
  * real finding from the scanned notes sample. Then the loop as four tabs
  * (Build, Evaluate and Compare each play a clip of the real site, Take it home
- * shows what the zip holds), three ways to start, three lessons, and Pandion
+ * shows the team and laptop zips), three ways to start, three lessons, and Pandion
  * itself with a real run's output.
  *
  * The figures on this page are real: the slip's are from
@@ -30,7 +30,9 @@ import chapterTimes from "./clipChapters.json"
 const REPO = "https://github.com/nadeem4/rag-playground"
 const PYPI = "https://pypi.org/project/pandion/"
 const PANDION_SOURCE = `${REPO}/tree/main/packages/pandion`
-const LESSONS_DOC = `${REPO}/blob/main/docs/lessons-learned.md`
+const PYPI_API = "https://pypi.org/project/pandion-api/"
+const PANDION_API_SOURCE = `${REPO}/tree/main/packages/pandion-api`
+const LESSONS_DOC =`${REPO}/blob/main/docs/lessons-learned.md`
 
 const goTo = (href: string) => window.location.assign(href)
 
@@ -113,7 +115,44 @@ function chaptersOf(step: Step) {
   return step.chapters?.map((label, i) => ({ label, at: { light: times.light[i], dark: times.dark[i] } }))
 }
 
-const ZIP_FILES = ["pipeline.yaml", "run.py", "questions.json", "requirements.txt", "README.md", "docs/"]
+// The files of the two zips on the Take it home page. tests/test_home_zip_lists.py checks both against what Pandion writes.
+const ZIPS = {
+  team: [
+    "pipeline.yaml",
+    "serve.py",
+    "policy.py",
+    "evals/questions.json",
+    "tests/test_quality.py",
+    "Dockerfile",
+    "pyproject.toml",
+    ".env.example",
+    ".dockerignore",
+    ".gitignore",
+    "README.md",
+  ],
+  laptop: ["pipeline.yaml", "run.py", "questions.json", "requirements.txt", "README.md", "docs/"],
+}
+
+const ZIP_CHOICES = {
+  team: { label: "Serve it for your team", note: "Build the image with the Dockerfile, point it at your documents and run it. It answers over HTTP." },
+  laptop: { label: "Try it on your laptop", note: "Unzip it, add your documents to docs/ and run python run.py." },
+}
+
+const TEAM_GETS: ReactNode[] = [
+  "A chat API that streams answers with their sources.",
+  "Sync from a folder or a bucket.",
+  <>
+    Roles on documents, ready to switch on in <code className="font-mono text-sm whitespace-nowrap text-fg">pipeline.yaml</code>.
+  </>,
+  "A quality check before each deploy.",
+  "Logs, metrics and a review command for flagged answers.",
+]
+const TEAM_BRING = [
+  "Sign-in through your own gateway.",
+  "Hosting.",
+  "A database for conversations and a shared index store.",
+  "Your own chat screen.",
+]
 
 const LESSONS = [
   // `anchor` is GitHub's heading anchor for the entry in docs/lessons-learned.md.
@@ -221,15 +260,56 @@ function FindingSlip() {
   )
 }
 
+/** Step 4 as a still: the three steps of the Take it home page, and the files of the zip you pick. */
+function TourStill({ note }: { note: string }) {
+  const [zip, setZip] = useState<"team" | "laptop">("team")
+  return (
+    <div className="grid gap-3 rounded-panel border border-hairline bg-surface-raised p-4">
+      <ol aria-label="The three steps on the Take it home page" className="m-0 flex list-none flex-wrap gap-2 p-0 text-sm font-semibold">
+        {["Check your questions", "Say where it will run", "Download"].map((s) => (
+          <li key={s} className="list-inside list-decimal rounded-swatch bg-surface-elevated px-2 py-1 marker:font-mono marker:text-primary">
+            {s}
+          </li>
+        ))}
+      </ol>
+      <div className="flex flex-wrap gap-2">
+        {(["team", "laptop"] as const).map((k) => (
+          <button
+            key={k}
+            type="button"
+            aria-pressed={zip === k}
+            onClick={() => setZip(k)}
+            className={cn(
+              "min-h-[44px] rounded-control border px-4 text-sm font-semibold",
+              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--focus-ring)",
+              zip === k ? "border-primary bg-surface-elevated text-fg" : "border-hairline text-fg-muted hover:bg-surface-hover",
+            )}
+          >
+            {ZIP_CHOICES[k].label}
+          </button>
+        ))}
+      </div>
+      <ul aria-label="The files in the zip" className="m-0 flex list-none flex-wrap gap-2 p-0">
+        {ZIPS[zip].map((f) => (
+          <li key={f} className="rounded-swatch border border-hairline bg-surface px-2 py-1 font-mono text-xs">
+            {f}
+          </li>
+        ))}
+      </ul>
+      <p className="m-0 text-sm">{ZIP_CHOICES[zip].note}</p>
+      <p className="m-0 text-sm text-fg-muted">{note}</p>
+    </div>
+  )
+}
+
 /** The four steps as tabs: arrow keys move between them, Home and End jump to the ends. */
-function Loop() {
-  const [active, setActive] = useState(0)
+function Loop({ active, onActive }: { active: number; onActive: (i: number) => void }) {
   const tabs = useRef<(HTMLButtonElement | null)[]>([])
   const step = STEPS[active]
 
   const select = (i: number) => {
     const next = (i + STEPS.length) % STEPS.length
-    setActive(next)
+    onActive(next)
     tabs.current[next]?.focus()
   }
   const onKey = (e: KeyboardEvent, i: number) => {
@@ -258,7 +338,7 @@ function Loop() {
             aria-selected={i === active}
             aria-controls="home-step-panel"
             tabIndex={i === active ? 0 : -1}
-            onClick={() => setActive(i)}
+            onClick={() => onActive(i)}
             onKeyDown={(e) => onKey(e, i)}
             className={cn(
               "grid w-[13rem] shrink-0 grid-cols-[2rem_minmax(0,1fr)] content-start gap-x-2 rounded-panel border px-4 py-3 text-left lg:w-auto",
@@ -283,26 +363,7 @@ function Loop() {
             </p>
           </>
         ) : (
-          <>
-            <Terminal
-              label="What the zip holds"
-              lines={[
-                "# starter.zip, from Build's Take it home",
-                "$ unzip starter.zip && cd starter",
-                "$ pip install -r requirements.txt",
-                "$ cp ~/Documents/handbook.pdf docs/",
-                "$ python run.py",
-              ]}
-            />
-            <ul aria-label="The files in the zip" className="m-0 flex list-none flex-wrap gap-2 p-0">
-              {ZIP_FILES.map((f) => (
-                <li key={f} className="rounded-swatch border border-hairline bg-surface-raised px-2 py-1 font-mono text-xs">
-                  {f}
-                </li>
-              ))}
-            </ul>
-            <p className="m-0 text-sm">{step.note}</p>
-          </>
+          <TourStill note={step.note} />
         )}
       </div>
     </div>
@@ -315,6 +376,7 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
   const demo = settings?.demo === true
   const limits = demo ? settings?.limits : undefined
   const { upload, addLink, busy: uploading, error: uploadError, limitsLine, linkLine, accept } = useUpload()
+  const [tourStep, setTourStep] = useState(0)
   const [link, setLink] = useState("")
   // The upload error is shared with the link box: it shows beside whichever one was used last.
   const [errorAt, setErrorAt] = useState<"upload" | "link">("upload")
@@ -361,6 +423,13 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
   }
   const waiting = uploading !== null || current.sampleLoading !== null
 
+  /** Open the tour on its last step, bring it into view and put focus on its tab. */
+  function showTakeHome() {
+    setTourStep(STEPS.length - 1)
+    document.getElementById("loop")?.scrollIntoView?.({ behavior: "smooth" })
+    document.getElementById("home-tab-home")?.focus()
+  }
+
   // Private to the browser is true only on the demo; locally the files never leave the machine.
   const filesFact = settings === null ? null : demo ? "Your files stay private to your browser" : "Your files stay on this machine."
   const facts = ["No sign in", filesFact, "A key is needed only for model steps"].filter((f): f is string => f !== null)
@@ -386,13 +455,22 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
               Bring your documents, web pages or photos of pages. See what every step does to them, score the search with questions you know the answers
               to, and compare recipes on what they find, how long they take and what they cost.
             </p>
-            <p className="m-0 grid max-w-[34rem] gap-1 border-l-[3px] border-primary py-1 pl-4 text-base">
+            <div className="grid max-w-[34rem] gap-1 border-l-[3px] border-primary py-1 pl-4 text-base">
               <span className={EYEBROW}>You leave with</span>
+              <ul className="m-0 grid list-none gap-2 p-0">
+                <li>
+                  <strong className="font-semibold">Try it on your laptop.</strong> A small Python project that runs your winning pipeline on your
+                  computer, with your questions and the scores to beat.
+                </li>
+                <li>
+                  <strong className="font-semibold">Serve it for your team.</strong> A chat API that stays in sync with your documents and checks its
+                  own quality before each deploy.
+                </li>
+              </ul>
               <span>
-                a Python project that runs the winning pipeline on your computer, with your questions and the scores to beat. It is built on{" "}
-                <strong className="font-semibold">Pandion</strong>, the open source engine behind this site.
+                It is built on <strong className="font-semibold">Pandion</strong>, the open source engine behind this site.
               </span>
-            </p>
+            </div>
             <div className="grid gap-2">
               <div className="flex flex-wrap items-center gap-3">
                 <Button size={null} className={CTA} disabled={waiting} onClick={() => void tryStarter()}>
@@ -423,9 +501,9 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
                   {/* The header names the file; a long name here would push the button past a phone's edge. */}
                   {uploading ? (uploading.startsWith("Fetching") ? "Fetching" : "Uploading") : "Use your own files"}
                 </Button>
-                <a href="#pandion" className={cn(LINK, "px-2")}>
+                <button type="button" className={cn(LINK, "px-2")} onClick={showTakeHome}>
                   See what you take home
-                </a>
+                </button>
               </div>
               {uploadError && errorAt === "upload" ? (
                 <p role="alert" className="m-0 text-sm break-words text-danger">
@@ -452,7 +530,28 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
             Build it, score it, compare it, take it home. Each page hands its work to the next, so one changed setting can be followed all the way to the
             score, and the winner leaves as code.
           </p>
-          <Loop />
+          <Loop active={tourStep} onActive={setTourStep} />
+        </Section>
+
+        <Section id="team">
+          <SectionTitle id="team">What your team gets, and what you bring</SectionTitle>
+          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+            {(
+              [
+                ["In the download", TEAM_GETS],
+                ["What you bring", TEAM_BRING],
+              ] as const
+            ).map(([title, items]) => (
+              <div key={title} className="grid content-start gap-2 border-t-[3px] border-primary pt-3">
+                <h3 className="m-0 text-base font-semibold">{title}</h3>
+                <ul className="m-0 grid list-disc gap-1 pl-4 text-base text-fg-muted">
+                  {items.map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </Section>
 
         <Section id="start">
@@ -551,7 +650,8 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
             <span className={EYEBROW}>Pandion</span>
             <SectionTitle id="pandion">The engine is a Python package</SectionTitle>
             <p className="m-0 max-w-[40rem] text-base text-fg-muted">
-              Everything this site runs is Pandion, on PyPI. The pipeline you build here is the same YAML it reads.
+              Everything this site runs is Pandion, on PyPI. The pipeline you build here is the same YAML it reads.{" "}
+              <code className="font-mono text-sm whitespace-nowrap text-fg">pandion-api</code> serves it to your team: a REST layer on Pandion's public API.
             </p>
             <ul className="m-0 grid list-disc gap-1 pl-4 text-base text-fg-muted">
               <li>
@@ -561,7 +661,12 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
                 Have a model write test questions with <code className="font-mono text-sm whitespace-nowrap text-fg">pandion questions</code>.
               </li>
               <li>
-                Fail a CI run when a change loses questions, with <code className="font-mono text-sm whitespace-nowrap text-fg">--baseline</code>.
+                Serve a chat API for your team with <code className="font-mono text-sm whitespace-nowrap text-fg">pandion-api</code>, which the team
+                download uses.
+              </li>
+              <li>
+                Fail a deploy when a change loses questions, with{" "}
+                <code className="font-mono text-sm whitespace-nowrap text-fg">pandion eval --baseline</code>.
               </li>
             </ul>
             <div className="flex flex-wrap gap-x-6">
@@ -570,6 +675,12 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
               </a>
               <a href={PANDION_SOURCE} className={LINK}>
                 Pandion on GitHub
+              </a>
+              <a href={PYPI_API} className={LINK}>
+                pandion-api on PyPI
+              </a>
+              <a href={PANDION_API_SOURCE} className={LINK}>
+                pandion-api on GitHub
               </a>
             </div>
           </div>
@@ -596,6 +707,9 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
         </a>
         <a href={PYPI} className="inline-flex min-h-[44px] items-center hover:text-fg">
           Pandion on PyPI
+        </a>
+        <a href={PYPI_API} className="inline-flex min-h-[44px] items-center hover:text-fg">
+          pandion-api on PyPI
         </a>
         <a href="/privacy" className="inline-flex min-h-[44px] items-center hover:text-fg">
           Your data and privacy

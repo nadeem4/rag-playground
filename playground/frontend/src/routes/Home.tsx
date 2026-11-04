@@ -427,7 +427,10 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
   function showTakeHome() {
     setTourStep(STEPS.length - 1)
     document.getElementById("loop")?.scrollIntoView?.({ behavior: "smooth" })
-    document.getElementById("home-tab-home")?.focus({ preventScroll: true })
+    const tab = document.getElementById("home-tab-home")
+    tab?.focus({ preventScroll: true })
+    // On a phone the tab list scrolls sideways; bring the tab into it without moving the page.
+    tab?.scrollIntoView?.({ block: "nearest", inline: "nearest" })
   }
 
   // Private to the browser is true only on the demo; locally the files never leave the machine.

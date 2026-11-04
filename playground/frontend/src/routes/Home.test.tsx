@@ -142,10 +142,13 @@ describe("Home's hero", () => {
     render(<Home navigate={vi.fn()} />)
     const scroll = vi.fn()
     document.getElementById("loop")!.scrollIntoView = scroll
+    const tabScroll = vi.fn()
+    document.getElementById("home-tab-home")!.scrollIntoView = tabScroll
     fireEvent.click(screen.getByRole("button", { name: "See what you take home" }))
     expect(screen.getAllByRole("tab")[3].getAttribute("aria-selected")).toBe("true")
     expect(document.activeElement).toBe(screen.getAllByRole("tab")[3])
     expect(scroll).toHaveBeenCalled()
+    expect(tabScroll).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" })
     expect(within(screen.getByRole("tabpanel")).getByRole("list", { name: "The files in the zip" })).toBeTruthy()
   })
 

@@ -17,6 +17,7 @@ const PRIMARY = [
   { href: "/evaluate", label: "Evaluate" },
   { href: "/read", label: "Read" },
   { href: "/library", label: "Library" },
+  { href: "/take-home", label: "Take it home" },
 ]
 
 /** Development pages: real components against real-engine fixtures. */

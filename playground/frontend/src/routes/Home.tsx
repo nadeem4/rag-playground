@@ -298,6 +298,9 @@ function TourStill({ note }: { note: string }) {
       </ul>
       <p className="m-0 text-sm">{ZIP_CHOICES[zip].note}</p>
       <p className="m-0 text-sm text-fg-muted">{note}</p>
+      <a href="/take-home" className={cn(LINK, "justify-self-start")}>
+        Open Take it home
+      </a>
     </div>
   )
 }

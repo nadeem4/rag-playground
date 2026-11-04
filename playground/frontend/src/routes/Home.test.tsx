@@ -304,6 +304,12 @@ describe("Home's four steps", () => {
     ])
   })
 
+  it("Take it home links to the page", () => {
+    render(<Home navigate={vi.fn()} />)
+    fireEvent.click(tabs()[3])
+    expect(within(panel()).getByRole("link", { name: "Open Take it home" }).getAttribute("href")).toBe("/take-home")
+  })
+
   it("opens on the team zip and switches to the laptop zip", () => {
     render(<Home navigate={vi.fn()} />)
     fireEvent.click(tabs()[3])

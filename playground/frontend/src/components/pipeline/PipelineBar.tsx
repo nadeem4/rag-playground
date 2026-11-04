@@ -324,7 +324,7 @@ export function PipelineBar({
             </>
           ) : null}
           {working.ok ? (
-            <a href="/take-home" className={buttonVariants({ size: "sm", variant: "ghost" })}>
+            <a href="/take-home" className={`${buttonVariants({ size: "sm", variant: "outline" })} min-h-11`}>
               Take it home
             </a>
           ) : null}

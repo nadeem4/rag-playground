@@ -55,3 +55,6 @@ examples/pandion/own_strategies/work/
 examples/pandion/cli-index/
 # The pandion-api example server keeps its files here
 examples/pandion-api/pandion-data/
+
+# Local LanceDB index written by a playground run
+/index/

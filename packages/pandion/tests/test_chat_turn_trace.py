@@ -4,6 +4,7 @@ import pytest
 
 from pandion.chat_turn import chat_turn
 from pandion.conversation_store import get_conversation_store
+from pandion.results import StageResult
 from trace_helpers import StubPipeline
 
 
@@ -80,3 +81,17 @@ def test_a_failing_trace_save_does_not_log_the_question(store, monkeypatch, capl
 def test_the_result_carries_the_trace_id(store):
     assert chat_turn(StubPipeline(), store, user_id="u", question="q", trace_id="abc").trace_id == "abc"
     assert len(chat_turn(StubPipeline(), store, user_id="u", question="q").trace_id) == 32
+
+
+def test_trace_saves_when_the_answer_has_rerank_steps_in_a_list(store):
+    # The real shape: Answer.stages["rerank"] is a list of steps, the others are one step each.
+    class Reranked(StubPipeline):
+        def ask(self, question, **kwargs):
+            answer = super().ask(question, **kwargs)
+            answer.stages["rerank"] = [StageResult("rerank", "cross_encoder", None, duration_ms=7.0),
+                                       StageResult("rerank", "mmr", None, duration_ms=3.0)]
+            return answer
+
+    chat_turn(Reranked(), store, user_id="u", question="q", trace_id="r")
+    stages = store.trace("r").stages
+    assert [(s["name"], s["ms"]) for s in stages] == [("search", 12), ("answer", 30), ("rerank.1", 7), ("rerank.2", 3)]

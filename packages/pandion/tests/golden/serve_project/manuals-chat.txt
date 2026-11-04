@@ -67,6 +67,7 @@ dependencies = [
     "pandion[anthropic,docling,files,lancedb,local,sql]~=<pin>",
     "pandion-api~=<api-pin>",
     "uvicorn>=0.30,<1",
+    "torch>=2.14.0",
 ]
 
 [dependency-groups]

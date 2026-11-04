@@ -12,7 +12,7 @@ A `TraceRecord` holds `trace_id`, `user_id`, `conversation_id`, `question` (as t
 
 - `trace_id` is the id you pass to `chat_turn(..., trace_id=)`. When you pass none, `chat_turn` makes one (a uuid4 in hex) and puts it on the `Turn` too. The server passes the request's trace id.
 - `label` is the worst grounding label in the answer, from worst to best `none`, `weak`, `similarity`, `cited`. An answer that only declined has `not_found`; one with no grounding counts (a `search` answer) has an empty label.
-- `stages` lists each stage once, in order, as `{"name", "ms", "dollars"}`. `dollars` is the estimated price of that stage, or `None` when it called no priced model. `cost` is the total, as `Answer.cost()` gives it, and `latency_ms` is the whole turn.
+- `stages` lists each stage once, in order (a pipeline with several rerankers lists them as `rerank.1`, `rerank.2`), as `{"name", "ms", "dollars"}`. `dollars` is the estimated price of that stage, or `None` when it called no priced model. `cost` is the total, as `Answer.cost()` gives it, and `latency_ms` is the whole turn.
 - `flags` is filled by `chat_turn` (see "Flags and feedback" below); `scores` is empty for now, evaluator scores fill it in later.
 - `feedback` is a list of `Feedback(value="up" or "down", category, comment, created_at)`; `category` is at most 40 characters and `comment` at most 500.
 - A record never holds a credential or an API key.

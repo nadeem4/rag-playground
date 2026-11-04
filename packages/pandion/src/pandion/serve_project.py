@@ -37,6 +37,9 @@ ACCESS_EXAMPLE = """
 """
 
 
+#: uv applies `[tool.uv.sources]` only to direct dependencies, so torch is listed here too. The floor is Pandion's own.
+TORCH_DEPENDENCY = '    "torch>=2.14.0",\n'
+
 #: With the `local` extra, Linux takes CPU-only torch, not the multi-GB CUDA build.
 CPU_TORCH = """
 # On Linux (the Docker image) take CPU-only torch, not the multi-GB CUDA build.
@@ -107,6 +110,7 @@ def render_pyproject(p: Any, name: str) -> str:
         f'    "pandion[{",".join(extras)}]{_pin()}",\n'
         f'    "pandion-api{SERVE_API_PIN}",\n'
         '    "uvicorn>=0.30,<1",\n'
+        f"{TORCH_DEPENDENCY if 'local' in extras else ''}"
         "]\n"
         "\n"
         "[dependency-groups]\n"

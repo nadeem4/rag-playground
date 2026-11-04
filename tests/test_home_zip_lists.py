@@ -40,9 +40,9 @@ def names(folder: Path, written: list[Path]) -> set[str]:
 
 def test_team_zip_list_matches_the_serve_project(tmp_path):
     written = pandion.new_project(tmp_path / "p", OFFLINE, kind="serve", categories_questions=SETS)
-    assert set(listed("team")) == names(tmp_path / "p", written)
+    assert sorted(listed("team")) == sorted(names(tmp_path / "p", written))
 
 
 def test_laptop_zip_list_matches_the_laptop_project(tmp_path):
     written = pandion.new_project(tmp_path / "p", OFFLINE, QUESTIONS)
-    assert set(listed("laptop")) == names(tmp_path / "p", written)
+    assert sorted(listed("laptop")) == sorted(names(tmp_path / "p", written))

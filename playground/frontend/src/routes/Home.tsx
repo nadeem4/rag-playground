@@ -134,7 +134,7 @@ const ZIPS = {
 }
 
 const ZIP_CHOICES = {
-  team: { label: "Serve it for your team", note: "Build the image with the Dockerfile, point it at your documents and run it. It answers over HTTP." },
+  team: { label: "Serve it for your team", note: "Build the image with the Dockerfile and point it at your documents, then follow its README." },
   laptop: { label: "Try it on your laptop", note: "Unzip it, add your documents to docs/ and run python run.py." },
 }
 
@@ -427,7 +427,7 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
   function showTakeHome() {
     setTourStep(STEPS.length - 1)
     document.getElementById("loop")?.scrollIntoView?.({ behavior: "smooth" })
-    document.getElementById("home-tab-home")?.focus()
+    document.getElementById("home-tab-home")?.focus({ preventScroll: true })
   }
 
   // Private to the browser is true only on the demo; locally the files never leave the machine.
@@ -463,7 +463,7 @@ export function Home({ navigate = goTo }: { navigate?: (href: string) => void } 
                   computer, with your questions and the scores to beat.
                 </li>
                 <li>
-                  <strong className="font-semibold">Serve it for your team.</strong> A chat API that stays in sync with your documents and checks its
+                  <strong className="font-semibold">Serve it for your team.</strong> A chat API that syncs from your documents and checks its
                   own quality before each deploy.
                 </li>
               </ul>

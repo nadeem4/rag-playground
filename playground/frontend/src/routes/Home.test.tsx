@@ -134,7 +134,7 @@ describe("Home's hero", () => {
     const items = within(outcome).getAllByRole("listitem")
     expect(items.map((li) => li.textContent)).toEqual([
       "Try it on your laptop. A small Python project that runs your winning pipeline on your computer, with your questions and the scores to beat.",
-      "Serve it for your team. A chat API that stays in sync with your documents and checks its own quality before each deploy.",
+      "Serve it for your team. A chat API that syncs from your documents and checks its own quality before each deploy.",
     ])
   })
 
@@ -329,7 +329,7 @@ describe("Home's four steps", () => {
   it("each choice says how its zip runs", () => {
     render(<Home navigate={vi.fn()} />)
     fireEvent.click(tabs()[3])
-    expect(panel().textContent).toMatch(/Docker/)
+    expect(panel().textContent).toContain("Build the image with the Dockerfile and point it at your documents, then follow its README.")
     fireEvent.click(within(panel()).getByRole("button", { name: "Try it on your laptop" }))
     expect(panel().textContent).toMatch(/python run\.py/)
   })

@@ -125,7 +125,7 @@ describe("PipelineBar: Take it home", () => {
     const home = screen.getByRole("link", { name: "Take it home" })
     expect(home.getAttribute("href")).toBe("/take-home")
     expect(screen.queryByRole("button", { name: "Take it home" })).toBeNull()
-    expect(home.className).toContain("min-h-11")
+    expect(home.className).toContain("min-h-[2.75rem]")
   })
 
   it("no Take it home link when the pipeline is not usable", () => {

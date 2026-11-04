@@ -42,12 +42,12 @@ function header(path = "/", lessonsEnabled = true) {
 const devButton = () => screen.getByRole("button", { name: "Dev" })
 
 describe("AppHeader", () => {
-  it("shows Home, Lessons, Build, Compare, Evaluate, Read and Library as primary navigation", () => {
+  it("shows Home, Lessons, Build, Compare, Evaluate, Read, Library and Take it home as primary navigation", () => {
     header()
     const main = screen.getByRole("navigation", { name: "Main" })
     const links = within(main).getAllByRole("link")
-    expect(links.map((l) => l.textContent)).toEqual(["Home", "Lessons", "Build", "Compare", "Evaluate", "Read", "Library"])
-    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/", "/learn", "/build", "/compare", "/evaluate", "/read", "/library"])
+    expect(links.map((l) => l.textContent)).toEqual(["Home", "Lessons", "Build", "Compare", "Evaluate", "Read", "Library", "Take it home"])
+    expect(links.map((l) => l.getAttribute("href"))).toEqual(["/", "/learn", "/build", "/compare", "/evaluate", "/read", "/library", "/take-home"])
     expect(screen.queryByText("Forms")).toBeNull()
     expect(screen.queryByText("Tokens")).toBeNull()
   })
@@ -203,7 +203,7 @@ describe("AppHeader with the lessons hidden", () => {
     header("/build", false)
     const main = screen.getByRole("navigation", { name: "Main" })
     const links = within(main).getAllByRole("link")
-    expect(links.map((l) => l.textContent)).toEqual(["Home", "Build", "Compare", "Evaluate", "Read", "Library"])
+    expect(links.map((l) => l.textContent)).toEqual(["Home", "Build", "Compare", "Evaluate", "Read", "Library", "Take it home"])
     expect(links[0].getAttribute("href")).toBe("/")
     expect(screen.queryByText("Lessons")).toBeNull()
   })

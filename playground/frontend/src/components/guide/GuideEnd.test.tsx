@@ -66,6 +66,7 @@ describe("GuideEnd", () => {
     const { props } = setup()
     expect(screen.queryByRole("button", { name: "Take it home" })).toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "Save" }))
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Try it on your own document" }))
     fireEvent.click(screen.getByRole("button", { name: "Take it home" }))
     expect(props.onTakeHome).toHaveBeenCalledTimes(1)
   })

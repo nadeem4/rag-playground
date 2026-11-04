@@ -746,7 +746,7 @@ function Evaluation({
       setStartedAt(null)
     }
   }, [done, startedAt])
-  // The pipeline and the set it was scored with, so Take it home offers these scores only for the same pair.
+  // The pipeline and the set it was scored with, so the Take it home page shows the score for reference only, for the same pair.
   const scoredMade = graphToConfig(graph, into)
   const scoredConfig = scoredMade.ok ? (scoredMade.pipeline.config as unknown as Record<string, unknown>) : null
   const finishedRun: PreviousEvaluation | null =

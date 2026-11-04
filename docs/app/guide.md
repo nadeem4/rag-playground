@@ -877,9 +877,7 @@ Your documents, your key and the saved index stay behind. Keys are never written
 so the zip only names the variable to set. run.py builds a fresh index the first time it
 runs.
 
-The zip can include your question set, and a result to beat when Evaluate has one for this
-exact pipeline and question set, scored at 5 pieces checked as run.py scores. The hosted
-demo packs at most 50 questions. On the demo, the README also lists any setting you set to
+The zip can include your question set. The hosted demo packs at most 50 questions. On the demo, the README also lists any setting you set to
 the demo's cap, so you can raise it at home.
 
 Unzip the download and follow the README. The project needs Python 3.13. If the pipeline

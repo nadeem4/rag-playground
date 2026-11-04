@@ -97,3 +97,9 @@ describe("the switch", () => {
     expect(canonicalPath("/learn/chunking")).toBe(routeFor("/learn/chunking", LESSONS_ENABLED))
   })
 })
+
+describe("the old Take it home sheet", () => {
+  it("is gone", () => {
+    expect(Object.keys(import.meta.glob("/src/components/pipeline/TakeHome*"))).toEqual([])
+  })
+})

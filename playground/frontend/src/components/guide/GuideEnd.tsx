@@ -49,7 +49,7 @@ export function GuideEnd({ graph, rule, onSaved, onOwn, onTakeHome, onLeave }: P
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Button ref={tryRef} onClick={onOwn}>Try it on your own document</Button>
-            <Button variant="outline" onClick={onTakeHome}>
+            <Button variant="ghost" onClick={onTakeHome}>
               Take it home
             </Button>
             <Button variant="ghost" onClick={onLeave}>

@@ -11,11 +11,12 @@ interface Props {
   rule: string
   onSaved: (saved: SavedPipeline) => void
   onOwn: () => void
+  onTakeHome: () => void
   onLeave: () => void
 }
 
 /** The last guided step: the rule, then keep the pipeline in the Library. */
-export function GuideEnd({ graph, rule, onSaved, onOwn, onLeave }: Props) {
+export function GuideEnd({ graph, rule, onSaved, onOwn, onTakeHome, onLeave }: Props) {
   const size = stageNode(graph, "chunk")?.config.chunk_size
   const [name, setName] = useState(typeof size === "number" ? `Chunks of ${size}` : "")
   const [error, setError] = useState<string | null>(null)
@@ -48,6 +49,9 @@ export function GuideEnd({ graph, rule, onSaved, onOwn, onLeave }: Props) {
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Button ref={tryRef} onClick={onOwn}>Try it on your own document</Button>
+            <Button variant="outline" onClick={onTakeHome}>
+              Take it home
+            </Button>
             <Button variant="ghost" onClick={onLeave}>
               Keep playing here
             </Button>

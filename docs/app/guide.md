@@ -304,8 +304,9 @@ for you from the chunk size the run used, and **Save** puts the pipeline in your
 change the name first. After it is saved, **Try it on your own document** ends the guided run,
 clears the sample document, and keeps the saved pipeline with all its settings. Build then shows
 the Document card and a note that says the pipeline is loaded. Choose your own PDF on the
-Document card, then press **Build the index**. **Keep playing here** ends the guided run and
-leaves everything as it is. The saved pipeline stays in your Library either way.
+Document card, then press **Build the index**. **Take it home** opens the Take it home page
+(see below) with the pipeline you just saved; it does not end the guided run. **Keep playing here**
+ends the guided run and leaves everything as it is. The saved pipeline stays in your Library either way.
 
 While the guided run is on, the Ask panel is hidden, not closed. **Leave the guided run**
 ends it and the panel comes back as it was. The invite shows again only while nothing has run
@@ -847,8 +848,10 @@ Choose the file, or drop it on the Library page, in any browser.
 
 ### Take it home
 
-**Take it home** on Build gives you the pipeline as a small Python project
-in a zip. It opens a sheet that shows what the zip holds:
+**Take it home** gives you the pipeline as a small Python project in a zip. Build's header
+has a **Take it home** link to the Take it home page (below), and the last step of the guided
+run offers the same page after you save. The link is hidden while the pipeline cannot be
+packed. On the page, **Try it on my laptop** makes this project:
 
 - `README.md`: how to set it up and run it. It names the environment variable for the
   key, if a step calls a model.
@@ -858,36 +861,33 @@ in a zip. It opens a sheet that shows what the zip holds:
 - `requirements.txt`: what pip installs.
 - `docs/`: an empty folder for your documents.
 
-Click a file to see its text. The server writes every file with `pandion.new_project`
-(see [pandion/index.md](../pandion/index.md)), so what you see is what you get.
+The page lists these files and shows the text of the one you pick. The server writes every
+file with `pandion.new_project` (see [pandion/index.md](../pandion/index.md)), so what you
+see is what you get.
 
-The sheet also says what stays behind: your documents, your key and the saved index.
-Keys are never written to a file, so the zip only names the variable to set. run.py builds
-a fresh index the first time it runs.
+Your documents, your key and the saved index stay behind. Keys are never written to a file,
+so the zip only names the variable to set. run.py builds a fresh index the first time it
+runs.
 
-When Evaluate has a question set for the pipeline's document, the sheet offers **Your N
-questions**. When Evaluate also has a result for this exact pipeline and question set,
-scored at 5 pieces checked as run.py scores, it offers **Scores to beat**, which adds
-that result to the README. Untick either to leave it out. The hosted demo packs at most
-50 questions; a larger set is shown unticked, and the zip goes without it. On the
-demo, the README also lists any setting you set to the demo's cap, so you can raise it
-at home.
+The zip can include your question set, and a result to beat when Evaluate has one for this
+exact pipeline and question set, scored at 5 pieces checked as run.py scores. The hosted
+demo packs at most 50 questions. On the demo, the README also lists any setting you set to
+the demo's cap, so you can raise it at home.
 
-**Download** saves the zip. Unzip it and follow the README. The project needs Python
-3.13. If the pipeline cannot be packed, such as one that loads plugins, the sheet says
-why in plain words.
+Unzip the download and follow the README. The project needs Python 3.13. If the pipeline
+cannot be packed, such as one that loads plugins, the page says why in plain words.
 
 The same project can also be made for a server: pandion-api's `POST /projects/serve` (at `/api/v2/projects/serve` here) writes the serve project, with the questions of each category in one `evals/questions.json`. The hosted demo applies its question cap to that route too.
 
 ### The Take it home page
 
-The page does the same job as the sheet, for a whole pipeline, in three steps. For now you reach it by its address, `/take-home`. A link at the top goes back to Build, and the first line names the pipeline.
+The page packs a whole pipeline in three steps. You reach it from the **Take it home** link in Build's header, from the **Take it home** button on the guided run's last step (after **Save**), or by its address, `/take-home`. A link at the top goes back to Build, and the first line names the pipeline.
 
 1. **Check your questions.** One row per category: its documents, each tagged **Your upload** or **Sample** (a category with no document shows **Empty**), how many of your own questions name those documents, a status word with a mark, and a sentence saying what it means. **Ready** (a tick) is 10 or more of your own questions. **Weak check** (an exclamation mark) is fewer, and the button says how many more to write, for example **Write 6 more questions**; it opens Evaluate on the category's first document. **Sample questions only** means every question is about a bundled sample, so they stay out of the download; the link says **Add a policy document** (named after the category) and goes to Build. **Not tested** (a hyphen) means the category has no document yet, and the link goes to Build. Questions that name no document are counted on their own line and stay out. In a category that has both a sample and a document of your own, only the questions on your own document are counted and exported. Below the rows, the last Evaluate run on the whole pipeline is shown once, only for reference: the real starting score is recorded later, on your server.
 2. **Where it will run.** Where your documents live (a folder, or a bucket such as `gs://`, `s3://` or Azure), and where the index lives: LanceDB in `./index` next to the server, or Qdrant at an address you type. A remote LanceDB index is not offered, because the project cannot use one. The page lists the secrets you set on your server, by variable name with a note on each, and says access control is off in the download, with an example in `pipeline.yaml` to turn it on. It never asks for a key. For the laptop project these settings are not used, and the secrets are not listed.
 3. **Download.** Choose **Try it on my laptop** (one script that runs your pipeline and your questions) or **Serve it for a team** (a chat API with streaming, sync, a quality check and logs). The page lists the files in the zip, each with a line on what it is for, and previews the one you pick; it opens on `pipeline.yaml`. For the team project it also lists what is left out (categories without questions, your documents, and `uv.lock`, which you make once with `uv lock` and commit). The laptop zip carries your own questions, flattened into one set. One button downloads it. If the server refuses the export, the page shows its sentence.
 
-On the hosted demo a note at the top says your questions and scores live only in this browser tab, and how many of the demo's 50 questions you have used. The old sheet on Build stays for now.
+On the hosted demo a note at the top says your questions and scores live only in this browser tab, and how many of the demo's 50 questions you have used.
 
 ## Read
 

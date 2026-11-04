@@ -147,10 +147,10 @@ afterEach(() => {
 const card = (id: string) => document.querySelector(`[data-node-id="${id}"]`) as HTMLElement
 const coach = () => screen.getByRole("complementary", { name: "Guided run" })
 
-async function open(step?: number, session?: unknown) {
+async function open(step?: number, session?: unknown, navigate?: (href: string) => void) {
   if (step !== undefined) window.sessionStorage.setItem(STEP_KEY, String(step))
   if (session) window.sessionStorage.setItem(BUILD_SESSION_KEY, JSON.stringify(session))
-  render(<Shell />)
+  render(<Shell navigate={navigate} />)
   await waitFor(() => expect(card("parse")).toBeTruthy())
 }
 
@@ -878,15 +878,15 @@ describe("the guided run on Build", () => {
     const BEFORE = { artifact: "ret-g", found: { rank: 11 }, shown: 5, candidates: 20 }
     const session = (results: Record<string, unknown>) => ({ ...ASKED, tracked: { results, history: {} }, guideAsk: BEFORE })
     const AFTER_RUN = { retrieve: done("retrieve", "ret-a"), use_case: done("use_case", "out-a"), index: done("index", "idx-1") }
-    const finish = async () => {
+    const finish = async (navigate?: (href: string) => void) => {
       withSize(800)
       goldAnswer = { found: { index: 0, gold: "Size factors." } }
-      await open(6, session(AFTER_RUN))
+      await open(6, session(AFTER_RUN), navigate)
       await waitFor(() => expect(within(coach()).getByRole("button", { name: "Finish" })).toBeTruthy())
       fireEvent.click(within(coach()).getByRole("button", { name: "Finish" }))
     }
-    const keep = async () => {
-      await finish()
+    const keep = async (navigate?: (href: string) => void) => {
+      await finish(navigate)
       fireEvent.click(within(coach()).getByRole("button", { name: "Save" }))
       await waitFor(() => expect(within(coach()).getByRole("button", { name: "Try it on your own document" })).toBeTruthy())
     }
@@ -910,6 +910,20 @@ describe("the guided run on Build", () => {
       expect(screen.getByText(`Your pipeline ${name} is loaded with its settings. Choose your own PDF on the Document card, then press Build the index.`)).toBeTruthy()
       expect(screen.getByRole("region", { name: "Document" })).toBeTruthy()
       expect(screen.getByRole("region", { name: "Document" }).textContent).not.toMatch(/[–—]/)
+    })
+
+    it("Take it home goes after Save, goes to the page, and the saved pipeline is current", async () => {
+      const navigate = vi.fn()
+      await finish(navigate)
+      expect(within(coach()).queryByRole("button", { name: "Take it home" })).toBeNull()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Save" }))
+      await waitFor(() => expect(within(coach()).getByRole("button", { name: "Take it home" })).toBeTruthy())
+      const id = readCurrentId()
+      expect(id).toBeTruthy()
+      fireEvent.click(within(coach()).getByRole("button", { name: "Take it home" }))
+      expect(navigate).toHaveBeenCalledWith("/take-home")
+      expect(readCurrentId()).toBe(id)
+      expect(readPipelines().some((p) => p.id === id)).toBe(true)
     })
 
     it("Try it on your own document has no dashes and moves focus to the Document region", async () => {

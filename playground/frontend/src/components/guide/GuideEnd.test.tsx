@@ -20,7 +20,7 @@ const DOC = { sha: "a".repeat(64), filename: "primer.pdf" }
 const graph = sampleGraph(R, DOC, "What decides chunk size?")
 
 function setup() {
-  const props = { graph, rule: GUIDE_RULE, onSaved: vi.fn(), onOwn: vi.fn(), onLeave: vi.fn() }
+  const props = { graph, rule: GUIDE_RULE, onSaved: vi.fn(), onOwn: vi.fn(), onTakeHome: vi.fn(), onLeave: vi.fn() }
   return { props, ...render(<GuideEnd {...props} />) }
 }
 
@@ -60,6 +60,14 @@ describe("GuideEnd", () => {
     expect(props.onOwn).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole("button", { name: "Keep playing here" }))
     expect(props.onLeave).toHaveBeenCalledTimes(1)
+  })
+
+  it("offers Take it home only after Save, and the button calls onTakeHome", () => {
+    const { props } = setup()
+    expect(screen.queryByRole("button", { name: "Take it home" })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Save" }))
+    fireEvent.click(screen.getByRole("button", { name: "Take it home" }))
+    expect(props.onTakeHome).toHaveBeenCalledTimes(1)
   })
 
   it("asks for a name and stores nothing when the name is empty", () => {

@@ -881,7 +881,7 @@ function Build({ registry, navigate }: { registry: Registry; navigate: (href: st
               <button type="button" onClick={guide.leave} className="cursor-pointer self-start bg-transparent p-0 text-xs text-muted-foreground underline hover:text-fg">
                 Leave the guided run
               </button>
-              <GuideEnd graph={graph} rule={GUIDE_RULE} onSaved={(s) => setSavedName(s.name)} onOwn={tryOwnDocument} onLeave={guide.leave} />
+              <GuideEnd graph={graph} rule={GUIDE_RULE} onSaved={(s) => setSavedName(s.name)} onOwn={tryOwnDocument} onTakeHome={() => navigate("/take-home")} onLeave={guide.leave} />
             </aside>
           ) : (
             <GuideCoach {...guide.coach} onSeeResults={isPhone && hasAskResults && !outputOpen ? () => setOutputOpen(true) : undefined} />

@@ -194,6 +194,16 @@ def test_pyproject_with_the_local_extra_lists_torch_as_a_direct_dependency(tmp_p
     assert '    "torch>=2.14.0",' in text.split("dependencies = [")[1].split("\n]")[0]
 
 
+def test_pyproject_with_the_docling_extra_gets_cpu_torch_and_torchvision(tmp_path):
+    # docling pulls torch and torchvision without `local`; both must be direct to take the CPU source.
+    docling = {**OFFLINE, "index": {**OFFLINE["index"], "parse": {"use": "docling"}}}
+    text = (make(tmp_path, docling) / "pyproject.toml").read_text(encoding="utf-8")
+    deps = text.split("dependencies = [")[1].split(chr(10) + "]")[0]
+    assert "docling" in deps and "local" not in deps.split("pandion[")[1].split("]")[0].split(",")
+    assert '    "torch>=2.14.0",' in deps and '    "torchvision>=0.29.0",' in deps
+    assert 'name = "pytorch-cpu"' in text
+
+
 def test_pyproject_without_the_local_extra_has_no_torch_source(tmp_path):
     assert "pytorch-cpu" not in (make(tmp_path) / "pyproject.toml").read_text(encoding="utf-8")
 

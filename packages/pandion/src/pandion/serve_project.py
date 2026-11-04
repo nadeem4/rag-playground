@@ -37,8 +37,10 @@ ACCESS_EXAMPLE = """
 """
 
 
-#: uv applies `[tool.uv.sources]` only to direct dependencies, so torch is listed here too. The floor is Pandion's own.
+#: uv applies `[tool.uv.sources]` only to direct dependencies, so torch (and torchvision for docling) is listed here too.
+#: The floors are Pandion's own `local` extra and the locked torchvision.
 TORCH_DEPENDENCY = '    "torch>=2.14.0",\n'
+TORCHVISION_DEPENDENCY = '    "torchvision>=0.29.0",\n'
 
 #: With the `local` extra, Linux takes CPU-only torch, not the multi-GB CUDA build.
 CPU_TORCH = """
@@ -92,6 +94,13 @@ def serve_pipeline(data: dict[str, Any], source: str, index_store: str, index_ur
     return out
 
 
+def _torch_dependencies(extras: list[str]) -> str:
+    """The direct torch lines: `local` and `docling` both pull torch, and docling also torchvision."""
+    if "docling" in extras:
+        return TORCH_DEPENDENCY + TORCHVISION_DEPENDENCY
+    return TORCH_DEPENDENCY if "local" in extras else ""
+
+
 def _extras(p: Any) -> list[str]:
     return sorted({*p.extras(), "files", "sql"})
 
@@ -110,7 +119,7 @@ def render_pyproject(p: Any, name: str) -> str:
         f'    "pandion[{",".join(extras)}]{_pin()}",\n'
         f'    "pandion-api{SERVE_API_PIN}",\n'
         '    "uvicorn>=0.30,<1",\n'
-        f"{TORCH_DEPENDENCY if 'local' in extras else ''}"
+        f"{_torch_dependencies(extras)}"
         "]\n"
         "\n"
         "[dependency-groups]\n"
@@ -119,7 +128,7 @@ def render_pyproject(p: Any, name: str) -> str:
         "# An application, not a library: `uv sync` installs the dependencies and nothing else.\n"
         "[tool.uv]\n"
         "package = false\n"
-        f"{CPU_TORCH if 'local' in extras else ''}"
+        f"{CPU_TORCH if {'local', 'docling'} & set(extras) else ''}"
         "\n"
         "[tool.pytest.ini_options]\n"
         'testpaths = ["tests"]\n'
